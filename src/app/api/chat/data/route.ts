@@ -10,6 +10,7 @@ import {
   getInsightsWithBreakdowns,
   getAccountInsights,
   getCampaignOptimizationMap,
+  getDailyInsights,
 } from '@/lib/meta-api';
 import { generateMockChatData } from './mock';
 
@@ -17,8 +18,9 @@ import { generateMockChatData } from './mock';
  * GET /api/chat/data
  *
  * Fetches comprehensive multi-period ad data for the AI Chat.
- * Returns today, yesterday (with hourly breakdowns), breakdowns — everything
- * Claude needs to do deep hourly performance diagnosis.
+ * Returns today, yesterday (with hourly breakdowns), last 7/14/30 day daily
+ * trends, and breakdowns — everything Claude needs to do deep diagnosis
+ * on any date in the past month.
  *
  * Set USE_MOCK_DATA=true in .env.local to use realistic mock data
  * for testing the AI Chat without a Meta connection.
@@ -47,6 +49,11 @@ export async function GET(request: NextRequest) {
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  // Calculate 30 days ago for historical range
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
   try {
     // Fetch all data in parallel for speed
@@ -79,6 +86,12 @@ export async function GET(request: NextRequest) {
       getInsightsWithBreakdowns(ad_account_id, meta_access_token, 'today', 'publisher_platform'),
       // 13: Campaign optimization mapping (campaign_id → result action type)
       getCampaignOptimizationMap(ad_account_id, meta_access_token),
+      // 14: Last 30 days — daily account-level data (one row per day)
+      getDailyInsights(ad_account_id, meta_access_token, 'last_30d', 'account'),
+      // 15: Last 30 days — daily campaign-level data (one row per campaign per day)
+      getDailyInsights(ad_account_id, meta_access_token, 'last_30d', 'campaign'),
+      // 16: Last 7 days — daily ad-set-level data (more granularity for recent period)
+      getDailyInsights(ad_account_id, meta_access_token, 'last_7d', 'adset'),
     ]);
 
     const extract = (index: number) => {
@@ -93,7 +106,7 @@ export async function GET(request: NextRequest) {
       : {};
 
     const response = {
-      date: { today: todayStr, yesterday: yesterdayStr },
+      date: { today: todayStr, yesterday: yesterdayStr, thirtyDaysAgo: thirtyDaysAgoStr },
       optimizationMap,
       today: {
         campaigns: extract(0),
@@ -109,6 +122,15 @@ export async function GET(request: NextRequest) {
         account: extract(9),
         hourly: extract(7),
       },
+      // NEW: Historical daily data for trend analysis
+      history: {
+        // Account-level daily totals for the last 30 days
+        accountDaily: extract(14),
+        // Campaign-level daily data for the last 30 days
+        campaignDaily: extract(15),
+        // Ad-set-level daily data for the last 7 days
+        adsetDaily: extract(16),
+      },
       breakdowns: {
         ageGender: extract(10),
         device: extract(11),
@@ -119,7 +141,8 @@ export async function GET(request: NextRequest) {
     // If all data is empty (Meta API issues), fall back to mock
     const hasAnyData = response.today.campaigns.length > 0
       || response.yesterday.campaigns.length > 0
-      || response.today.account.length > 0;
+      || response.today.account.length > 0
+      || response.history.accountDaily.length > 0;
 
     if (!hasAnyData) {
       console.log('[Chat Data] No real data returned — falling back to mock data');

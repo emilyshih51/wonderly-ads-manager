@@ -62,10 +62,15 @@ interface InsightRow {
 }
 
 interface ChatData {
-  date: { today: string; yesterday: string };
+  date: { today: string; yesterday: string; thirtyDaysAgo?: string };
   optimizationMap?: Record<string, string>; // campaign_id → result action type
   today: { campaigns: InsightRow[]; adSets: InsightRow[]; ads: InsightRow[]; account: InsightRow[]; hourly?: InsightRow[] };
   yesterday: { campaigns: InsightRow[]; adSets: InsightRow[]; ads: InsightRow[]; account: InsightRow[]; hourly?: InsightRow[] };
+  history?: {
+    accountDaily: InsightRow[];   // one row per day, last 30 days
+    campaignDaily: InsightRow[];  // one row per campaign per day, last 30 days
+    adsetDaily: InsightRow[];     // one row per adset per day, last 7 days
+  };
   breakdowns: { ageGender: InsightRow[]; device: InsightRow[]; publisher: InsightRow[] };
 }
 
@@ -365,6 +370,96 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
+  // ──── HISTORICAL DAILY DATA (last 30 days) ────
+  const history = data.history;
+  if (history) {
+    // Account-level daily totals (last 30 days)
+    if (history.accountDaily.length > 0) {
+      sections.push('\n=== DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ===');
+      sections.push('Date | Spend | Impressions | Clicks | CTR | CPC | CPM | Results | Cost/Result');
+      // Sort by date ascending
+      const sorted = [...history.accountDaily].sort((a, b) => a.date_start.localeCompare(b.date_start));
+      for (const row of sorted) {
+        const results = getResults(row);
+        const cpr = getCostPerResult(row);
+        const cpc = row.cost_per_inline_link_click || row.cpc;
+        sections.push(
+          `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Impr ${row.impressions}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${cpc}, CPM $${row.cpm}, Results ${results}, Cost/Result $${cpr}`
+        );
+      }
+
+      // Compute 7-day and 14-day averages for easy comparison
+      const last7 = sorted.slice(-7);
+      const last14 = sorted.slice(-14);
+      const avg = (rows: InsightRow[], field: 'spend' | 'clicks' | 'impressions') =>
+        rows.reduce((sum, r) => sum + parseFloat(r[field] || '0'), 0) / (rows.length || 1);
+      const avgResults = (rows: InsightRow[]) =>
+        rows.reduce((sum, r) => sum + getResults(r), 0) / (rows.length || 1);
+
+      if (last7.length >= 7) {
+        sections.push(`\n7-Day Averages: Spend $${avg(last7, 'spend').toFixed(2)}/day, Clicks ${avg(last7, 'clicks').toFixed(0)}/day, Impr ${avg(last7, 'impressions').toFixed(0)}/day, Results ${avgResults(last7).toFixed(1)}/day`);
+      }
+      if (last14.length >= 14) {
+        sections.push(`14-Day Averages: Spend $${avg(last14, 'spend').toFixed(2)}/day, Clicks ${avg(last14, 'clicks').toFixed(0)}/day, Impr ${avg(last14, 'impressions').toFixed(0)}/day, Results ${avgResults(last14).toFixed(1)}/day`);
+      }
+      const all30 = sorted;
+      if (all30.length >= 20) {
+        sections.push(`30-Day Averages: Spend $${avg(all30, 'spend').toFixed(2)}/day, Clicks ${avg(all30, 'clicks').toFixed(0)}/day, Impr ${avg(all30, 'impressions').toFixed(0)}/day, Results ${avgResults(all30).toFixed(1)}/day`);
+      }
+    }
+
+    // Campaign-level daily data (last 30 days) — grouped by campaign
+    if (history.campaignDaily.length > 0) {
+      sections.push('\n=== DAILY CAMPAIGN PERFORMANCE (LAST 30 DAYS) ===');
+      // Group by campaign
+      const byCampaign: Record<string, InsightRow[]> = {};
+      for (const row of history.campaignDaily) {
+        const key = row.campaign_id || 'unknown';
+        if (!byCampaign[key]) byCampaign[key] = [];
+        byCampaign[key].push(row);
+      }
+
+      for (const [cid, rows] of Object.entries(byCampaign)) {
+        const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
+        const name = sorted[0]?.campaign_name || cid;
+        const r = rat(cid);
+        sections.push(`\nCampaign "${name}" daily:`);
+        for (const row of sorted) {
+          const results = getResults(row, r);
+          const cpr = getCostPerResult(row, r);
+          sections.push(
+            `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${row.cost_per_inline_link_click || row.cpc}, Cost/Result $${cpr}`
+          );
+        }
+      }
+    }
+
+    // Ad-set daily data (last 7 days) — summarized
+    if (history.adsetDaily.length > 0) {
+      sections.push('\n=== DAILY AD SET PERFORMANCE (LAST 7 DAYS) ===');
+      const byAdset: Record<string, InsightRow[]> = {};
+      for (const row of history.adsetDaily) {
+        const key = row.adset_id || 'unknown';
+        if (!byAdset[key]) byAdset[key] = [];
+        byAdset[key].push(row);
+      }
+
+      for (const [aid, rows] of Object.entries(byAdset)) {
+        const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
+        const name = sorted[0]?.adset_name || aid;
+        const r = rat(sorted[0]?.campaign_id);
+        sections.push(`\nAd Set "${name}" daily:`);
+        for (const row of sorted) {
+          const results = getResults(row, r);
+          const cpr = getCostPerResult(row, r);
+          sections.push(
+            `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, Cost/Result $${cpr}`
+          );
+        }
+      }
+    }
+  }
+
   return sections.join('\n');
 }
 
@@ -484,6 +579,8 @@ export default function ChatPage() {
     hasYesterday: chatData.yesterday.campaigns.length > 0,
     hasHourly: (chatData.today.hourly?.length || 0) > 0,
     hasBreakdowns: chatData.breakdowns.ageGender.length > 0,
+    hasHistory: (chatData.history?.accountDaily?.length || 0) > 0,
+    historyDays: chatData.history?.accountDaily?.length || 0,
   } : null;
 
   /* Execute an approved action */

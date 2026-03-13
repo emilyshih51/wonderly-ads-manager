@@ -663,9 +663,54 @@ export default function ChatPage() {
           history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
         }),
       });
-      const data = await res.json();
-      const raw = data.reply || data.error || 'Sorry, I could not generate a response.';
-      const { content, actions } = parseActionsFromReply(raw);
+
+      if (!res.ok) throw new Error('Failed to send message');
+
+      // Handle streaming response
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      let fullContent = '';
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') break;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.text) {
+                  fullContent += parsed.text;
+                  // Update message incrementally with streaming text
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === loadingMsg.id
+                        ? { ...m, content: fullContent, isLoading: true }
+                        : m
+                      )
+                    );
+                }
+              } catch {
+                // Ignore JSON parse errors
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Parse actions from completed response
+      const { content, actions } = parseActionsFromReply(fullContent);
 
       setMessages((prev) =>
         prev.map((m) =>

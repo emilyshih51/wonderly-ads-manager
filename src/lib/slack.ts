@@ -194,15 +194,19 @@ export function buildSlackBlocks(
 ): any[] {
   const blocks: any[] = [];
 
-  // Main text section
+  // Main text section — split into chunks if > 2900 chars (Slack limit is 3000)
   if (text.trim()) {
-    blocks.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: formatForSlack(text),
-      },
-    });
+    const formatted = formatForSlack(text);
+    const chunks = splitText(formatted, 2900);
+    for (const chunk of chunks) {
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: chunk,
+        },
+      });
+    }
   }
 
   // Action buttons (if any)
@@ -267,18 +271,40 @@ export function buildSlackBlocks(
   return blocks;
 }
 
+/**
+ * Split text into chunks at paragraph boundaries, respecting max length
+ */
+function splitText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    // Find a good break point (double newline, single newline, or space)
+    let breakAt = remaining.lastIndexOf('\n\n', maxLen);
+    if (breakAt < maxLen * 0.3) breakAt = remaining.lastIndexOf('\n', maxLen);
+    if (breakAt < maxLen * 0.3) breakAt = remaining.lastIndexOf(' ', maxLen);
+    if (breakAt < maxLen * 0.3) breakAt = maxLen;
+    chunks.push(remaining.slice(0, breakAt).trim());
+    remaining = remaining.slice(breakAt).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 function getActionLabel(action: ActionBlock): string {
+  // Slack button text max 75 chars
+  const name = action.name.length > 30 ? action.name.slice(0, 27) + '...' : action.name;
   switch (action.type) {
     case 'pause_campaign':
     case 'pause_ad_set':
     case 'pause_ad':
-      return `⏸ Pause`;
+      return `⏸ Pause "${name}"`;
     case 'resume_campaign':
     case 'resume_ad_set':
     case 'resume_ad':
-      return `▶ Resume`;
+      return `▶ Resume "${name}"`;
     case 'adjust_budget':
-      return `💰 Set to $${action.budget?.toFixed(2)}`;
+      return `💰 "${name}" → $${action.budget?.toFixed(2)}/day`;
     default:
       return 'Execute';
   }

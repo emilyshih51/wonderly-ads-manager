@@ -25,6 +25,21 @@ import { generateMockChatData } from '../../chat/data/mock';
  * - Responds within 3 seconds
  */
 
+// Simple in-memory deduplication to prevent Slack retries from triggering duplicate processing
+const processedEvents = new Map<string, number>();
+const DEDUP_WINDOW_MS = 60_000; // 60 seconds
+
+function isDuplicateEvent(eventId: string): boolean {
+  // Clean up old entries
+  const now = Date.now();
+  for (const [id, ts] of processedEvents) {
+    if (now - ts > DEDUP_WINDOW_MS) processedEvents.delete(id);
+  }
+  if (processedEvents.has(eventId)) return true;
+  processedEvents.set(eventId, now);
+  return false;
+}
+
 // Helper to get raw request body for signature verification
 async function getRawBody(request: NextRequest): Promise<string> {
   const arrayBuffer = await request.arrayBuffer();
@@ -61,9 +76,17 @@ export async function POST(request: NextRequest) {
   // Handle app_mention event
   if (body.type === 'event_callback' && body.event?.type === 'app_mention') {
     const event = body.event;
+    const eventId = body.event_id || `${event.channel}_${event.ts}`;
+
+    // Deduplicate — Slack retries if it doesn't get a fast 200
+    if (isDuplicateEvent(eventId)) {
+      console.log('[Slack Events] Duplicate event, skipping:', eventId);
+      return NextResponse.json({ ok: true });
+    }
+
     console.log('[Slack Events] Received app_mention:', { channel: event.channel, user: event.user, text: event.text });
 
-    // Respond immediately to avoid timeout
+    // Respond immediately to avoid Slack 3-second timeout
     const ack = NextResponse.json({ ok: true });
 
     // Process async in the background
@@ -243,38 +266,131 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
 }
 
 /**
- * Format ad data for Claude context (same as web chat)
+ * Extract the result count from a Meta insights row's actions array.
+ * Meta returns actions as [{action_type: "offsite_conversion.fb_pixel_lead", value: "5"}, ...]
+ */
+function getResultsFromRow(row: any, optimizationMap?: Record<string, string>): number {
+  if (!row.actions || !Array.isArray(row.actions)) return 0;
+  const campaignId = row.campaign_id;
+  const resultType = campaignId && optimizationMap?.[campaignId];
+
+  // If we know the specific optimization event, look for that
+  if (resultType) {
+    const found = row.actions.find((a: any) => a.action_type === resultType);
+    if (found) return parseInt(found.value) || 0;
+  }
+
+  // Fallback: look for any conversion action
+  const conversion = row.actions.find((a: any) =>
+    a.action_type.startsWith('offsite_conversion.') ||
+    a.action_type.startsWith('onsite_conversion.') ||
+    a.action_type === 'lead' ||
+    a.action_type === 'complete_registration'
+  );
+  return conversion ? parseInt(conversion.value) || 0 : 0;
+}
+
+function getCostPerResult(row: any, optimizationMap?: Record<string, string>): string {
+  const results = getResultsFromRow(row, optimizationMap);
+  if (results === 0) return 'N/A';
+  return (parseFloat(row.spend) / results).toFixed(2);
+}
+
+/**
+ * Format ad data for Claude context — comprehensive, matching the web chat quality
  */
 function formatContextForClaude(data: any): string {
-  let context = '';
+  const sections: string[] = [];
+  const optMap = data.optimizationMap || {};
 
   // Account totals
-  const todayAccount = data.today.account?.[0];
-  const yesterdayAccount = data.yesterday.account?.[0];
+  const todayAcct = data.today.account?.[0];
+  const yesterdayAcct = data.yesterday.account?.[0];
 
-  if (todayAccount) {
-    context += `Today: Spend $${(parseInt(todayAccount.spend) / 100).toFixed(2)}, Impressions ${todayAccount.impressions || 0}, Clicks ${todayAccount.clicks || 0}, CTR ${(parseFloat(todayAccount.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAccount.cpc) || 0).toFixed(2)}\n`;
+  if (todayAcct) {
+    const results = getResultsFromRow(todayAcct);
+    sections.push(`ACCOUNT TODAY: Spend $${parseFloat(todayAcct.spend).toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${results}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`);
+  }
+  if (yesterdayAcct) {
+    const results = getResultsFromRow(yesterdayAcct);
+    sections.push(`ACCOUNT YESTERDAY: Spend $${parseFloat(yesterdayAcct.spend).toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${results}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`);
   }
 
-  if (yesterdayAccount) {
-    context += `Yesterday: Spend $${(parseInt(yesterdayAccount.spend) / 100).toFixed(2)}, Impressions ${yesterdayAccount.impressions || 0}, Clicks ${yesterdayAccount.clicks || 0}, CTR ${(parseFloat(yesterdayAccount.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAccount.cpc) || 0).toFixed(2)}\n`;
+  // Campaign breakdown — today vs yesterday
+  sections.push('\n--- CAMPAIGNS (TODAY vs YESTERDAY) ---');
+  const allCampaignIds = new Set<string>();
+  for (const c of [...(data.today.campaigns || []), ...(data.yesterday.campaigns || [])]) {
+    allCampaignIds.add(c.campaign_id);
   }
 
-  context += '\n';
+  for (const cid of allCampaignIds) {
+    const t = (data.today.campaigns || []).find((c: any) => c.campaign_id === cid);
+    const y = (data.yesterday.campaigns || []).find((c: any) => c.campaign_id === cid);
+    const name = t?.campaign_name || y?.campaign_name || cid;
 
-  // Campaign breakdown
-  for (const campaign of data.today.campaigns || []) {
-    context += `Campaign "${campaign.campaign_name}": TODAY Spend $${(parseInt(campaign.spend) / 100).toFixed(2)}, Impressions ${campaign.impressions}, Clicks ${campaign.clicks}, CTR ${(parseFloat(campaign.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(campaign.cpc) || 0).toFixed(2)}, Results ${campaign.actions || 0}. `;
-
-    const yesterdayCampaign = data.yesterday.campaigns?.find((c: any) => c.campaign_id === campaign.campaign_id);
-    if (yesterdayCampaign) {
-      const spendChange = ((parseInt(campaign.spend) - parseInt(yesterdayCampaign.spend)) / parseInt(yesterdayCampaign.spend) * 100).toFixed(1);
-      const resultsChange = ((parseInt(campaign.actions || 0) - parseInt(yesterdayCampaign.actions || 0)) / Math.max(1, parseInt(yesterdayCampaign.actions || 0)) * 100).toFixed(1);
-      context += `YESTERDAY Spend $${(parseInt(yesterdayCampaign.spend) / 100).toFixed(2)}, Results ${yesterdayCampaign.actions || 0}. Spend ${spendChange}%, Results ${resultsChange}%.\n`;
+    let line = `Campaign "${name}" (ID: ${cid}):`;
+    if (t) {
+      const tResults = getResultsFromRow(t, optMap);
+      line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${tResults}, Cost/Result $${getCostPerResult(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(t.cpc) || 0).toFixed(2)}, Frequency ${t.frequency || 'N/A'}`;
     } else {
-      context += '\n';
+      line += ' TODAY: No data yet';
+    }
+    if (y) {
+      const yResults = getResultsFromRow(y, optMap);
+      line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${yResults}, Cost/Result $${getCostPerResult(y, optMap)}, Clicks ${y.clicks}, CTR ${(parseFloat(y.ctr) || 0).toFixed(2)}%`;
+    } else {
+      line += ' | YESTERDAY: No data';
+    }
+    sections.push(line);
+  }
+
+  // Ad Set breakdown
+  if (data.today.adSets?.length > 0 || data.yesterday.adSets?.length > 0) {
+    sections.push('\n--- AD SETS (TODAY vs YESTERDAY) ---');
+    const allAdSetIds = new Set<string>();
+    for (const a of [...(data.today.adSets || []), ...(data.yesterday.adSets || [])]) {
+      allAdSetIds.add(a.adset_id);
+    }
+    for (const asid of allAdSetIds) {
+      const t = (data.today.adSets || []).find((a: any) => a.adset_id === asid);
+      const y = (data.yesterday.adSets || []).find((a: any) => a.adset_id === asid);
+      const name = t?.adset_name || y?.adset_name || asid;
+      let line = `Ad Set "${name}" (ID: ${asid}):`;
+      if (t) {
+        line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResultsFromRow(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%`;
+      }
+      if (y) {
+        line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResultsFromRow(y, optMap)}, Clicks ${y.clicks}`;
+      }
+      sections.push(line);
     }
   }
 
-  return context;
+  // Ad breakdown (today only, keep it concise)
+  if (data.today.ads?.length > 0) {
+    sections.push('\n--- TOP ADS (TODAY) ---');
+    const sortedAds = [...data.today.ads].sort((a: any, b: any) => parseFloat(b.spend) - parseFloat(a.spend)).slice(0, 15);
+    for (const ad of sortedAds) {
+      sections.push(`Ad "${ad.ad_name}" (ID: ${ad.ad_id}, campaign ${ad.campaign_id}): Spend $${parseFloat(ad.spend).toFixed(2)}, Results ${getResultsFromRow(ad, optMap)}, Clicks ${ad.clicks}, CTR ${(parseFloat(ad.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(ad.cpc) || 0).toFixed(2)}`);
+    }
+  }
+
+  // Historical daily data (last 30 days account level)
+  if (data.history?.accountDaily?.length > 0) {
+    sections.push('\n--- DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ---');
+    for (const row of data.history.accountDaily) {
+      const results = getResultsFromRow(row);
+      sections.push(`${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(row.cpc) || 0).toFixed(2)}`);
+    }
+  }
+
+  // Breakdowns
+  if (data.breakdowns?.ageGender?.length > 0) {
+    sections.push('\n--- AUDIENCE BREAKDOWN (TODAY) ---');
+    for (const row of data.breakdowns.ageGender) {
+      sections.push(`${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%`);
+    }
+  }
+
+  return sections.join('\n');
 }

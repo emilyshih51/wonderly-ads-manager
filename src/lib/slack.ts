@@ -49,7 +49,8 @@ export function verifySlackSignature(
 export async function postSlackMessage(
   channel: string,
   text: string,
-  blocks?: any[]
+  blocks?: any[],
+  threadTs?: string
 ): Promise<{ ts: string; channel: string } | null> {
   if (!SLACK_BOT_TOKEN) {
     console.warn('[Slack] No SLACK_BOT_TOKEN configured');
@@ -67,6 +68,7 @@ export async function postSlackMessage(
         channel,
         text,
         ...(blocks && { blocks }),
+        ...(threadTs && { thread_ts: threadTs }),
       }),
     });
 

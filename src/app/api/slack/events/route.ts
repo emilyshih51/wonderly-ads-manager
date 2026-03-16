@@ -99,7 +99,9 @@ async function processAppMention(event: any) {
       console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID');
       await postSlackMessage(
         channelId,
-        'Sorry, the Slack integration is not fully configured. Please set META_SYSTEM_ACCESS_TOKEN and META_AD_ACCOUNT_ID in your environment.'
+        'Sorry, the Slack integration is not fully configured. Please set META_SYSTEM_ACCESS_TOKEN and META_AD_ACCOUNT_ID in your environment.',
+        undefined,
+        threadTs
       );
       return;
     }
@@ -147,13 +149,13 @@ async function processAppMention(event: any) {
     // Build Slack blocks
     const blocks = buildSlackBlocks(cleanText, actions, channelId, threadTs);
 
-    // Post message (threaded if replying to a message)
-    await postSlackMessage(channelId, cleanText, blocks);
+    // Post as a threaded reply to the original message
+    await postSlackMessage(channelId, cleanText, blocks, threadTs);
 
   } catch (error) {
     console.error('[Slack Events] Error processing mention:', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    await postSlackMessage(channelId, `Sorry, I encountered an error: ${errorMsg}`);
+    await postSlackMessage(channelId, `Sorry, I encountered an error: ${errorMsg}`, undefined, threadTs);
   }
 }
 

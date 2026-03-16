@@ -146,6 +146,12 @@ function buildRichContext(data: ChatData): string {
   const { today, yesterday, breakdowns, date, optimizationMap } = data;
   const optMap = optimizationMap || {};
 
+  // Tell Claude what time it is so it knows today's data is partial
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const dayStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  sections.push(`CURRENT TIME: ${timeStr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`);
+
   // Helper to look up result action type for a campaign
   const rat = (campaignId?: string) => campaignId ? optMap[campaignId] : undefined;
 

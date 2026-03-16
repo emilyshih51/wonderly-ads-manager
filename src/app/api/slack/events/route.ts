@@ -308,17 +308,27 @@ function formatContextForClaude(data: any): string {
   const sections: string[] = [];
   const optMap = data.optimizationMap || {};
 
-  // Account totals
+  // Account totals — compute results by summing campaign-level results (using optimization map)
+  // This matches the dashboard's methodology instead of picking a random action_type at account level
   const todayAcct = data.today.account?.[0];
   const yesterdayAcct = data.yesterday.account?.[0];
 
+  const todayCampaignResults = (data.today.campaigns || []).reduce(
+    (sum: number, c: any) => sum + getResultsFromRow(c, optMap), 0
+  );
+  const yesterdayCampaignResults = (data.yesterday.campaigns || []).reduce(
+    (sum: number, c: any) => sum + getResultsFromRow(c, optMap), 0
+  );
+
   if (todayAcct) {
-    const results = getResultsFromRow(todayAcct);
-    sections.push(`ACCOUNT TODAY: Spend $${parseFloat(todayAcct.spend).toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${results}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`);
+    const spend = parseFloat(todayAcct.spend);
+    const costPerResult = todayCampaignResults > 0 ? (spend / todayCampaignResults).toFixed(2) : 'N/A';
+    sections.push(`ACCOUNT TODAY: Spend $${spend.toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${todayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`);
   }
   if (yesterdayAcct) {
-    const results = getResultsFromRow(yesterdayAcct);
-    sections.push(`ACCOUNT YESTERDAY: Spend $${parseFloat(yesterdayAcct.spend).toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${results}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`);
+    const spend = parseFloat(yesterdayAcct.spend);
+    const costPerResult = yesterdayCampaignResults > 0 ? (spend / yesterdayCampaignResults).toFixed(2) : 'N/A';
+    sections.push(`ACCOUNT YESTERDAY: Spend $${spend.toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${yesterdayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`);
   }
 
   // Campaign breakdown — today vs yesterday

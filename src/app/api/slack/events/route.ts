@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { verifySlackSignature, postSlackMessage, buildSlackBlocks, parseActions, stripActions } from '@/lib/slack';
 import { SYSTEM_PROMPT } from '../../chat/route';
+
+// Allow up to 60 seconds for this function (Claude + Meta API calls take time)
+export const maxDuration = 60;
 import {
   getCampaignLevelInsights,
   getAdSetLevelInsights,
@@ -86,15 +89,17 @@ export async function POST(request: NextRequest) {
 
     console.log('[Slack Events] Received app_mention:', { channel: event.channel, user: event.user, text: event.text });
 
-    // Respond immediately to avoid Slack 3-second timeout
-    const ack = NextResponse.json({ ok: true });
-
-    // Process async in the background
-    processAppMention(event).catch((error) => {
-      console.error('[Slack Events] Background processing error:', error);
+    // Use after() to process in the background — keeps the serverless function alive
+    // while returning 200 to Slack immediately (avoids 3-second timeout)
+    after(async () => {
+      try {
+        await processAppMention(event);
+      } catch (error) {
+        console.error('[Slack Events] Background processing error:', error);
+      }
     });
 
-    return ack;
+    return NextResponse.json({ ok: true });
   }
 
   // Ignore other event types

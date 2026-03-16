@@ -831,7 +831,13 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-screen">
-      <Header title="AI Chat" description="Deep performance analysis powered by Claude" />
+      {/* Custom header without date picker — AI Chat always loads all available data */}
+      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-8 py-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">AI Chat</h1>
+          <p className="mt-1 text-sm text-gray-500">Deep performance analysis powered by Claude — includes last 30 days of data</p>
+        </div>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (

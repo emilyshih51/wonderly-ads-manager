@@ -496,7 +496,6 @@ export default function AutomationsPage() {
           >
             <Background color="#e2e8f0" gap={24} size={1} />
             <Controls
-              showMinimap={false}
               className="!rounded-xl !border-gray-200 !shadow-sm !bg-white"
             />
 

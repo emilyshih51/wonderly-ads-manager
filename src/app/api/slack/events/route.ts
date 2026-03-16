@@ -314,6 +314,12 @@ function formatContextForClaude(data: any): string {
   const sections: string[] = [];
   const optMap = data.optimizationMap || {};
 
+  // Tell Claude what time it is so it knows today's data is partial
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
+  const dayStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' });
+  sections.push(`CURRENT TIME: ${timeStr} PT on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`);
+
   // Account totals — compute results by summing campaign-level results (using optimization map)
   // This matches the dashboard's methodology instead of picking a random action_type at account level
   const todayAcct = data.today.account?.[0];

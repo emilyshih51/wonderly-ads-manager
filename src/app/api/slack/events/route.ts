@@ -41,7 +41,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  // Verify Slack signature
+  // Handle URL verification challenge FIRST (before signature check)
+  // Slack sends this during initial setup and needs the challenge echoed back
+  if (body.type === 'url_verification') {
+    console.log('[Slack Events] URL verification challenge');
+    return NextResponse.json({ challenge: body.challenge });
+  }
+
+  // Verify Slack signature for all other requests
   const slackSignature = request.headers.get('x-slack-signature') || '';
   const slackTimestamp = request.headers.get('x-slack-request-timestamp') || '';
   const isValid = verifySlackSignature(slackSignature, slackTimestamp, rawBody);
@@ -49,12 +56,6 @@ export async function POST(request: NextRequest) {
   if (!isValid) {
     console.warn('[Slack Events] Invalid signature');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Handle URL verification challenge
-  if (body.type === 'url_verification') {
-    console.log('[Slack Events] URL verification challenge');
-    return NextResponse.json({ challenge: body.challenge });
   }
 
   // Handle app_mention event

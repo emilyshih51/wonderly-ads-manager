@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { verifySlackSignature, postSlackMessage, buildSlackBlocks, parseActions, stripActions } from '@/lib/slack';
+import { verifySlackSignature, postSlackMessage, buildSlackBlocks, parseActions, stripActions, getThreadMessages } from '@/lib/slack';
 import { SYSTEM_PROMPT } from '../../chat/route';
 
 // Allow up to 60 seconds for this function (Claude + Meta API calls take time)
@@ -136,8 +136,11 @@ async function processAppMention(event: any) {
       return;
     }
 
-    // Fetch comprehensive ad data
-    const contextData = await fetchAdContextData(adAccountId, metaSystemToken);
+    // Fetch ad data and thread history in parallel
+    const [contextData, threadHistory] = await Promise.all([
+      fetchAdContextData(adAccountId, metaSystemToken),
+      getThreadMessages(channelId, threadTs),
+    ]);
     const contextText = formatContextForClaude(contextData);
 
     // Send to Claude
@@ -149,11 +152,19 @@ async function processAppMention(event: any) {
       try {
         const client = new Anthropic({ apiKey: anthropicKey });
 
+        // Build message history from thread for conversation memory
+        const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+        for (const msg of threadHistory) {
+          messages.push({ role: msg.role, content: msg.text });
+        }
+        // Add the current question
+        messages.push({ role: 'user', content: question });
+
         const message = await client.messages.create({
           model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
           max_tokens: 4000,
           system: SYSTEM_PROMPT + contextText,
-          messages: [{ role: 'user', content: question }],
+          messages,
         });
 
         // Extract text from response

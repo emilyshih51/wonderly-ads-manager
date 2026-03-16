@@ -130,6 +130,68 @@ export async function updateSlackMessage(
 }
 
 /**
+ * Fetch thread replies for conversation memory.
+ * Returns messages in chronological order (oldest first).
+ * Each message includes the user/bot_id and text.
+ */
+export async function getThreadMessages(
+  channel: string,
+  threadTs: string,
+  limit: number = 20
+): Promise<Array<{ role: 'user' | 'assistant'; text: string }>> {
+  if (!SLACK_BOT_TOKEN) return [];
+
+  try {
+    const response = await fetch(
+      `https://slack.com/api/conversations.replies?channel=${channel}&ts=${threadTs}&limit=${limit}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+    if (!data.ok || !data.messages) return [];
+
+    // Get bot user ID so we can identify our own messages
+    const authRes = await fetch('https://slack.com/api/auth.test', {
+      headers: { 'Authorization': `Bearer ${SLACK_BOT_TOKEN}` },
+    });
+    const authData = await authRes.json();
+    const botUserId = authData.ok ? authData.user_id : null;
+
+    const messages: Array<{ role: 'user' | 'assistant'; text: string }> = [];
+
+    // Skip the first message (it's the original thread parent) if it's just the @mention
+    // Include all replies in the thread
+    for (const msg of data.messages) {
+      // Skip the very last message (the current @mention that triggered this call)
+      if (msg.ts === threadTs && data.messages.length > 1) continue;
+
+      const isBot = msg.bot_id || (botUserId && msg.user === botUserId);
+      const text = (msg.text || '').replace(/<@.+?>/g, '').trim();
+      if (!text) continue;
+
+      messages.push({
+        role: isBot ? 'assistant' : 'user',
+        text,
+      });
+    }
+
+    // Remove the last user message (it's the current question, handled separately)
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      messages.pop();
+    }
+
+    return messages;
+  } catch (error) {
+    console.error('[Slack] Failed to fetch thread messages:', error);
+    return [];
+  }
+}
+
+/**
  * Convert AI analysis text to Slack mrkdwn format
  * Handles basic markdown conversion
  */

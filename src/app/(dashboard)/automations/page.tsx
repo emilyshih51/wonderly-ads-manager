@@ -5,35 +5,189 @@ import ReactFlow, {
   addEdge,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   Connection,
   Edge,
   Node,
   Panel,
+  Handle,
+  Position,
+  NodeProps,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { TriggerNode } from '@/components/automations/trigger-node';
-import { ConditionNode } from '@/components/automations/condition-node';
-import { ActionNode } from '@/components/automations/action-node';
 import {
-  Plus, Save, Trash2, Zap, GitBranch, Play,
-  Power, PowerOff, LayoutList, Workflow, ChevronRight,
-  Clock, Activity, Pause, Bell, Edit3,
+  Plus, Save, Trash2, Zap, Play, Pause,
+  LayoutList, Workflow, ArrowLeft, Clock,
+  AlertTriangle, TrendingDown, DollarSign,
+  Eye, ShieldAlert, ToggleLeft, ToggleRight,
+  ChevronRight, Settings2,
 } from 'lucide-react';
 
+/* ─────────── Pre-built templates ─────────── */
+
+interface AutomationTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;        // tailwind bg color
+  iconColor: string;    // tailwind text color
+  category: 'protect' | 'optimize' | 'alert';
+  nodes: Node[];
+  edges: Edge[];
+}
+
+const TEMPLATES: AutomationTemplate[] = [
+  {
+    id: 'pause-high-spend-no-results',
+    name: 'Pause high spend with 0 results',
+    description: 'Pause any ad set spending over $40 with 0 link clicks and 0 conversions',
+    icon: <ShieldAlert className="h-5 w-5" />,
+    color: 'bg-red-50',
+    iconColor: 'text-red-600',
+    category: 'protect',
+    nodes: [
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ad Sets', config: { entity_type: 'adset', schedule: 'hourly' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Spend > $40', config: { metric: 'spend', operator: '>', threshold: '40' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: '0 Link Clicks', config: { metric: 'clicks', operator: '==', threshold: '0' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad Set', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+    ],
+    edges: [
+      { id: 'e1', source: 't1', target: 'c1', animated: true },
+      { id: 'e2', source: 'c1', target: 'c2', animated: true },
+      { id: 'e3', source: 'c2', target: 'a1', animated: true },
+    ],
+  },
+  {
+    id: 'pause-high-cpa',
+    name: 'Pause if CPA too high',
+    description: 'Pause campaign or ad set if cost per result exceeds your target CPA',
+    icon: <DollarSign className="h-5 w-5" />,
+    color: 'bg-amber-50',
+    iconColor: 'text-amber-600',
+    category: 'protect',
+    nodes: [
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Campaigns', config: { entity_type: 'campaign', schedule: 'hourly' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'CPA > $50', config: { metric: 'cost_per_result', operator: '>', threshold: '50' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 350 }, data: { label: 'Pause Campaign', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+    ],
+    edges: [
+      { id: 'e1', source: 't1', target: 'c1', animated: true },
+      { id: 'e2', source: 'c1', target: 'a1', animated: true },
+    ],
+  },
+  {
+    id: 'pause-fatigued-creatives',
+    name: 'Pause fatigued creatives',
+    description: 'Pause ads with frequency > 3.5 and declining CTR over 3 days',
+    icon: <TrendingDown className="h-5 w-5" />,
+    color: 'bg-purple-50',
+    iconColor: 'text-purple-600',
+    category: 'optimize',
+    nodes: [
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ads', config: { entity_type: 'ad', schedule: '6hours' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Frequency > 3.5', config: { metric: 'frequency', operator: '>', threshold: '3.5' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: 'CTR Declining', config: { metric: 'ctr_trend', operator: '<', threshold: '0' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+    ],
+    edges: [
+      { id: 'e1', source: 't1', target: 'c1', animated: true },
+      { id: 'e2', source: 'c1', target: 'c2', animated: true },
+      { id: 'e3', source: 'c2', target: 'a1', animated: true },
+    ],
+  },
+];
+
+/* ─────────── Zapier-style node components ─────────── */
+
+function ZapierTriggerNode({ data }: NodeProps) {
+  return (
+    <div className="bg-white rounded-xl border-2 border-amber-300 shadow-sm min-w-[260px]">
+      <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 rounded-t-[10px] border-b border-amber-200">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
+          <Zap className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Trigger</p>
+          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+        </div>
+      </div>
+      <div className="px-4 py-2.5 text-xs text-gray-500">
+        {data.config?.entity_type && <span className="capitalize">{data.config.entity_type}</span>}
+        {data.config?.schedule && <span> · {data.config.schedule}</span>}
+      </div>
+      <Handle type="source" position={Position.Bottom} className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white" />
+    </div>
+  );
+}
+
+function ZapierConditionNode({ data }: NodeProps) {
+  return (
+    <div className="bg-white rounded-xl border-2 border-blue-300 shadow-sm min-w-[260px]">
+      <Handle type="target" position={Position.Top} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
+      <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 rounded-t-[10px] border-b border-blue-200">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500">
+          <Eye className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">Condition</p>
+          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+        </div>
+      </div>
+      <div className="px-4 py-2.5 text-xs text-gray-500">
+        {data.config?.metric && <span>{data.config.metric} {data.config.operator} {data.config.threshold}</span>}
+      </div>
+      <Handle type="source" position={Position.Bottom} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
+    </div>
+  );
+}
+
+function ZapierActionNode({ data }: NodeProps) {
+  return (
+    <div className="bg-white rounded-xl border-2 border-emerald-300 shadow-sm min-w-[260px]">
+      <Handle type="target" position={Position.Top} className="!bg-emerald-400 !w-3 !h-3 !border-2 !border-white" />
+      <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 rounded-t-[10px] border-b border-emerald-200">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500">
+          <Play className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Action</p>
+          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+        </div>
+      </div>
+      <div className="px-4 py-2.5 text-xs text-gray-500">
+        {data.config?.action_type && <span className="capitalize">{data.config.action_type}</span>}
+        {data.config?.also_notify_slack === 'true' && <span> + Slack alert</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Constants ─────────── */
+
 const nodeTypes = {
-  trigger: TriggerNode,
-  condition: ConditionNode,
-  action: ActionNode,
+  trigger: ZapierTriggerNode,
+  condition: ZapierConditionNode,
+  action: ZapierActionNode,
 };
+
+const SCHEDULE_OPTIONS = [
+  { label: 'Every 15 minutes', value: '15min' },
+  { label: 'Every hour', value: 'hourly' },
+  { label: 'Every 6 hours', value: '6hours' },
+  { label: 'Daily', value: 'daily' },
+];
+
+const SCHEDULE_LABELS: Record<string, string> = {
+  '15min': 'Every 15 min', 'hourly': 'Every hour', '6hours': 'Every 6 hours', 'daily': 'Daily',
+};
+
+/* ─────────── Main Component ─────────── */
 
 interface Rule {
   id: string;
@@ -43,77 +197,32 @@ interface Rule {
   edges: Edge[];
 }
 
-const defaultNodes: Node[] = [
-  {
-    id: 'trigger-1', type: 'trigger', position: { x: 250, y: 50 },
-    data: { label: 'Check Ad Performance', config: { entity_type: 'adset', schedule: 'hourly' } },
-  },
-  {
-    id: 'condition-1', type: 'condition', position: { x: 250, y: 200 },
-    data: { label: 'Spend Threshold', config: { metric: 'spend', operator: '>', threshold: '50' } },
-  },
-  {
-    id: 'action-1', type: 'action', position: { x: 250, y: 350 },
-    data: { label: 'Pause & Notify', config: { action_type: 'pause', also_notify_slack: 'true' } },
-  },
-];
-
-const defaultEdges: Edge[] = [
-  { id: 'e-trigger-condition', source: 'trigger-1', target: 'condition-1', animated: true, style: { stroke: '#a78bfa' } },
-  { id: 'e-condition-action', source: 'condition-1', target: 'action-1', animated: true, style: { stroke: '#34d399' } },
-];
-
-const SCHEDULE_OPTIONS = [
-  { label: 'Every minute', value: '1min' },
-  { label: 'Every 5 minutes', value: '5min' },
-  { label: 'Every 15 minutes', value: '15min' },
-  { label: 'Every hour', value: 'hourly' },
-  { label: 'Every 6 hours', value: '6hours' },
-  { label: 'Daily', value: 'daily' },
-];
-
-const SCHEDULE_LABELS: Record<string, string> = {
-  '1min': 'Every minute',
-  '5min': 'Every 5 min',
-  '15min': 'Every 15 min',
-  'hourly': 'Every hour',
-  '6hours': 'Every 6 hours',
-  'daily': 'Daily',
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  pause: 'Pause entity',
-  activate: 'Activate entity',
-  slack_notify: 'Slack notification',
-};
-
-const METRIC_LABELS: Record<string, string> = {
-  spend: 'Spend', impressions: 'Impressions', clicks: 'Clicks',
-  ctr: 'CTR', cpc: 'CPC', cpm: 'CPM',
-};
-
 export default function AutomationsPage() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
-  const [ruleName, setRuleName] = useState('New Automation');
+  const [ruleName, setRuleName] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [viewMode, setViewMode] = useState<'list' | 'canvas'>('list');
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeConfig, setNodeConfig] = useState<Record<string, string>>({});
-
-  /* -- View mode: 'rules' (list) or 'canvas' (builder) -- */
-  const [viewMode, setViewMode] = useState<'rules' | 'canvas'>('rules');
 
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
 
   const onConnect = useCallback(
     (params: Connection) =>
-      setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#a78bfa' } }, eds)),
+      setEdges((eds) => addEdge({
+        ...params,
+        animated: true,
+        style: { stroke: '#94a3b8', strokeWidth: 2 },
+      }, eds)),
     [setEdges]
   );
 
+  /* ─── API ─── */
   const fetchRules = useCallback(async () => {
     try {
       const res = await fetch('/api/automations/rules');
@@ -131,14 +240,15 @@ export default function AutomationsPage() {
       const body = {
         ...(selectedRule && { id: selectedRule.id }),
         name: ruleName,
-        is_active: selectedRule?.is_active ?? true,
+        is_active: selectedRule?.is_active ?? false, // Start paused by default
         nodes, edges,
       };
       await fetch('/api/automations/rules', {
         method, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      fetchRules();
+      await fetchRules();
+      setViewMode('list');
     } catch (err) { console.error('Save failed:', err); }
     finally { setSaving(false); }
   };
@@ -147,11 +257,7 @@ export default function AutomationsPage() {
     try {
       await fetch(`/api/automations/rules?id=${ruleId}`, { method: 'DELETE' });
       fetchRules();
-      if (selectedRule?.id === ruleId) {
-        setSelectedRule(null);
-        setNodes(defaultNodes); setEdges(defaultEdges);
-        setRuleName('New Automation');
-      }
+      if (selectedRule?.id === ruleId) setSelectedRule(null);
     } catch (err) { console.error('Delete failed:', err); }
   };
 
@@ -165,32 +271,49 @@ export default function AutomationsPage() {
     } catch (err) { console.error('Toggle failed:', err); }
   };
 
-  const loadRule = (rule: Rule) => {
-    setSelectedRule(rule);
-    setRuleName(rule.name);
-    setNodes(rule.nodes); setEdges(rule.edges);
-  };
-
-  const editRule = (rule: Rule) => {
-    loadRule(rule);
+  const useTemplate = (template: AutomationTemplate) => {
+    setSelectedRule(null);
+    setRuleName(template.name);
+    setNodes(template.nodes);
+    setEdges(template.edges);
     setViewMode('canvas');
   };
 
-  const newAutomation = () => {
+  const editRule = (rule: Rule) => {
+    setSelectedRule(rule);
+    setRuleName(rule.name);
+    setNodes(rule.nodes);
+    setEdges(rule.edges);
+    setViewMode('canvas');
+  };
+
+  const newBlank = () => {
     setSelectedRule(null);
-    setNodes(defaultNodes); setEdges(defaultEdges);
     setRuleName('New Automation');
+    setNodes([
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Performance', config: { entity_type: 'adset', schedule: 'hourly' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Set Condition', config: {} } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 350 }, data: { label: 'Take Action', config: {} } },
+    ]);
+    setEdges([
+      { id: 'e1', source: 't1', target: 'c1', animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } },
+      { id: 'e2', source: 'c1', target: 'a1', animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } },
+    ]);
     setViewMode('canvas');
   };
 
   const addNode = (type: 'trigger' | 'condition' | 'action') => {
     const id = `${type}-${Date.now()}`;
-    const labels: Record<string, string> = { trigger: 'New Trigger', condition: 'New Condition', action: 'New Action' };
-    const newNode: Node = {
-      id, type, position: { x: 250, y: (nodes.length + 1) * 150 },
-      data: { label: labels[type], config: {} },
+    const defaults: Record<string, { label: string }> = {
+      trigger: { label: 'New Trigger' },
+      condition: { label: 'New Condition' },
+      action: { label: 'New Action' },
     };
-    setNodes((nds) => [...nds, newNode]);
+    setNodes((nds) => [...nds, {
+      id, type,
+      position: { x: 300, y: (nds.length + 1) * 160 },
+      data: { ...defaults[type], config: {} },
+    }]);
   };
 
   const onNodeDoubleClick = (_: React.MouseEvent, node: Node) => {
@@ -207,220 +330,250 @@ export default function AutomationsPage() {
     setConfigDialogOpen(false);
   };
 
-  /* Helper: extract info from rule nodes */
-  const getRuleInfo = (rule: Rule) => {
-    const trigger = rule.nodes.find((n) => n.type === 'trigger');
-    const condition = rule.nodes.find((n) => n.type === 'condition');
-    const action = rule.nodes.find((n) => n.type === 'action');
-    return {
-      entityType: trigger?.data?.config?.entity_type || 'N/A',
-      schedule: trigger?.data?.config?.schedule || 'hourly',
-      metric: condition?.data?.config?.metric || 'N/A',
-      operator: condition?.data?.config?.operator || '>',
-      threshold: condition?.data?.config?.threshold || '0',
-      actionType: action?.data?.config?.action_type || 'N/A',
-      triggerLabel: trigger?.data?.label || 'Trigger',
-      conditionLabel: condition?.data?.label || 'Condition',
-      actionLabel: action?.data?.label || 'Action',
-    };
+  /* ─── Helpers ─── */
+  const getCategoryLabel = (cat: string) => {
+    if (cat === 'protect') return 'Spend Protection';
+    if (cat === 'optimize') return 'Performance';
+    return 'Alerts';
   };
 
+  const getRuleSummary = (rule: Rule) => {
+    const trigger = rule.nodes.find((n) => n.type === 'trigger');
+    const conditions = rule.nodes.filter((n) => n.type === 'condition');
+    const action = rule.nodes.find((n) => n.type === 'action');
+    return { trigger, conditions, action };
+  };
+
+  /* ─────────── RENDER ─────────── */
   return (
     <div className="flex flex-col h-screen">
-      <Header title="Automations" description="Set up rules to auto-manage your ads">
-        <div className="flex items-center gap-2">
-          {/* View mode tabs */}
-          <div className="flex items-center bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('rules')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'rules' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <LayoutList className="h-3.5 w-3.5" /> Rules
-            </button>
-            <button
-              onClick={() => setViewMode('canvas')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                viewMode === 'canvas' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Workflow className="h-3.5 w-3.5" /> Canvas Builder
-            </button>
-          </div>
-          <Button size="sm" onClick={newAutomation}>
-            <Plus className="h-4 w-4 mr-1" /> New Automation
-          </Button>
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-8 py-5">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Automations</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {viewMode === 'list' ? 'Rules that automatically manage your ads' : 'Build your automation workflow'}
+          </p>
         </div>
-      </Header>
+        <div className="flex items-center gap-2">
+          {viewMode === 'canvas' && (
+            <Button variant="ghost" size="sm" onClick={() => setViewMode('list')}>
+              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            </Button>
+          )}
+          {viewMode === 'list' && (
+            <Button size="sm" onClick={newBlank}>
+              <Plus className="h-4 w-4 mr-1" /> Custom Rule
+            </Button>
+          )}
+        </div>
+      </div>
 
-      {/* ===== RULES LIST VIEW ===== */}
-      {viewMode === 'rules' && (
-        <div className="flex-1 overflow-y-auto p-8">
-          {rules.length === 0 ? (
-            <div className="text-center py-20">
-              <Workflow className="h-16 w-16 text-gray-200 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No automations yet</h3>
-              <p className="text-gray-500 mb-6 max-w-md mx-auto">
-                Create your first automation rule to automatically monitor and manage your ad performance.
-              </p>
-              <Button onClick={newAutomation}>
-                <Plus className="h-4 w-4 mr-2" /> Create Automation
-              </Button>
+      {/* ─── LIST VIEW ─── */}
+      {viewMode === 'list' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-8 py-8 space-y-10">
+
+            {/* Templates Section */}
+            <div>
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Templates</h2>
+              <div className="grid grid-cols-1 gap-3">
+                {TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => useTemplate(template)}
+                    className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-sm transition-all text-left group"
+                  >
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${template.color} flex-shrink-0`}>
+                      <span className={template.iconColor}>{template.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{template.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{template.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-xs text-blue-600 font-medium">Use template</span>
+                      <ChevronRight className="h-4 w-4 text-blue-600" />
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="max-w-4xl mx-auto space-y-4">
-              {rules.map((rule) => {
-                const info = getRuleInfo(rule);
-                return (
-                  <Card key={rule.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-0">
-                      <div className="flex items-stretch">
-                        {/* Left: Status indicator */}
-                        <div className={`w-1.5 rounded-l-xl flex-shrink-0 ${rule.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
 
-                        <div className="flex-1 p-5">
-                          {/* Header row */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <h3 className="text-base font-semibold text-gray-900">{rule.name}</h3>
-                              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
-                                rule.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                              }`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${rule.is_active ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                                {rule.is_active ? 'Active' : 'Paused'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Button variant="ghost" size="sm" onClick={() => editRule(rule)} className="text-gray-500 hover:text-blue-600">
-                                <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon" className="h-8 w-8"
-                                onClick={() => handleToggle(rule)}
-                              >
-                                {rule.is_active
-                                  ? <Pause className="h-3.5 w-3.5 text-amber-500" />
-                                  : <Play className="h-3.5 w-3.5 text-emerald-500" />
-                                }
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(rule.id)}>
-                                <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                              </Button>
-                            </div>
+            {/* Active Rules Section */}
+            <div>
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+                Your Rules {rules.length > 0 && `(${rules.length})`}
+              </h2>
+
+              {rules.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <Workflow className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500 mb-1">No rules yet</p>
+                  <p className="text-xs text-gray-400">Pick a template above or create a custom rule</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {rules.map((rule) => {
+                    const { trigger, conditions, action } = getRuleSummary(rule);
+                    return (
+                      <div
+                        key={rule.id}
+                        className="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-xl"
+                      >
+                        {/* Toggle */}
+                        <button
+                          onClick={() => handleToggle(rule)}
+                          className="flex-shrink-0"
+                          title={rule.is_active ? 'Pause rule' : 'Enable rule'}
+                        >
+                          {rule.is_active ? (
+                            <ToggleRight className="h-7 w-7 text-emerald-500" />
+                          ) : (
+                            <ToggleLeft className="h-7 w-7 text-gray-300" />
+                          )}
+                        </button>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-medium ${rule.is_active ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {rule.name}
+                            </p>
+                            <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                              rule.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                              {rule.is_active ? 'Active' : 'Off'}
+                            </span>
                           </div>
-
-                          {/* Visual flow: Trigger → Condition → Action */}
-                          <div className="flex items-center gap-2 mb-3">
-                            {/* Trigger chip */}
-                            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                              <Zap className="h-3.5 w-3.5 text-amber-600" />
-                              <div>
-                                <p className="text-xs font-medium text-amber-800">{info.triggerLabel}</p>
-                                <p className="text-[10px] text-amber-600">{info.entityType} • {SCHEDULE_LABELS[info.schedule] || info.schedule}</p>
-                              </div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
-                            {/* Condition chip */}
-                            <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
-                              <GitBranch className="h-3.5 w-3.5 text-purple-600" />
-                              <div>
-                                <p className="text-xs font-medium text-purple-800">{info.conditionLabel}</p>
-                                <p className="text-[10px] text-purple-600">{METRIC_LABELS[info.metric] || info.metric} {info.operator} {info.threshold}</p>
-                              </div>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
-                            {/* Action chip */}
-                            <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                              <Play className="h-3.5 w-3.5 text-emerald-600" />
-                              <div>
-                                <p className="text-xs font-medium text-emerald-800">{info.actionLabel}</p>
-                                <p className="text-[10px] text-emerald-600">{ACTION_LABELS[info.actionType] || info.actionType}</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Meta info */}
-                          <div className="flex items-center gap-4 text-xs text-gray-400">
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {SCHEDULE_LABELS[info.schedule] || info.schedule}</span>
-                            <span className="flex items-center gap-1"><Activity className="h-3 w-3" /> {rule.nodes.length} nodes</span>
-                            {info.actionType !== 'slack_notify' && (
-                              <span className="flex items-center gap-1"><Bell className="h-3 w-3" /> +Slack notify</span>
-                            )}
+                          <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
+                            <span>{trigger?.data?.config?.entity_type || 'adset'}</span>
+                            <span>·</span>
+                            <span>{SCHEDULE_LABELS[trigger?.data?.config?.schedule] || 'hourly'}</span>
+                            <span>·</span>
+                            <span>{conditions.length} condition{conditions.length !== 1 ? 's' : ''}</span>
+                            <span>·</span>
+                            <span className="capitalize">{action?.data?.config?.action_type || 'pause'}</span>
                           </div>
                         </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editRule(rule)}>
+                            <Settings2 className="h-3.5 w-3.5 text-gray-400" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(rule.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-gray-300 hover:text-red-400" />
+                          </Button>
+                        </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ===== CANVAS BUILDER VIEW ===== */}
+      {/* ─── CANVAS VIEW (Zapier-style) ─── */}
       {viewMode === 'canvas' && (
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={nodes} edges={edges}
+            nodes={nodes}
+            edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeDoubleClick={onNodeDoubleClick}
             nodeTypes={memoizedNodeTypes}
             fitView
-            className="bg-gray-50"
+            className="bg-slate-50"
+            defaultEdgeOptions={{
+              animated: true,
+              style: { stroke: '#94a3b8', strokeWidth: 2 },
+            }}
           >
-            <Background color="#e5e7eb" gap={20} />
-            <Controls className="!rounded-lg !border-gray-200 !shadow-sm" />
-            <MiniMap className="!rounded-lg !border-gray-200" />
+            <Background color="#e2e8f0" gap={24} size={1} />
+            <Controls
+              showMinimap={false}
+              className="!rounded-xl !border-gray-200 !shadow-sm !bg-white"
+            />
 
-            <Panel position="top-center" className="flex items-center gap-3 bg-white rounded-xl shadow-sm border border-gray-200 px-4 py-2">
+            {/* Top bar */}
+            <Panel position="top-center" className="flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 px-4 py-2.5 mt-3">
               <Input
-                value={ruleName} onChange={(e) => setRuleName(e.target.value)}
-                className="w-64 h-8 text-sm" placeholder="Automation name..."
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
+                className="w-56 h-8 text-sm border-0 bg-transparent font-medium focus:ring-0 px-0"
+                placeholder="Rule name..."
               />
-              <Button size="sm" variant="outline" onClick={handleSave} disabled={saving}>
-                <Save className="h-3.5 w-3.5 mr-1" />
-                {saving ? 'Saving...' : 'Save'}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setViewMode('rules')}>
-                Back to Rules
+              <div className="w-px h-6 bg-gray-200" />
+              <Button size="sm" onClick={handleSave} disabled={saving} className="h-8">
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                {saving ? 'Saving...' : 'Save Rule'}
               </Button>
             </Panel>
 
-            <Panel position="top-right" className="flex flex-col gap-2 bg-white rounded-xl shadow-sm border border-gray-200 p-3">
-              <p className="text-xs font-medium text-gray-500 uppercase">Add Node</p>
-              <Button size="sm" variant="outline" onClick={() => addNode('trigger')} className="justify-start">
-                <Zap className="h-3.5 w-3.5 mr-2 text-amber-500" /> Trigger
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => addNode('condition')} className="justify-start">
-                <GitBranch className="h-3.5 w-3.5 mr-2 text-purple-500" /> Condition
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => addNode('action')} className="justify-start">
-                <Play className="h-3.5 w-3.5 mr-2 text-emerald-500" /> Action
-              </Button>
+            {/* Side panel: Add nodes */}
+            <Panel position="top-right" className="flex flex-col gap-1.5 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm border border-gray-200 p-3 mt-3 mr-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Add Step</p>
+              <button
+                onClick={() => addNode('trigger')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-amber-50 transition-colors"
+              >
+                <Zap className="h-3.5 w-3.5 text-amber-500" /> Trigger
+              </button>
+              <button
+                onClick={() => addNode('condition')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-blue-50 transition-colors"
+              >
+                <Eye className="h-3.5 w-3.5 text-blue-500" /> Condition
+              </button>
+              <button
+                onClick={() => addNode('action')}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-emerald-50 transition-colors"
+              >
+                <Play className="h-3.5 w-3.5 text-emerald-500" /> Action
+              </button>
             </Panel>
           </ReactFlow>
         </div>
       )}
 
-      {/* Node Config Dialog */}
+      {/* ─── Node Config Dialog ─── */}
       <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Configure {selectedNode?.type}</DialogTitle>
-            <DialogDescription>Double-click any node to edit its configuration.</DialogDescription>
+            <DialogTitle className="text-base">
+              Configure {selectedNode?.type === 'trigger' ? 'Trigger' : selectedNode?.type === 'condition' ? 'Condition' : 'Action'}
+            </DialogTitle>
+            <DialogDescription className="text-xs">Double-click any node to edit.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4 mt-2">
+            {/* Label */}
+            <div>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Label</label>
+              <Input
+                value={selectedNode?.data?.label || ''}
+                onChange={(e) => {
+                  if (selectedNode) {
+                    setNodes((nds) =>
+                      nds.map((n) => n.id === selectedNode.id ? { ...n, data: { ...n.data, label: e.target.value } } : n)
+                    );
+                  }
+                }}
+                className="mt-1 h-9"
+              />
+            </div>
+
             {selectedNode?.type === 'trigger' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Entity Type</label>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Entity Type</label>
                   <SelectNative
-                    value={nodeConfig.entity_type || ''}
+                    value={nodeConfig.entity_type || 'adset'}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, entity_type: e.target.value })}
                     options={[
                       { label: 'Campaign', value: 'campaign' },
@@ -431,15 +584,7 @@ export default function AutomationsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Entity ID</label>
-                  <Input
-                    value={nodeConfig.entity_id || ''}
-                    onChange={(e) => setNodeConfig({ ...nodeConfig, entity_id: e.target.value })}
-                    className="mt-1" placeholder="Paste campaign/ad set/ad ID"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Check Frequency</label>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Check Frequency</label>
                   <SelectNative
                     value={nodeConfig.schedule || 'hourly'}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, schedule: e.target.value })}
@@ -453,9 +598,9 @@ export default function AutomationsPage() {
             {selectedNode?.type === 'condition' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Metric</label>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</label>
                   <SelectNative
-                    value={nodeConfig.metric || ''}
+                    value={nodeConfig.metric || 'spend'}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, metric: e.target.value })}
                     options={[
                       { label: 'Spend', value: 'spend' },
@@ -464,32 +609,39 @@ export default function AutomationsPage() {
                       { label: 'CTR', value: 'ctr' },
                       { label: 'CPC', value: 'cpc' },
                       { label: 'CPM', value: 'cpm' },
+                      { label: 'Frequency', value: 'frequency' },
+                      { label: 'Cost per Result', value: 'cost_per_result' },
+                      { label: 'CTR Trend (3-day)', value: 'ctr_trend' },
                     ]}
                     className="mt-1"
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Operator</label>
-                  <SelectNative
-                    value={nodeConfig.operator || '>'}
-                    onChange={(e) => setNodeConfig({ ...nodeConfig, operator: e.target.value })}
-                    options={[
-                      { label: 'Greater than (>)', value: '>' },
-                      { label: 'Less than (<)', value: '<' },
-                      { label: 'Greater or equal (>=)', value: '>=' },
-                      { label: 'Less or equal (<=)', value: '<=' },
-                      { label: 'Equals (==)', value: '==' },
-                    ]}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Threshold</label>
-                  <Input
-                    type="number" value={nodeConfig.threshold || ''}
-                    onChange={(e) => setNodeConfig({ ...nodeConfig, threshold: e.target.value })}
-                    className="mt-1" placeholder="50"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Operator</label>
+                    <SelectNative
+                      value={nodeConfig.operator || '>'}
+                      onChange={(e) => setNodeConfig({ ...nodeConfig, operator: e.target.value })}
+                      options={[
+                        { label: '>', value: '>' },
+                        { label: '<', value: '<' },
+                        { label: '>=', value: '>=' },
+                        { label: '<=', value: '<=' },
+                        { label: '=', value: '==' },
+                      ]}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Threshold</label>
+                    <Input
+                      type="number"
+                      value={nodeConfig.threshold || ''}
+                      onChange={(e) => setNodeConfig({ ...nodeConfig, threshold: e.target.value })}
+                      className="mt-1 h-9"
+                      placeholder="50"
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -497,50 +649,33 @@ export default function AutomationsPage() {
             {selectedNode?.type === 'action' && (
               <>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Action</label>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Action</label>
                   <SelectNative
-                    value={nodeConfig.action_type || ''}
+                    value={nodeConfig.action_type || 'pause'}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, action_type: e.target.value })}
                     options={[
-                      { label: 'Pause ad/ad set/campaign', value: 'pause' },
-                      { label: 'Activate ad/ad set/campaign', value: 'activate' },
-                      { label: 'Send Slack notification only', value: 'slack_notify' },
+                      { label: 'Pause', value: 'pause' },
+                      { label: 'Activate', value: 'activate' },
+                      { label: 'Slack notification only', value: 'slack_notify' },
                     ]}
                     className="mt-1"
                   />
                 </div>
-                <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="checkbox" id="also_slack"
+                    type="checkbox"
                     checked={nodeConfig.also_notify_slack === 'true'}
                     onChange={(e) => setNodeConfig({ ...nodeConfig, also_notify_slack: String(e.target.checked) })}
-                    className="rounded border-gray-300"
+                    className="rounded border-gray-300 text-blue-600"
                   />
-                  <label htmlFor="also_slack" className="text-sm text-gray-700">Also send Slack notification</label>
-                </div>
+                  <span className="text-sm text-gray-700">Also send Slack notification</span>
+                </label>
               </>
             )}
 
-            <div>
-              <label className="text-sm font-medium text-gray-700">Label</label>
-              <Input
-                value={selectedNode?.data?.label || ''}
-                onChange={(e) => {
-                  if (selectedNode) {
-                    setNodes((nds) =>
-                      nds.map((n) =>
-                        n.id === selectedNode.id ? { ...n, data: { ...n.data, label: e.target.value } } : n
-                      )
-                    );
-                  }
-                }}
-                className="mt-1"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
-              <Button onClick={saveNodeConfig}>Save Configuration</Button>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={saveNodeConfig}>Save</Button>
             </div>
           </div>
         </DialogContent>

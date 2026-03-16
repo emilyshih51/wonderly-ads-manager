@@ -279,18 +279,24 @@ function getResultsFromRow(row: any, optimizationMap?: Record<string, string>): 
   const campaignId = row.campaign_id;
   const resultType = campaignId && optimizationMap?.[campaignId];
 
-  // If we know the specific optimization event, look for that
+  // If we know the specific optimization event, ONLY look for that — don't fall through
+  // This matches the dashboard's getResults() behavior exactly
   if (resultType) {
     const found = row.actions.find((a: any) => a.action_type === resultType);
-    if (found) return parseInt(found.value) || 0;
+    return found ? parseInt(found.value) || 0 : 0;
   }
 
-  // Fallback: look for any conversion action
+  // Only use generic fallback for campaigns NOT in the optimization map
+  // Exclude engagement-only actions (link_click, page_engagement, etc.) to match dashboard
   const conversion = row.actions.find((a: any) =>
-    a.action_type.startsWith('offsite_conversion.') ||
+    (a.action_type.startsWith('offsite_conversion.') ||
     a.action_type.startsWith('onsite_conversion.') ||
     a.action_type === 'lead' ||
-    a.action_type === 'complete_registration'
+    a.action_type === 'complete_registration') &&
+    // Exclude engagement actions that aren't true conversions
+    !a.action_type.includes('post_engagement') &&
+    !a.action_type.includes('page_engagement') &&
+    !a.action_type.includes('link_click')
   );
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }

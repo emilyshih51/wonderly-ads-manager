@@ -48,8 +48,8 @@ const TEMPLATES: AutomationTemplate[] = [
     name: 'Pause high spend with 0 results',
     description: 'Pause any ad set spending over $40 with 0 link clicks and 0 conversions',
     icon: <ShieldAlert className="h-5 w-5" />,
-    color: 'bg-red-50',
-    iconColor: 'text-red-600',
+    color: 'bg-gray-50 border border-gray-200',
+    iconColor: 'text-red-500',
     category: 'protect',
     nodes: [
       { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ad Sets', config: { entity_type: 'adset', schedule: 'hourly' } } },
@@ -68,8 +68,8 @@ const TEMPLATES: AutomationTemplate[] = [
     name: 'Pause if CPA too high',
     description: 'Pause campaign or ad set if cost per result exceeds your target CPA',
     icon: <DollarSign className="h-5 w-5" />,
-    color: 'bg-amber-50',
-    iconColor: 'text-amber-600',
+    color: 'bg-gray-50 border border-gray-200',
+    iconColor: 'text-amber-500',
     category: 'protect',
     nodes: [
       { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Campaigns', config: { entity_type: 'campaign', schedule: 'hourly' } } },
@@ -86,8 +86,8 @@ const TEMPLATES: AutomationTemplate[] = [
     name: 'Pause fatigued creatives',
     description: 'Pause ads with frequency > 3.5 and declining CTR over 3 days',
     icon: <TrendingDown className="h-5 w-5" />,
-    color: 'bg-purple-50',
-    iconColor: 'text-purple-600',
+    color: 'bg-gray-50 border border-gray-200',
+    iconColor: 'text-violet-500',
     category: 'optimize',
     nodes: [
       { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ads', config: { entity_type: 'ad', schedule: '6hours' } } },
@@ -107,60 +107,60 @@ const TEMPLATES: AutomationTemplate[] = [
 
 function ZapierTriggerNode({ data }: NodeProps) {
   return (
-    <div className="bg-white rounded-xl border-2 border-amber-300 shadow-sm min-w-[260px]">
-      <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 rounded-t-[10px] border-b border-amber-200">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500">
-          <Zap className="h-4 w-4 text-white" />
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm min-w-[260px] hover:shadow-md transition-shadow">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 border border-orange-200">
+          <Zap className="h-4 w-4 text-orange-500" />
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Trigger</p>
-          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Trigger</p>
+          <p className="text-sm font-medium text-gray-800">{data.label}</p>
         </div>
       </div>
-      <div className="px-4 py-2.5 text-xs text-gray-500">
+      <div className="px-4 py-2 text-xs text-gray-400">
         {data.config?.entity_type && <span className="capitalize">{data.config.entity_type}</span>}
         {data.config?.schedule && <span> · {data.config.schedule}</span>}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-amber-400 !w-3 !h-3 !border-2 !border-white" />
+      <Handle type="source" position={Position.Bottom} className="!bg-gray-300 !w-2.5 !h-2.5 !border-2 !border-white" />
     </div>
   );
 }
 
 function ZapierConditionNode({ data }: NodeProps) {
   return (
-    <div className="bg-white rounded-xl border-2 border-blue-300 shadow-sm min-w-[260px]">
-      <Handle type="target" position={Position.Top} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
-      <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 rounded-t-[10px] border-b border-blue-200">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500">
-          <Eye className="h-4 w-4 text-white" />
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm min-w-[260px] hover:shadow-md transition-shadow">
+      <Handle type="target" position={Position.Top} className="!bg-gray-300 !w-2.5 !h-2.5 !border-2 !border-white" />
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-200">
+          <Eye className="h-4 w-4 text-indigo-500" />
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600">Condition</p>
-          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Condition</p>
+          <p className="text-sm font-medium text-gray-800">{data.label}</p>
         </div>
       </div>
-      <div className="px-4 py-2.5 text-xs text-gray-500">
+      <div className="px-4 py-2 text-xs text-gray-400">
         {data.config?.metric && <span>{data.config.metric} {data.config.operator} {data.config.threshold}</span>}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-blue-400 !w-3 !h-3 !border-2 !border-white" />
+      <Handle type="source" position={Position.Bottom} className="!bg-gray-300 !w-2.5 !h-2.5 !border-2 !border-white" />
     </div>
   );
 }
 
 function ZapierActionNode({ data }: NodeProps) {
   return (
-    <div className="bg-white rounded-xl border-2 border-emerald-300 shadow-sm min-w-[260px]">
-      <Handle type="target" position={Position.Top} className="!bg-emerald-400 !w-3 !h-3 !border-2 !border-white" />
-      <div className="flex items-center gap-3 px-4 py-3 bg-emerald-50 rounded-t-[10px] border-b border-emerald-200">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500">
-          <Play className="h-4 w-4 text-white" />
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm min-w-[260px] hover:shadow-md transition-shadow">
+      <Handle type="target" position={Position.Top} className="!bg-gray-300 !w-2.5 !h-2.5 !border-2 !border-white" />
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 border border-emerald-200">
+          <Play className="h-4 w-4 text-emerald-500" />
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Action</p>
-          <p className="text-sm font-medium text-gray-900">{data.label}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Action</p>
+          <p className="text-sm font-medium text-gray-800">{data.label}</p>
         </div>
       </div>
-      <div className="px-4 py-2.5 text-xs text-gray-500">
+      <div className="px-4 py-2 text-xs text-gray-400">
         {data.config?.action_type && <span className="capitalize">{data.config.action_type}</span>}
         {data.config?.also_notify_slack === 'true' && <span> + Slack alert</span>}
       </div>
@@ -217,7 +217,7 @@ export default function AutomationsPage() {
       setEdges((eds) => addEdge({
         ...params,
         animated: true,
-        style: { stroke: '#94a3b8', strokeWidth: 2 },
+        style: { stroke: '#d1d5db', strokeWidth: 1.5 },
       }, eds)),
     [setEdges]
   );
@@ -296,8 +296,8 @@ export default function AutomationsPage() {
       { id: 'a1', type: 'action', position: { x: 300, y: 350 }, data: { label: 'Take Action', config: {} } },
     ]);
     setEdges([
-      { id: 'e1', source: 't1', target: 'c1', animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } },
-      { id: 'e2', source: 'c1', target: 'a1', animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } },
+      { id: 'e1', source: 't1', target: 'c1', animated: true, style: { stroke: '#d1d5db', strokeWidth: 1.5 } },
+      { id: 'e2', source: 'c1', target: 'a1', animated: true, style: { stroke: '#d1d5db', strokeWidth: 1.5 } },
     ]);
     setViewMode('canvas');
   };
@@ -491,10 +491,10 @@ export default function AutomationsPage() {
             className="bg-slate-50"
             defaultEdgeOptions={{
               animated: true,
-              style: { stroke: '#94a3b8', strokeWidth: 2 },
+              style: { stroke: '#d1d5db', strokeWidth: 1.5 },
             }}
           >
-            <Background color="#e2e8f0" gap={24} size={1} />
+            <Background color="#f1f5f9" gap={20} size={1} />
             <Controls
               className="!rounded-xl !border-gray-200 !shadow-sm !bg-white"
             />
@@ -519,21 +519,21 @@ export default function AutomationsPage() {
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Add Step</p>
               <button
                 onClick={() => addNode('trigger')}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-amber-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                <Zap className="h-3.5 w-3.5 text-amber-500" /> Trigger
+                <Zap className="h-3.5 w-3.5 text-orange-400" /> Trigger
               </button>
               <button
                 onClick={() => addNode('condition')}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                <Eye className="h-3.5 w-3.5 text-blue-500" /> Condition
+                <Eye className="h-3.5 w-3.5 text-indigo-400" /> Condition
               </button>
               <button
                 onClick={() => addNode('action')}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-emerald-50 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                <Play className="h-3.5 w-3.5 text-emerald-500" /> Action
+                <Play className="h-3.5 w-3.5 text-emerald-400" /> Action
               </button>
             </Panel>
           </ReactFlow>

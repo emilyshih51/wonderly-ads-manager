@@ -92,6 +92,8 @@ export async function GET(request: NextRequest) {
       getDailyInsights(ad_account_id, meta_access_token, 'last_30d', 'campaign'),
       // 16: Last 7 days — daily ad-set-level data (more granularity for recent period)
       getDailyInsights(ad_account_id, meta_access_token, 'last_7d', 'adset'),
+      // 17: Last 7 days — daily ad-level data (for individual ad performance over time)
+      getDailyInsights(ad_account_id, meta_access_token, 'last_7d', 'ad'),
     ]);
 
     const extract = (index: number) => {
@@ -130,6 +132,8 @@ export async function GET(request: NextRequest) {
         campaignDaily: extract(15),
         // Ad-set-level daily data for the last 7 days
         adsetDaily: extract(16),
+        // Ad-level daily data for the last 7 days
+        adDaily: extract(17),
       },
       breakdowns: {
         ageGender: extract(10),

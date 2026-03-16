@@ -404,12 +404,28 @@ function formatContextForClaude(data: any): string {
     }
   }
 
-  // Ad breakdown (today only, keep it concise)
-  if (data.today.ads?.length > 0) {
-    sections.push('\n--- TOP ADS (TODAY) ---');
-    const sortedAds = [...data.today.ads].sort((a: any, b: any) => parseFloat(b.spend) - parseFloat(a.spend)).slice(0, 15);
-    for (const ad of sortedAds) {
-      sections.push(`Ad "${ad.ad_name}" (ID: ${ad.ad_id}, campaign ${ad.campaign_id}): Spend $${parseFloat(ad.spend).toFixed(2)}, Results ${getResultsFromRow(ad, optMap)}, Clicks ${ad.clicks}, CTR ${(parseFloat(ad.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(ad.cpc) || 0).toFixed(2)}`);
+  // Ad breakdown — today vs yesterday
+  if (data.today.ads?.length > 0 || data.yesterday.ads?.length > 0) {
+    sections.push('\n--- ADS (TODAY vs YESTERDAY) ---');
+    const allAdIds = new Set<string>();
+    for (const a of [...(data.today.ads || []), ...(data.yesterday.ads || [])]) {
+      allAdIds.add(a.ad_id);
+    }
+    for (const adId of allAdIds) {
+      const t = (data.today.ads || []).find((a: any) => a.ad_id === adId);
+      const y = (data.yesterday.ads || []).find((a: any) => a.ad_id === adId);
+      const name = t?.ad_name || y?.ad_name || adId;
+      const cid = t?.campaign_id || y?.campaign_id;
+      let line = `Ad "${name}" (ID: ${adId}, campaign ${cid}):`;
+      if (t) {
+        line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResultsFromRow(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(t.cpc) || 0).toFixed(2)}`;
+      } else {
+        line += ' TODAY: No data';
+      }
+      if (y) {
+        line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResultsFromRow(y, optMap)}, Clicks ${y.clicks}`;
+      }
+      sections.push(line);
     }
   }
 

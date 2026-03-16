@@ -70,6 +70,7 @@ interface ChatData {
     accountDaily: InsightRow[];   // one row per day, last 30 days
     campaignDaily: InsightRow[];  // one row per campaign per day, last 30 days
     adsetDaily: InsightRow[];     // one row per adset per day, last 7 days
+    adDaily?: InsightRow[];       // one row per ad per day, last 7 days
   };
   breakdowns: { ageGender: InsightRow[]; device: InsightRow[]; publisher: InsightRow[] };
 }
@@ -237,14 +238,59 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // Ad-level data (today only, for granularity)
-  if (today.ads.length > 0) {
-    sections.push('\n=== INDIVIDUAL ADS (TODAY) ===');
-    for (const ad of today.ads) {
-      const r = rat(ad.campaign_id);
-      sections.push(
-        `Ad "${ad.ad_name}" (adset ${ad.adset_id}, campaign ${ad.campaign_id}): Spend $${parseFloat(ad.spend).toFixed(2)}, Results ${getResults(ad, r)}, Clicks ${ad.clicks}, CTR ${ad.ctr}%, CPC $${ad.cost_per_inline_link_click || ad.cpc}, Cost/Result $${getCostPerResult(ad, r)}`
-      );
+  // Ad-level data: today vs yesterday
+  const adIds = new Set([
+    ...today.ads.map((a) => a.ad_id),
+    ...yesterday.ads.map((a) => a.ad_id),
+  ]);
+  if (adIds.size > 0) {
+    sections.push('\n=== INDIVIDUAL ADS: TODAY vs YESTERDAY ===');
+    for (const adId of adIds) {
+      const t = today.ads.find((a) => a.ad_id === adId);
+      const y = yesterday.ads.find((a) => a.ad_id === adId);
+      const name = t?.ad_name || y?.ad_name || adId;
+      const cid = t?.campaign_id || y?.campaign_id;
+      const r = rat(cid);
+
+      let line = `Ad "${name}" (ID: ${adId}, campaign ${cid}):`;
+      if (t) {
+        line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResults(t, r)}, Clicks ${t.clicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc}, Cost/Result $${getCostPerResult(t, r)}`;
+      } else {
+        line += ' TODAY: No data';
+      }
+      if (y) {
+        line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResults(y, r)}, Clicks ${y.clicks}, CTR ${y.ctr}%, Cost/Result $${getCostPerResult(y, r)}`;
+      } else {
+        line += ' | YESTERDAY: No data';
+      }
+      sections.push(line);
+    }
+  }
+
+  // Ad-level 7-day history (for accurate multi-day totals)
+  const { history } = data;
+  if (history?.adDaily && history.adDaily.length > 0) {
+    sections.push('\n=== AD DAILY PERFORMANCE (LAST 7 DAYS) ===');
+    // Group by ad_id, show totals
+    const adMap = new Map<string, { name: string; rows: InsightRow[] }>();
+    for (const row of history.adDaily) {
+      const key = row.ad_id || 'unknown';
+      if (!adMap.has(key)) adMap.set(key, { name: row.ad_name || key, rows: [] });
+      adMap.get(key)!.rows.push(row);
+    }
+    for (const [adId, { name, rows }] of adMap) {
+      const totalSpend = rows.reduce((s, r) => s + parseFloat(r.spend || '0'), 0);
+      const totalClicks = rows.reduce((s, r) => s + parseInt(r.clicks || '0'), 0);
+      const cid = rows[0]?.campaign_id;
+      const rType = rat(cid);
+      const totalResults = rows.reduce((s, r) => s + getResults(r, rType), 0);
+      const cpr = totalResults > 0 ? (totalSpend / totalResults).toFixed(2) : 'N/A';
+      sections.push(`Ad "${name}" (7-day total): Spend $${totalSpend.toFixed(2)}, Results ${totalResults}, Clicks ${totalClicks}, Cost/Result $${cpr}`);
+      // Daily breakdown
+      const sorted = [...rows].sort((a, b) => (a.date_start || '').localeCompare(b.date_start || ''));
+      for (const row of sorted) {
+        sections.push(`  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${getResults(row, rType)}, Clicks ${row.clicks}`);
+      }
     }
   }
 
@@ -377,7 +423,6 @@ function buildRichContext(data: ChatData): string {
   }
 
   // ──── HISTORICAL DAILY DATA (last 30 days) ────
-  const history = data.history;
   if (history) {
     // Account-level daily totals (last 30 days)
     if (history.accountDaily.length > 0) {

@@ -93,7 +93,9 @@ async function processAppMention(event: any) {
   try {
     // Fetch ad data using system access token (no session needed)
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
-    const adAccountId = process.env.META_AD_ACCOUNT_ID;
+    // Strip act_ prefix if present — meta-api.ts functions add it themselves
+    const rawAdAccountId = process.env.META_AD_ACCOUNT_ID || '';
+    const adAccountId = rawAdAccountId.replace(/^act_/, '');
 
     if (!metaSystemToken || !adAccountId) {
       console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID');

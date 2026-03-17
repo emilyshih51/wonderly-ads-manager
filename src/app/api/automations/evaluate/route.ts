@@ -74,10 +74,10 @@ export async function GET() {
 /**
  * POST /api/automations/evaluate
  *
- * Test a specific rule (dry run — no actions are taken, no Slack messages sent).
- * Returns what WOULD happen if the rule were active.
+ * Test a specific rule. No pause/promote actions are taken, but Slack messages
+ * ARE sent when send_slack is true so you can preview the real notification.
  *
- * Body: { rule: RuleObject } — the full rule to test
+ * Body: { rule: RuleObject, send_slack?: boolean }
  */
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const rule = body.rule;
+  const sendSlack = body.send_slack === true;
 
   if (!rule) {
     return NextResponse.json({ error: 'Rule required' }, { status: 400 });
@@ -103,10 +104,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const results = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, true);
+    const results = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, true, sendSlack);
     return NextResponse.json({
       test: true,
       dry_run: true,
+      send_slack: sendSlack,
       rule_name: rule.name,
       matched: results.length,
       results,
@@ -124,7 +126,8 @@ async function evaluateRule(
   adAccountId: string,
   accessToken: string,
   optimizationMap: Record<string, string>,
-  dryRun: boolean = false
+  dryRun: boolean = false,
+  sendSlack: boolean = false
 ): Promise<any[]> {
   const triggerNode = rule.nodes.find((n: any) => n.type === 'trigger');
   const conditionNodes = rule.nodes.filter((n: any) => n.type === 'condition');
@@ -258,9 +261,10 @@ async function evaluateRule(
         }
       }
 
-      // Send Slack notification
+      // Send Slack notification (always in live mode; in test mode only when sendSlack is true)
       if (actionConfig.slack_channel && (actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true)) {
-        if (!dryRun) {
+        if (!dryRun || sendSlack) {
+          const testPrefix = dryRun ? '🧪 *[TEST]* ' : '';
           await sendSlackNotification(
             actionConfig.slack_channel,
             rule.name,
@@ -271,8 +275,10 @@ async function evaluateRule(
             metrics,
             adAccountId,
             actionResult.duplicated_ad_id,
-            actionConfig.slack_message
+            actionConfig.slack_message,
+            testPrefix
           );
+          actionResult.slack_sent = true;
         }
         actionResult.slack_channel = actionConfig.slack_channel;
       }
@@ -338,7 +344,8 @@ async function sendSlackNotification(
   metrics: Record<string, number>,
   adAccountId: string,
   duplicatedAdId?: string,
-  customMessage?: string
+  customMessage?: string,
+  prefix?: string
 ) {
   const adManagerLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&selected_ad_ids=${entityId}`;
 
@@ -357,9 +364,11 @@ async function sendSlackNotification(
 
   let text: string;
 
+  const testPrefix = prefix || '';
+
   if (customMessage) {
     // Replace template variables in custom message
-    text = customMessage
+    text = testPrefix + customMessage
       .replace(/\{rule_name\}/g, ruleName)
       .replace(/\{action\}/g, actionVerb)
       .replace(/\{entity_type\}/g, entityType)
@@ -372,7 +381,7 @@ async function sendSlackNotification(
       .replace(/\{ctr\}/g, `${(metrics.ctr || 0).toFixed(2)}%`);
   } else {
     // Default message format
-    text = `${actionEmoji} *${ruleName}*\n`;
+    text = `${testPrefix}${actionEmoji} *${ruleName}*\n`;
     text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
     text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
   }

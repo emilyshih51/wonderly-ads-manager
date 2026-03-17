@@ -1,21 +1,44 @@
 /**
- * Persistent rules store using Vercel KV (Redis).
- * This allows the cron job to read rules without browser cookies.
+ * Persistent rules store.
  *
- * Setup: Create a KV database in Vercel Dashboard → Storage → Create → KV
- * It auto-adds KV_REST_API_URL and KV_REST_API_TOKEN env vars.
+ * Storage strategy:
+ * 1. If Vercel KV is configured → uses KV (persistent Redis, works for cron)
+ * 2. Always also reads/writes cookies as fallback (works immediately, no setup needed)
  *
- * If KV is not configured, falls back to an in-memory store (works for dev but
- * won't persist across serverless cold starts in production).
+ * The cron job reads from KV (no cookies available). The UI reads from cookies.
+ * When KV is available, writes go to BOTH so they stay in sync.
  */
 
-import { kv } from '@vercel/kv';
+import { cookies } from 'next/headers';
 
-const RULES_KEY = 'wonderly:rules'; // Single hash key for all rules
+const RULE_PREFIX = 'wonderly_rule_';
+
+// KV imports — only used if env vars are set
+let kvModule: any = null;
 const KV_AVAILABLE = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+const RULES_KEY = 'wonderly:rules';
 
-// In-memory fallback for development (or when KV isn't configured)
-const memoryStore = new Map<string, any>();
+async function getKv() {
+  if (!KV_AVAILABLE) return null;
+  if (!kvModule) {
+    try {
+      kvModule = await import('@vercel/kv');
+    } catch {
+      return null;
+    }
+  }
+  return kvModule.kv;
+}
+
+function getCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    maxAge: 60 * 60 * 24 * 365,
+    path: '/',
+  };
+}
 
 export interface StoredRule {
   id: string;
@@ -29,10 +52,32 @@ export interface StoredRule {
 }
 
 /**
- * Get all rules
+ * Get all rules — reads from cookies (always available in user requests)
+ * Falls back to KV for cron jobs (no cookies)
  */
 export async function getAllRules(): Promise<StoredRule[]> {
-  if (KV_AVAILABLE) {
+  // Try cookies first (works in user requests)
+  try {
+    const cookieStore = await cookies();
+    const rules: StoredRule[] = [];
+    for (const cookie of cookieStore.getAll()) {
+      if (cookie.name.startsWith(RULE_PREFIX)) {
+        try {
+          rules.push(JSON.parse(cookie.value));
+        } catch { /* skip malformed */ }
+      }
+    }
+    if (rules.length > 0) {
+      rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      return rules;
+    }
+  } catch {
+    // cookies() may throw in cron context — that's fine, fall through to KV
+  }
+
+  // Fall back to KV (for cron jobs where cookies aren't available)
+  const kv = await getKv();
+  if (kv) {
     try {
       const data = await kv.hgetall(RULES_KEY);
       if (!data) return [];
@@ -40,14 +85,11 @@ export async function getAllRules(): Promise<StoredRule[]> {
       rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       return rules;
     } catch (e) {
-      console.error('[RulesStore] KV read error, falling back to memory:', e);
+      console.error('[RulesStore] KV read error:', e);
     }
   }
 
-  // Fallback to memory
-  const rules = Array.from(memoryStore.values());
-  rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  return rules;
+  return [];
 }
 
 /**
@@ -62,7 +104,16 @@ export async function getActiveRules(): Promise<StoredRule[]> {
  * Get a single rule by ID
  */
 export async function getRule(ruleId: string): Promise<StoredRule | null> {
-  if (KV_AVAILABLE) {
+  // Try cookie first
+  try {
+    const cookieStore = await cookies();
+    const cookie = cookieStore.get(`${RULE_PREFIX}${ruleId}`);
+    if (cookie) return JSON.parse(cookie.value);
+  } catch { /* no cookies in cron */ }
+
+  // Fall back to KV
+  const kv = await getKv();
+  if (kv) {
     try {
       const rule = await kv.hget(RULES_KEY, ruleId);
       return (rule as StoredRule) || null;
@@ -70,37 +121,52 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
       console.error('[RulesStore] KV read error:', e);
     }
   }
-  return memoryStore.get(ruleId) || null;
+
+  return null;
 }
 
 /**
- * Save a rule (create or update)
+ * Save a rule — writes to BOTH cookies and KV (if available)
  */
 export async function saveRule(rule: StoredRule): Promise<void> {
-  if (KV_AVAILABLE) {
+  // Always write to cookies (immediate persistence for user)
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set(`${RULE_PREFIX}${rule.id}`, JSON.stringify(rule), getCookieOptions());
+  } catch (e) {
+    console.error('[RulesStore] Cookie write error:', e);
+  }
+
+  // Also write to KV if available (for cron access)
+  const kv = await getKv();
+  if (kv) {
     try {
       await kv.hset(RULES_KEY, { [rule.id]: rule });
-      return;
     } catch (e) {
-      console.error('[RulesStore] KV write error, falling back to memory:', e);
+      console.error('[RulesStore] KV write error:', e);
     }
   }
-  memoryStore.set(rule.id, rule);
 }
 
 /**
- * Delete a rule
+ * Delete a rule — removes from BOTH cookies and KV
  */
 export async function deleteRule(ruleId: string): Promise<void> {
-  if (KV_AVAILABLE) {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete(`${RULE_PREFIX}${ruleId}`);
+  } catch (e) {
+    console.error('[RulesStore] Cookie delete error:', e);
+  }
+
+  const kv = await getKv();
+  if (kv) {
     try {
       await kv.hdel(RULES_KEY, ruleId);
-      return;
     } catch (e) {
       console.error('[RulesStore] KV delete error:', e);
     }
   }
-  memoryStore.delete(ruleId);
 }
 
 /**

@@ -316,6 +316,41 @@ export async function createAd(
   });
 }
 
+/**
+ * Duplicate an ad to a different ad set.
+ * Fetches the original ad's creative and creates a new ad in the target ad set.
+ */
+export async function duplicateAd(
+  adId: string,
+  targetAdSetId: string,
+  adAccountId: string,
+  accessToken: string,
+  newName?: string
+): Promise<{ id: string }> {
+  // Get the original ad to find its creative
+  const original = await metaApi(`/${adId}`, accessToken, {
+    params: { fields: 'name,creative{id}' },
+  });
+
+  const creativeId = original.creative?.id;
+  if (!creativeId) throw new Error(`Ad ${adId} has no creative`);
+
+  const name = newName || `${original.name} [Winner Copy]`;
+
+  // Create a new ad in the target ad set using the same creative
+  const result = await metaApi(`/act_${adAccountId}/ads`, accessToken, {
+    method: 'POST',
+    body: {
+      name,
+      adset_id: targetAdSetId,
+      creative: { creative_id: creativeId },
+      status: 'ACTIVE',
+    },
+  });
+
+  return { id: result.id };
+}
+
 // Update status (for automations)
 export async function updateStatus(
   objectId: string,

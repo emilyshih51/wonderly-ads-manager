@@ -10,7 +10,7 @@ import {
   ArrowLeft, Search, X, ChevronDown, ChevronUp,
   Eye, ToggleLeft, ToggleRight, Loader2,
   Settings2, Check, AlertCircle, Target, Filter,
-  Activity, Bell, Copy, ArrowRight,
+  Activity, Bell, Copy, ArrowRight, Wand2,
 } from 'lucide-react';
 
 /* ─────────── Types ─────────── */
@@ -128,7 +128,7 @@ const DEFAULT_CONFIG: RuleConfig = {
   adset_filter: 'all',
   adset_name: '',
   schedule: 'hourly',
-  date_preset: 'today',
+  date_preset: 'last_7d',
   conditions: [{ id: 'c1', metric: 'spend', operator: '>=', threshold: '' }],
   action_type: 'pause',
   target_adset_id: '',
@@ -290,7 +290,7 @@ function nodesToConfig(nodes: any[]): RuleConfig {
     adset_filter: tc.adset_filter || 'all',
     adset_name: tc.adset_name || '',
     schedule: tc.schedule || 'hourly',
-    date_preset: tc.date_preset || 'today',
+    date_preset: tc.date_preset || 'last_7d',
     conditions: condNodes.map((n: any, i: number) => ({
       id: n.id || `c${i + 1}`,
       metric: n.data?.config?.metric || 'spend',
@@ -524,6 +524,144 @@ function AdSetSearch({
   );
 }
 
+/* ─────────── Copilot Parser ─────────── */
+
+function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleName: string } {
+  const lowerText = text.toLowerCase();
+
+  // Extract action type
+  let actionType = 'pause';
+  if (lowerText.match(/\b(promote|duplicate|scale)\b/)) {
+    actionType = 'promote';
+  } else if (lowerText.match(/\b(notify|alert|slack|send)\b/)) {
+    actionType = 'notify';
+  } else if (lowerText.match(/\b(pause|stop)\b/)) {
+    actionType = 'pause';
+  }
+
+  // Extract campaign name: "in [name] campaign" or "in [name]"
+  let campaignName = '';
+  const campaignMatch = text.match(/\bin\s+["']?([^"'\n]+?)["']?\s+campaign\b/i) ||
+                        text.match(/\bin\s+["']?([^"'\n]+?)["']?\s*(?:\.|$)/i);
+  if (campaignMatch) {
+    campaignName = campaignMatch[1].trim();
+  }
+
+  // Extract date preset
+  let datePreset = 'last_7d';
+  if (lowerText.match(/\blast\s+30\s*d(?:ays?)?\b/)) datePreset = 'last_30d';
+  else if (lowerText.match(/\blast\s+14\s*d(?:ays?)?\b/)) datePreset = 'last_14d';
+  else if (lowerText.match(/\blast\s+3\s*d(?:ays?)?\b/)) datePreset = 'last_3d';
+  else if (lowerText.match(/\btoday\b/)) datePreset = 'today';
+  else if (lowerText.match(/\byesterday\b/)) datePreset = 'yesterday';
+  else if (lowerText.match(/\blast\s+7\s*d(?:ays?)?\b/)) datePreset = 'last_7d';
+
+  // Extract conditions: metric + operator + threshold
+  const conditions: Condition[] = [];
+
+  // Metric aliases
+  const metricAliases: Record<string, string> = {
+    'cpa': 'cost_per_result',
+    'cost per result': 'cost_per_result',
+    'cost per acquisition': 'cost_per_result',
+    'spend': 'spend',
+    'spending': 'spend',
+    'spent': 'spend',
+    'cost': 'spend',
+    'results': 'results',
+    'conversions': 'results',
+    'leads': 'results',
+    'registrations': 'results',
+    'clicks': 'clicks',
+    'ctr': 'ctr',
+    'click through rate': 'ctr',
+    'impressions': 'impressions',
+  };
+
+  // Operator patterns
+  const operatorPatterns = [
+    { pattern: /\b(over|above|more than|greater than|exceeds?|>=)\b/, op: '>=' },
+    { pattern: /\b(under|below|less than|lower than|<=)\b/, op: '<=' },
+    { pattern: /\b(equal to|exactly|is)\s+\d/, op: '==' },
+  ];
+
+  // Find condition phrases: "metric operator value"
+  // Match: "CPA over $25", "spend > $30", "results >= 3", "0 results", etc.
+  const simplifiedRegex = /(cpa|cost per result|cost per acquisition|spend|spending|spent|cost|results?|conversions?|leads?|registrations?|clicks?|ctr|click through rate|impressions?)\s+(?:is\s+)?(over|above|more than|greater than|exceeds?|under|below|less than|lower than|equal to|exactly|is|>=|<=|==)\s*(\$)?(\d+(?:\.\d+)?)/gi;
+
+  let match;
+  while ((match = simplifiedRegex.exec(text)) !== null) {
+    const metricStr = match[1].trim().toLowerCase();
+    const operatorStr = match[2].toLowerCase();
+    const thresholdStr = match[4];
+
+    // Find metric
+    let metric = '';
+    for (const [alias, value] of Object.entries(metricAliases)) {
+      if (metricStr.includes(alias)) {
+        metric = value;
+        break;
+      }
+    }
+
+    if (metric && thresholdStr) {
+      // Determine operator
+      let operator = '>=';
+      if (operatorStr.match(/over|above|more|greater|exceeds|>=/)) operator = '>=';
+      else if (operatorStr.match(/under|below|less|lower|<=/)) operator = '<=';
+      else if (operatorStr.match(/equal|exactly|^is$/)) operator = '==';
+
+      conditions.push({
+        id: `c${conditions.length + 1}`,
+        metric,
+        operator,
+        threshold: thresholdStr,
+      });
+    }
+  }
+
+  // Handle "0 results" pattern
+  if (lowerText.match(/\b0\s+(results?|conversions?|leads?)\b/)) {
+    conditions.push({
+      id: `c${conditions.length + 1}`,
+      metric: 'results',
+      operator: '==',
+      threshold: '0',
+    });
+  }
+
+  // Default to at least one condition if none found
+  if (conditions.length === 0) {
+    conditions.push({
+      id: 'c1',
+      metric: 'spend',
+      operator: '>=',
+      threshold: '30',
+    });
+  }
+
+  // Generate rule name from input (truncate to ~50 chars)
+  const ruleName = text.length > 50 ? text.substring(0, 47) + '...' : text;
+
+  const config: Partial<RuleConfig> = {
+    entity_type: 'ad',
+    campaign_name: campaignName,
+    campaign_id: '', // Will be filled by campaign search
+    adset_filter: 'all',
+    schedule: 'hourly',
+    date_preset: datePreset,
+    conditions,
+    action_type: actionType,
+    target_adset_id: '',
+    target_adset_name: '',
+    also_notify_slack: actionType === 'notify',
+    slack_channel: actionType === 'notify' ? '#emily-space' : '',
+    slack_message: '',
+  };
+
+  return { config, ruleName };
+}
+
 /* ─────────── Step Component ─────────── */
 
 function StepHeader({
@@ -567,6 +705,82 @@ function StepHeader({
 }
 
 /* ─────────── Main Component ─────────── */
+
+/* ─────────── Copilot Card Component ─────────── */
+
+function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
+  const [input, setInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = () => {
+    if (!input.trim()) return;
+    setIsSubmitting(true);
+    // Simulate brief processing
+    setTimeout(() => {
+      onSubmit(input);
+      setInput('');
+      setIsSubmitting(false);
+    }, 300);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
+      {/* Background accent */}
+      <div className="absolute top-0 right-0 h-40 w-40 bg-gradient-to-bl from-blue-100 to-transparent rounded-full opacity-30 -mr-20 -mt-20" />
+
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-4">
+          <Wand2 className="h-5 w-5 text-blue-600" />
+          <h3 className="text-sm font-semibold text-gray-900">Copilot</h3>
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+            AI beta
+          </span>
+        </div>
+
+        <p className="text-xs text-gray-600 mb-3">
+          Describe what you want to automate in plain English
+        </p>
+
+        <div className="space-y-3">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Pause ads with CPA over $25 in Brad campaign... or promote ads with CPA under $16 and results above 3"
+            disabled={isSubmitting}
+            className="w-full h-24 p-3 rounded-lg border border-blue-200 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSubmit}
+              disabled={!input.trim() || isSubmitting}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                  Building...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-3.5 w-3.5 mr-2" />
+                  Start building
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AutomationsPage() {
   const [rules, setRules] = useState<Rule[]>([]);
@@ -684,6 +898,17 @@ export default function AutomationsPage() {
     setSelectedRule(null);
     setRuleName('New Automation');
     setConfig({ ...DEFAULT_CONFIG });
+    setOpenStep(1);
+    setPreviewLoaded(false);
+    setPreviewAds([]);
+    setViewMode('editor');
+  };
+
+  const useCopilot = (input: string) => {
+    const { config: parsedConfig, ruleName: parsedName } = parseCopilotInput(input);
+    setSelectedRule(null);
+    setRuleName(parsedName);
+    setConfig({ ...DEFAULT_CONFIG, ...parsedConfig });
     setOpenStep(1);
     setPreviewLoaded(false);
     setPreviewAds([]);
@@ -875,6 +1100,9 @@ export default function AutomationsPage() {
       {viewMode === 'list' && (
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-8 py-8 space-y-10">
+
+            {/* Copilot */}
+            <CopilotCard onSubmit={useCopilot} />
 
             {/* Templates */}
             <div>

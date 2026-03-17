@@ -141,7 +141,7 @@ async function evaluateRule(
   const triggerConfig = triggerNode.data?.config || {};
   const actionConfig = actionNode.data?.config || {};
   const entityType = triggerConfig.entity_type || 'ad';
-  const datePreset = triggerConfig.date_preset || 'today';
+  const datePreset = triggerConfig.date_preset || 'last_7d';
 
   // Determine which entities to scan
   let insightsData: any[] = [];

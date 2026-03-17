@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Layers,
-  FileImage,
+  Trophy,
   Workflow,
   Settings,
   LogOut,
@@ -20,7 +20,7 @@ const navigation = [
   { name: 'AI Chat', href: '/chat', icon: MessageSquare, isPrimary: true },
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Launch', href: '/adsets', icon: Layers },
-  { name: 'Ads', href: '/ads', icon: FileImage },
+  { name: 'Top Ads', href: '/ads', icon: Trophy },
   { name: 'Automations', href: '/automations', icon: Workflow },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

@@ -2,32 +2,43 @@
  * Persistent rules store.
  *
  * Storage strategy:
- * 1. If Vercel KV is configured → uses KV (persistent Redis, works for cron)
+ * 1. If REDIS_URL is configured → uses Redis (persistent, works for cron)
  * 2. Always also reads/writes cookies as fallback (works immediately, no setup needed)
  *
- * The cron job reads from KV (no cookies available). The UI reads from cookies.
- * When KV is available, writes go to BOTH so they stay in sync.
+ * The cron job reads from Redis (no cookies available). The UI reads from cookies.
+ * When Redis is available, writes go to BOTH so they stay in sync.
  */
 
 import { cookies } from 'next/headers';
+import { createClient, type RedisClientType } from 'redis';
 
 const RULE_PREFIX = 'wonderly_rule_';
+const RULES_HASH_KEY = 'wonderly:rules';
+const REDIS_URL = process.env.REDIS_URL || '';
+const REDIS_AVAILABLE = !!REDIS_URL;
 
-// KV imports — only used if env vars are set
-let kvModule: any = null;
-const KV_AVAILABLE = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-const RULES_KEY = 'wonderly:rules';
+// Singleton Redis client
+let redisClient: RedisClientType | null = null;
+let redisConnecting = false;
 
-async function getKv() {
-  if (!KV_AVAILABLE) return null;
-  if (!kvModule) {
-    try {
-      kvModule = await import('@vercel/kv');
-    } catch {
-      return null;
-    }
+async function getRedis(): Promise<RedisClientType | null> {
+  if (!REDIS_AVAILABLE) return null;
+  if (redisClient?.isOpen) return redisClient;
+  if (redisConnecting) return null; // Avoid concurrent connection attempts
+
+  try {
+    redisConnecting = true;
+    redisClient = createClient({ url: REDIS_URL }) as RedisClientType;
+    redisClient.on('error', (err) => console.error('[Redis] Client error:', err));
+    await redisClient.connect();
+    redisConnecting = false;
+    return redisClient;
+  } catch (e) {
+    console.error('[Redis] Connection error:', e);
+    redisConnecting = false;
+    redisClient = null;
+    return null;
   }
-  return kvModule.kv;
 }
 
 function getCookieOptions() {
@@ -53,7 +64,7 @@ export interface StoredRule {
 
 /**
  * Get all rules — reads from cookies (always available in user requests)
- * Falls back to KV for cron jobs (no cookies)
+ * Falls back to Redis for cron jobs (no cookies)
  */
 export async function getAllRules(): Promise<StoredRule[]> {
   // Try cookies first (works in user requests)
@@ -72,20 +83,20 @@ export async function getAllRules(): Promise<StoredRule[]> {
       return rules;
     }
   } catch {
-    // cookies() may throw in cron context — that's fine, fall through to KV
+    // cookies() may throw in cron context — that's fine, fall through to Redis
   }
 
-  // Fall back to KV (for cron jobs where cookies aren't available)
-  const kv = await getKv();
-  if (kv) {
+  // Fall back to Redis (for cron jobs where cookies aren't available)
+  const redis = await getRedis();
+  if (redis) {
     try {
-      const data = await kv.hgetall(RULES_KEY);
-      if (!data) return [];
-      const rules = Object.values(data) as StoredRule[];
+      const data = await redis.hGetAll(RULES_HASH_KEY);
+      if (!data || Object.keys(data).length === 0) return [];
+      const rules = Object.values(data).map((v) => JSON.parse(v)) as StoredRule[];
       rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       return rules;
     } catch (e) {
-      console.error('[RulesStore] KV read error:', e);
+      console.error('[RulesStore] Redis read error:', e);
     }
   }
 
@@ -111,14 +122,14 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
     if (cookie) return JSON.parse(cookie.value);
   } catch { /* no cookies in cron */ }
 
-  // Fall back to KV
-  const kv = await getKv();
-  if (kv) {
+  // Fall back to Redis
+  const redis = await getRedis();
+  if (redis) {
     try {
-      const rule = await kv.hget(RULES_KEY, ruleId);
-      return (rule as StoredRule) || null;
+      const data = await redis.hGet(RULES_HASH_KEY, ruleId);
+      return data ? JSON.parse(data) : null;
     } catch (e) {
-      console.error('[RulesStore] KV read error:', e);
+      console.error('[RulesStore] Redis read error:', e);
     }
   }
 
@@ -126,7 +137,7 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
 }
 
 /**
- * Save a rule — writes to BOTH cookies and KV (if available)
+ * Save a rule — writes to BOTH cookies and Redis (if available)
  */
 export async function saveRule(rule: StoredRule): Promise<void> {
   // Always write to cookies (immediate persistence for user)
@@ -137,19 +148,19 @@ export async function saveRule(rule: StoredRule): Promise<void> {
     console.error('[RulesStore] Cookie write error:', e);
   }
 
-  // Also write to KV if available (for cron access)
-  const kv = await getKv();
-  if (kv) {
+  // Also write to Redis if available (for cron access)
+  const redis = await getRedis();
+  if (redis) {
     try {
-      await kv.hset(RULES_KEY, { [rule.id]: rule });
+      await redis.hSet(RULES_HASH_KEY, rule.id, JSON.stringify(rule));
     } catch (e) {
-      console.error('[RulesStore] KV write error:', e);
+      console.error('[RulesStore] Redis write error:', e);
     }
   }
 }
 
 /**
- * Delete a rule — removes from BOTH cookies and KV
+ * Delete a rule — removes from BOTH cookies and Redis
  */
 export async function deleteRule(ruleId: string): Promise<void> {
   try {
@@ -159,19 +170,19 @@ export async function deleteRule(ruleId: string): Promise<void> {
     console.error('[RulesStore] Cookie delete error:', e);
   }
 
-  const kv = await getKv();
-  if (kv) {
+  const redis = await getRedis();
+  if (redis) {
     try {
-      await kv.hdel(RULES_KEY, ruleId);
+      await redis.hDel(RULES_HASH_KEY, ruleId);
     } catch (e) {
-      console.error('[RulesStore] KV delete error:', e);
+      console.error('[RulesStore] Redis delete error:', e);
     }
   }
 }
 
 /**
- * Check if KV is configured
+ * Check if Redis is configured
  */
 export function isKvConfigured(): boolean {
-  return KV_AVAILABLE;
+  return REDIS_AVAILABLE;
 }

@@ -136,6 +136,10 @@ export async function GET(request: NextRequest) {
 
           // Check ALL conditions (AND logic)
           const allMet = conditions.every((cond) => {
+            // Skip CPA conditions when results=0 — CPA is undefined, not infinitely high
+            if (cond.metric === 'cost_per_result' && resultCount === 0) {
+              return false;
+            }
             const actual = metrics[cond.metric] ?? 0;
             const threshold = parseFloat(cond.threshold || '0');
             return evaluateCondition(actual, cond.operator, threshold);

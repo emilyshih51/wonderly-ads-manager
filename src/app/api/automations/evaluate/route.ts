@@ -227,6 +227,12 @@ async function evaluateRule(
       const threshold = parseFloat(config.threshold || '0');
       const actual = metrics[metric] ?? 0;
 
+      // Skip CPA conditions when results=0 — CPA is undefined, not infinitely high
+      if (metric === 'cost_per_result' && resultCount === 0) {
+        allConditionsMet = false;
+        break;
+      }
+
       if (!evaluateCondition(actual, operator, threshold)) {
         allConditionsMet = false;
         break;

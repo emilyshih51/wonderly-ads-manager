@@ -34,6 +34,7 @@ interface LaunchState {
   dailyBudget: string;
   launchActive: boolean;
   images: QueuedImage[];
+  slackMessage: string;
 }
 
 const DEFAULT_UTM_PARAMS = 'utm_source=facebook&utm_medium={{campaign.id}}&utm_campaign={{adset.id}}&utm_content={{ad.id}}&fbc_id={{adset.id}}&h_ad_id={{ad.id}}';
@@ -54,6 +55,7 @@ const INITIAL_STATE: LaunchState = {
   dailyBudget: '',
   launchActive: false,
   images: [],
+  slackMessage: '🚀 *[Wonderly]* {adset_name} launched with {budget}\n{ad_count} ads created as {status}',
 };
 
 export default function LaunchPage() {
@@ -299,6 +301,7 @@ export default function LaunchPage() {
               budget: state.dailyBudget || null,
               ad_count: successCount,
               status: state.launchActive ? 'ACTIVE' : 'PAUSED',
+              custom_message: state.slackMessage || null,
             }),
           });
         } catch { /* Slack notification is best-effort */ }
@@ -741,6 +744,21 @@ export default function LaunchPage() {
                     }`}
                   />
                 </button>
+              </div>
+
+              {/* Slack Notification Message */}
+              <div className="mt-4">
+                <label className="text-sm font-medium text-gray-700 block mb-1">Slack Notification Message</label>
+                <textarea
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  rows={3}
+                  value={state.slackMessage}
+                  onChange={(e) => setState((prev) => ({ ...prev, slackMessage: e.target.value }))}
+                  placeholder="🚀 *[Wonderly]* {adset_name} launched with {budget}"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Variables: {'{adset_name}'} {'{budget}'} {'{ad_count}'} {'{status}'}
+                </p>
               </div>
             </CardContent>
           </Card>

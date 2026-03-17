@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { cookies } from 'next/headers';
 import {
   metaApi,
   updateStatus,
@@ -9,6 +8,7 @@ import {
   getCampaignOptimizationMap,
 } from '@/lib/meta-api';
 import { postSlackMessage } from '@/lib/slack';
+import { getActiveRules } from '@/lib/rules-store';
 
 export const maxDuration = 60;
 
@@ -34,15 +34,8 @@ export async function GET() {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
   }
 
-  // Read rules from per-rule cookies
-  const cookieStore = await cookies();
-  const allRules: any[] = [];
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_rule_')) {
-      try { allRules.push(JSON.parse(cookie.value)); } catch { /* skip */ }
-    }
-  }
-  const activeRules = allRules.filter((r: any) => r.is_active);
+  // Read active rules from persistent KV store (works for both cron and manual triggers)
+  const activeRules = await getActiveRules();
 
   if (activeRules.length === 0) {
     return NextResponse.json({ evaluated: 0, results: [] });

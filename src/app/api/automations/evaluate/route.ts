@@ -138,16 +138,16 @@ async function evaluateRule(
   const triggerConfig = triggerNode.data?.config || {};
   const actionConfig = actionNode.data?.config || {};
   const entityType = triggerConfig.entity_type || 'ad';
+  const datePreset = triggerConfig.date_preset || 'today';
 
   // Determine which entities to scan
   let insightsData: any[] = [];
 
   if (entityType === 'ad') {
-    // Get all ad-level insights for today
     const campaignId = triggerConfig.campaign_id;
 
-    // Fetch ad-level insights for the whole account
-    const response = await getAdLevelInsights(adAccountId, accessToken, 'today');
+    // Fetch ad-level insights using the rule's configured performance period
+    const response = await getAdLevelInsights(adAccountId, accessToken, datePreset);
     insightsData = response.data || [];
 
     // Filter to specific campaign if configured
@@ -158,7 +158,7 @@ async function evaluateRule(
     const response = await metaApi(`/act_${adAccountId}/insights`, accessToken, {
       params: {
         fields: 'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type',
-        date_preset: 'today',
+        date_preset: datePreset,
         level: 'adset',
         limit: '200',
       },
@@ -171,7 +171,7 @@ async function evaluateRule(
     const response = await metaApi(`/act_${adAccountId}/insights`, accessToken, {
       params: {
         fields: 'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type',
-        date_preset: 'today',
+        date_preset: datePreset,
         level: 'campaign',
         limit: '100',
       },

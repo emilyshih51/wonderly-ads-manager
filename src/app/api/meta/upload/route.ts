@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       const adsetId = formData.get('adset_id') as string;
       const name = formData.get('name') as string;
       const pageId = formData.get('page_id') as string;
+      const instagramActorId = formData.get('instagram_actor_id') as string;
       const message = formData.get('message') as string;
       const link = formData.get('link') as string;
       const urlTags = formData.get('url_tags') as string;
@@ -43,7 +44,6 @@ export async function POST(request: NextRequest) {
       const status = formData.get('status') as string || 'PAUSED';
 
       // Build link_data — only include fields that have actual values
-      // NOTE: `caption` (display link) was deprecated in Meta API v21.0 — removed
       const linkData: any = {
         link,
         call_to_action: { type: callToAction || 'LEARN_MORE' },
@@ -53,13 +53,19 @@ export async function POST(request: NextRequest) {
       if (description) linkData.description = description;
       if (imageHash) linkData.image_hash = imageHash;
 
-      // Create creative
+      // Create creative — copy identity (page_id + instagram) from the source ad set
+      const objectStorySpec: any = {
+        page_id: pageId,
+        link_data: linkData,
+      };
+      // Instagram actor ID enables Instagram placements (matches source ad set identity)
+      if (instagramActorId) {
+        objectStorySpec.instagram_actor_id = instagramActorId;
+      }
+
       const creativeBody: any = {
         name: `${name} Creative`,
-        object_story_spec: {
-          page_id: pageId,
-          link_data: linkData,
-        },
+        object_story_spec: objectStorySpec,
       };
 
       // url_tags is the Meta-supported way to add dynamic tracking params

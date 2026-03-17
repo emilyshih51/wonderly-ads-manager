@@ -136,26 +136,36 @@ async function evaluateRule(
   const entityType = triggerConfig.entity_type || 'ad';
   const datePreset = triggerConfig.date_preset || 'last_7d';
 
-  // Determine which entities to scan
+  // Determine which entities to scan — only ACTIVE entities (skip paused/off)
   let insightsData: any[] = [];
+  const activeAdFilter = JSON.stringify([{ field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] }]);
+  const activeAdSetFilter = JSON.stringify([{ field: 'adset.effective_status', operator: 'IN', value: ['ACTIVE'] }]);
+  const activeCampaignFilter = JSON.stringify([{ field: 'campaign.effective_status', operator: 'IN', value: ['ACTIVE'] }]);
 
   if (entityType === 'ad') {
     const campaignId = triggerConfig.campaign_id;
 
     if (campaignId) {
-      // Use campaign-scoped endpoint for accurate results (avoids pagination limits)
       const response = await metaApi(`/${campaignId}/insights`, accessToken, {
         params: {
           fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
           date_preset: datePreset,
           level: 'ad',
           limit: '500',
+          filtering: activeAdFilter,
         },
       });
       insightsData = response.data || [];
     } else {
-      // No campaign filter — fetch account-wide
-      const response = await getAdLevelInsights(adAccountId, accessToken, datePreset);
+      const response = await metaApi(`/act_${adAccountId}/insights`, accessToken, {
+        params: {
+          fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
+          date_preset: datePreset,
+          level: 'ad',
+          limit: '500',
+          filtering: activeAdFilter,
+        },
+      });
       insightsData = response.data || [];
     }
   } else if (entityType === 'adset') {
@@ -165,6 +175,7 @@ async function evaluateRule(
         date_preset: datePreset,
         level: 'adset',
         limit: '200',
+        filtering: activeAdSetFilter,
       },
     });
     insightsData = response.data || [];
@@ -178,6 +189,7 @@ async function evaluateRule(
         date_preset: datePreset,
         level: 'campaign',
         limit: '100',
+        filtering: activeCampaignFilter,
       },
     });
     insightsData = response.data || [];

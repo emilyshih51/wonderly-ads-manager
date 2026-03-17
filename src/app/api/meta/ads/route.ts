@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getAds, getAdLevelInsights } from '@/lib/meta-api';
+import { getAds, getAdLevelInsights, metaApi } from '@/lib/meta-api';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -9,9 +9,18 @@ export async function GET(request: NextRequest) {
   const adSetId = request.nextUrl.searchParams.get('adset_id') || undefined;
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
+  const customFields = request.nextUrl.searchParams.get('fields');
 
   try {
-    const data = await getAds(session.ad_account_id, session.meta_access_token, adSetId);
+    // If custom fields requested (e.g., fetching creative identity), use metaApi directly
+    let data;
+    if (customFields && adSetId) {
+      data = await metaApi(`/${adSetId}/ads`, session.meta_access_token, {
+        params: { fields: customFields, limit: '5' },
+      });
+    } else {
+      data = await getAds(session.ad_account_id, session.meta_access_token, adSetId);
+    }
     const ads = data.data || [];
 
     if (withInsights) {

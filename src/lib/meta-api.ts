@@ -35,7 +35,9 @@ export async function metaApi(
   const data = await response.json();
 
   if (data.error) {
-    throw new Error(data.error.message || 'Meta API Error');
+    const err: any = new Error(data.error.message || 'Meta API Error');
+    err.metaError = data.error; // Preserve full Meta error object (error_subcode, error_user_title, etc.)
+    throw err;
   }
 
   return data;

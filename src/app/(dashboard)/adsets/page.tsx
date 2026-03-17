@@ -257,7 +257,8 @@ export default function LaunchPage() {
           const adRes = await window.fetch('/api/meta/upload', { method: 'POST', body: adForm });
           const adData = await adRes.json();
           if (!adData.id) {
-            const errMsg = adData.error?.message || adData.error?.error_user_msg || JSON.stringify(adData.error) || 'Ad creation failed';
+            const errObj = adData.error || {};
+            const errMsg = errObj.detail || errObj.message || JSON.stringify(errObj) || 'Ad creation failed';
             throw new Error(errMsg);
           }
 

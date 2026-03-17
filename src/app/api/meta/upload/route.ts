@@ -38,32 +38,37 @@ export async function POST(request: NextRequest) {
       const urlTags = formData.get('url_tags') as string;
       const headline = formData.get('headline') as string;
       const description = formData.get('description') as string;
-      const displayLink = formData.get('display_link') as string;
       const callToAction = formData.get('call_to_action') as string;
       const imageHash = formData.get('image_hash') as string;
       const status = formData.get('status') as string || 'PAUSED';
 
+      // Build link_data — only include fields that have actual values
+      // NOTE: `caption` (display link) was deprecated in Meta API v21.0 — removed
+      const linkData: any = {
+        link,
+        call_to_action: { type: callToAction || 'LEARN_MORE' },
+      };
+      if (message) linkData.message = message;
+      if (headline) linkData.name = headline;
+      if (description) linkData.description = description;
+      if (imageHash) linkData.image_hash = imageHash;
+
       // Create creative
-      // Meta requires `link` to be a clean URL — tracking params go in `url_tags`
       const creativeBody: any = {
         name: `${name} Creative`,
         object_story_spec: {
           page_id: pageId,
-          link_data: {
-            message,
-            link,
-            name: headline,
-            ...(description && { description }),
-            ...(displayLink && { caption: displayLink }),
-            ...(imageHash && { image_hash: imageHash }),
-            call_to_action: { type: callToAction || 'LEARN_MORE' },
-          },
+          link_data: linkData,
         },
       };
+
       // url_tags is the Meta-supported way to add dynamic tracking params
+      // Must be on the creative body, not inside link_data
       if (urlTags) {
         creativeBody.url_tags = urlTags;
       }
+
+      console.log('[create_ad] Creative body:', JSON.stringify(creativeBody, null, 2));
 
       const creative = await metaApi(`/act_${session.ad_account_id}/adcreatives`, session.meta_access_token, {
         method: 'POST',
@@ -87,7 +92,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     console.error('Upload error:', error);
-    const message = error?.response?.data?.error?.message || error?.message || 'Upload failed';
-    return NextResponse.json({ error: { message } }, { status: 500 });
+    // Return the full Meta error details so the UI can show a useful message
+    const metaError = error?.metaError;
+    const message = metaError?.message || error?.message || 'Upload failed';
+    const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
+    return NextResponse.json({
+      error: {
+        message,
+        detail: errorDetail,
+        meta_error_code: metaError?.code,
+        meta_error_subcode: metaError?.error_subcode,
+        fbtrace_id: metaError?.fbtrace_id,
+      }
+    }, { status: 500 });
   }
 }

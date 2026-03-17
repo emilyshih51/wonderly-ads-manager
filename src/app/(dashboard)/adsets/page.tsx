@@ -197,12 +197,32 @@ export default function LaunchPage() {
       if (!duplicateData.id) {
         throw new Error(duplicateData.error || 'Failed to duplicate source');
       }
-      const newAdSetId = duplicateData.id;
+
+      let newAdSetId = duplicateData.id;
+
+      // If we duplicated a campaign, we need to get the ad set inside it
+      if (state.sourceType === 'campaign') {
+        // Fetch ad sets in the new campaign to find the duplicated ad set
+        const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${newAdSetId}`);
+        const adSetsData = await adSetsRes.json();
+        const campaignAdSets = adSetsData.data || [];
+        if (campaignAdSets.length > 0) {
+          newAdSetId = campaignAdSets[0].id; // Use first ad set in the duplicated campaign
+        } else {
+          throw new Error('Duplicated campaign has no ad sets. Please duplicate an ad set instead.');
+        }
+      }
 
       // Step 2: Upload images and create ads
-      const finalUrl = buildFinalUrl();
+      // Build the website URL - only add URL params if the base URL is provided
+      const baseUrl = state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`;
+      const finalUrl = state.urlParameters
+        ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${state.urlParameters}`
+        : baseUrl;
       const primaryText = getFirstPrimaryText();
       const headline = getFirstHeadline();
+
+      let successCount = 0;
 
       for (const img of state.images) {
         if (img.status === 'done') continue;
@@ -216,13 +236,16 @@ export default function LaunchPage() {
           const imgRes = await window.fetch('/api/meta/upload', { method: 'POST', body: imgForm });
           const imgData = await imgRes.json();
           const imageHash = imgData.images ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash : null;
-          if (!imageHash) throw new Error('Image upload failed — no hash');
+          if (!imageHash) {
+            const errMsg = imgData.error?.message || imgData.error?.error_user_msg || JSON.stringify(imgData.error) || 'Image upload failed — no hash returned';
+            throw new Error(errMsg);
+          }
 
           // Create ad
           const adForm = new FormData();
           adForm.append('action', 'create_ad');
           adForm.append('adset_id', newAdSetId);
-          adForm.append('name', `${state.newName} - Image ${state.images.indexOf(img) + 1}`);
+          adForm.append('name', `${state.newName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
           adForm.append('page_id', state.pageId);
           adForm.append('message', primaryText);
           adForm.append('link', finalUrl);
@@ -233,15 +256,23 @@ export default function LaunchPage() {
 
           const adRes = await window.fetch('/api/meta/upload', { method: 'POST', body: adForm });
           const adData = await adRes.json();
-          if (!adData.id) throw new Error(adData.error?.message || 'Ad creation failed');
+          if (!adData.id) {
+            const errMsg = adData.error?.message || adData.error?.error_user_msg || JSON.stringify(adData.error) || 'Ad creation failed';
+            throw new Error(errMsg);
+          }
 
           updateImage(img.id, { status: 'done' });
+          successCount++;
         } catch (err) {
           updateImage(img.id, { status: 'error', error: err instanceof Error ? err.message : 'Unknown error' });
         }
       }
 
-      setLaunchSuccess(true);
+      if (successCount > 0) {
+        setLaunchSuccess(true);
+      } else {
+        setLaunchError('Ad set was duplicated but all ad creations failed. Check the error details on each image.');
+      }
     } catch (err) {
       setLaunchError(err instanceof Error ? err.message : 'Launch failed');
     } finally {
@@ -626,24 +657,28 @@ export default function LaunchPage() {
                             </div>
                           )}
                           {img.status === 'done' && (
-                            <div className="absolute top-1 right-1">
+                            <div className="absolute top-1 left-1">
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
                             </div>
                           )}
                           {img.status === 'error' && (
-                            <div className="absolute top-1 right-1 cursor-help" title={img.error}>
+                            <div className="absolute top-1 left-1 cursor-help" title={img.error}>
                               <AlertCircle className="h-4 w-4 text-red-600" />
                             </div>
                           )}
-                          {img.status === 'pending' && (
+                          {/* Always show X to remove (except while uploading) */}
+                          {img.status !== 'uploading' && (
                             <button
                               onClick={() => removeImage(img.id)}
-                              className="absolute top-1 right-1 p-1 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
+                              className="absolute top-1 right-1 p-1 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
                         </div>
+                        {img.status === 'error' && img.error && (
+                          <p className="text-xs text-red-600 p-1.5 truncate" title={img.error}>{img.error}</p>
+                        )}
                       </div>
                     ))}
                   </div>

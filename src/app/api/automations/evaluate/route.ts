@@ -355,9 +355,9 @@ async function sendSlackNotification(
   customMessage?: string,
   prefix?: string
 ) {
-  // Link to Meta Ads Manager with the ad name pre-filled in the search filter
-  const encodedName = encodeURIComponent(entityName);
-  const adManagerLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=SEARCH_VALUE%3D%22${encodedName}%22`;
+  // Link directly to this ad in Meta Ads Manager
+  // selected_ad_ids highlights the ad; adding the ad-level view ensures Ads tab is active
+  const adManagerLink = `https://business.facebook.com/adsmanager/manage/ads?act=${adAccountId}&selected_ad_ids=${entityId}&nav_source=no_referrer`;
 
   let actionEmoji = '⏸️';
   let actionVerb = 'Paused';

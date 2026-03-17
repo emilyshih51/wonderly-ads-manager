@@ -590,6 +590,12 @@ export default function AutomationsPage() {
   const [testResults, setTestResults] = useState<any>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
 
+  // Run Now state
+  const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
+  const [runResults, setRunResults] = useState<any>(null);
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [confirmRunRule, setConfirmRunRule] = useState<Rule | null>(null);
+
   // Activity log
   const [activityLog, setActivityLog] = useState<any[]>([]);
 
@@ -745,6 +751,43 @@ export default function AutomationsPage() {
       setTestResults({ error: String(err) });
       setTestDialogOpen(true);
     } finally { setTesting(false); }
+  };
+
+  /* ─── Run Now (live execution) ─── */
+  const handleRunNow = async (rule: Rule) => {
+    setRunningRuleId(rule.id);
+    setRunResults(null);
+    setConfirmRunRule(null);
+    try {
+      const res = await fetch('/api/automations/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule: { name: rule.name, is_active: true, nodes: rule.nodes, edges: rule.edges },
+          send_slack: true,
+          live: true, // Actually execute actions
+        }),
+      });
+      const data = await res.json();
+      setRunResults(data);
+      setRunDialogOpen(true);
+
+      // Log to activity history
+      await fetch('/api/automations/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule_name: rule.name,
+          type: 'live',
+          matched: data.matched || 0,
+          results: data.results || [],
+        }),
+      });
+      fetchHistory();
+    } catch (err) {
+      setRunResults({ error: String(err) });
+      setRunDialogOpen(true);
+    } finally { setRunningRuleId(null); }
   };
 
   /* ─── Config helpers ─── */
@@ -910,6 +953,19 @@ export default function AutomationsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setConfirmRunRule(rule)}
+                            disabled={runningRuleId === rule.id}
+                          >
+                            {runningRuleId === rule.id ? (
+                              <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running...</>
+                            ) : (
+                              <><Play className="h-3 w-3 mr-1" /> Run Now</>
+                            )}
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => editRule(rule)}>
                             <Settings2 className="h-3.5 w-3.5 text-gray-400" />
                           </Button>
@@ -1486,6 +1542,95 @@ export default function AutomationsPage() {
           </div>
           <div className="flex justify-end pt-2">
             <Button size="sm" onClick={() => setTestDialogOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Run Now Confirmation Dialog ─── */}
+      <Dialog open={!!confirmRunRule} onOpenChange={(open) => !open && setConfirmRunRule(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Run Rule Now</DialogTitle>
+            <DialogDescription className="text-xs">
+              This will execute the rule for real — matching ads will be paused, promoted, or activated.
+            </DialogDescription>
+          </DialogHeader>
+          {confirmRunRule && (
+            <div className="mt-2 space-y-3">
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                <p className="text-sm text-amber-800 font-medium">{confirmRunRule.name}</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  This will take real actions on your Meta ads. Are you sure?
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmRunRule(null)}>Cancel</Button>
+                <Button size="sm" onClick={() => handleRunNow(confirmRunRule)}>
+                  <Play className="h-3.5 w-3.5 mr-1.5" /> Run Now
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Run Results Dialog ─── */}
+      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base">Run Complete</DialogTitle>
+            <DialogDescription className="text-xs">
+              Actions have been executed on your Meta ads.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 space-y-3 max-h-[400px] overflow-y-auto">
+            {runResults?.error ? (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                <p className="text-sm text-red-700">{runResults.error}</p>
+              </div>
+            ) : runResults?.matched === 0 ? (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center">
+                <p className="text-sm text-gray-600 font-medium">No ads matched the conditions</p>
+                <p className="text-xs text-gray-400 mt-1">No actions were taken.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium text-gray-900">{runResults?.matched || 0}</span> ad{runResults?.matched !== 1 ? 's' : ''} affected:
+                </p>
+                {runResults?.results?.map((r: any, i: number) => (
+                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.entity_name}</p>
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
+                        r.action?.includes('pause') ? 'bg-red-50 text-red-600' :
+                        r.action?.includes('promote') ? 'bg-emerald-50 text-emerald-600' :
+                        'bg-blue-50 text-blue-600'
+                      }`}>
+                        {r.action}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                      <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
+                      <span>Results: {r.metrics?.results}</span>
+                      <span>CPA: {r.metrics?.cost_per_result === 'N/A' ? 'N/A' : `$${r.metrics?.cost_per_result}`}</span>
+                    </div>
+                    {r.duplicated_ad_id && (
+                      <p className="mt-1 text-[10px] text-emerald-600">Duplicated to winners ad set</p>
+                    )}
+                    {r.slack_sent && r.slack_channel && (
+                      <p className="mt-1 text-[10px] text-emerald-600">Slack sent to {r.slack_channel}</p>
+                    )}
+                    {r.error && (
+                      <p className="mt-1 text-[10px] text-red-600">{r.error}</p>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button size="sm" onClick={() => setRunDialogOpen(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>

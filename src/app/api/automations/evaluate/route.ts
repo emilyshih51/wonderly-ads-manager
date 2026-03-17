@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const rule = body.rule;
   const sendSlack = body.send_slack === true;
+  const live = body.live === true; // Actually execute actions (pause/promote)
 
   if (!rule) {
     return NextResponse.json({ error: 'Rule required' }, { status: 400 });
@@ -100,15 +101,17 @@ export async function POST(request: NextRequest) {
   try {
     optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
   } catch (e) {
-    console.error('[Evaluate Test] Failed to get optimization map:', e);
+    console.error('[Evaluate] Failed to get optimization map:', e);
   }
 
   try {
-    const results = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, true, sendSlack);
+    const dryRun = !live;
+    const results = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, dryRun, sendSlack || live);
     return NextResponse.json({
-      test: true,
-      dry_run: true,
-      send_slack: sendSlack,
+      test: !live,
+      dry_run: dryRun,
+      live,
+      send_slack: sendSlack || live,
       rule_name: rule.name,
       matched: results.length,
       results,

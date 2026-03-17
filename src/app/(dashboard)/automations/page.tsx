@@ -590,6 +590,9 @@ export default function AutomationsPage() {
   const [testResults, setTestResults] = useState<any>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
 
+  // Activity log
+  const [activityLog, setActivityLog] = useState<any[]>([]);
+
   /* ─── API ─── */
   const fetchRules = useCallback(async () => {
     try {
@@ -599,7 +602,15 @@ export default function AutomationsPage() {
     } catch (err) { console.error('Failed to fetch rules:', err); }
   }, []);
 
-  useEffect(() => { fetchRules(); }, [fetchRules]);
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/automations/history');
+      const data = await res.json();
+      setActivityLog(data.data || []);
+    } catch (err) { console.error('Failed to fetch history:', err); }
+  }, []);
+
+  useEffect(() => { fetchRules(); fetchHistory(); }, [fetchRules, fetchHistory]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -711,12 +722,25 @@ export default function AutomationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rule: { name: ruleName, is_active: true, nodes, edges },
-          send_slack: true, // Send real Slack messages during test
+          send_slack: true,
         }),
       });
       const data = await res.json();
       setTestResults(data);
       setTestDialogOpen(true);
+
+      // Log to activity history
+      await fetch('/api/automations/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule_name: ruleName,
+          type: 'test',
+          matched: data.matched || 0,
+          results: data.results || [],
+        }),
+      });
+      fetchHistory();
     } catch (err) {
       setTestResults({ error: String(err) });
       setTestDialogOpen(true);
@@ -892,6 +916,72 @@ export default function AutomationsPage() {
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(rule.id)}>
                             <Trash2 className="h-3.5 w-3.5 text-gray-300 hover:text-red-400" />
                           </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Activity Log */}
+            <div>
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
+                Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
+              </h2>
+              {activityLog.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <Activity className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">No runs yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Test or activate a rule to see results here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {activityLog.map((event) => {
+                    const date = new Date(event.timestamp);
+                    const timeStr = date.toLocaleString('en-US', {
+                      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+                    });
+                    const isTest = event.type === 'test';
+                    return (
+                      <div key={event.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                              isTest ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                            }`}>
+                              {isTest ? 'Test' : 'Live'}
+                            </span>
+                            <p className="text-sm font-medium text-gray-900">{event.rule_name}</p>
+                          </div>
+                          <p className="text-xs text-gray-400">{timeStr}</p>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-500">
+                          {event.matched === 0 ? (
+                            <p>No ads matched the conditions</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <p><span className="font-medium text-gray-700">{event.matched}</span> ad{event.matched !== 1 ? 's' : ''} matched</p>
+                              {event.results?.map((r: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between pl-3 border-l-2 border-gray-100">
+                                  <span className="truncate text-gray-700">{r.entity_name}</span>
+                                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                    <span className="text-gray-400">
+                                      ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'} · {r.metrics?.results ?? 0} results
+                                    </span>
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                      r.action?.includes('pause') || r.action?.includes('would_pause') ? 'bg-red-50 text-red-600' :
+                                      r.action?.includes('promote') || r.action?.includes('would_promote') ? 'bg-emerald-50 text-emerald-600' :
+                                      'bg-blue-50 text-blue-600'
+                                    }`}>
+                                      {r.action?.replace('would_', '')}
+                                    </span>
+                                    {r.slack_sent && <span className="text-emerald-500 text-[10px]">Slack sent</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

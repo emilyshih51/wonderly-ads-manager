@@ -409,7 +409,10 @@ async function sendSlackNotification(
   }
 
   if (duplicatedAdId) {
-    const dupLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&selected_ad_ids=${duplicatedAdId}`;
+    // Use same filter_set format so the link opens directly to the new ad
+    const dupEncodedName = encodeURIComponent(`"[\\\"${entityName} [Winner Copy]\\\"]"`);
+    const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
+    const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
     text += `\n📋 Duplicated to winners ad set: <${dupLink}|View new ad>`;
   }
 

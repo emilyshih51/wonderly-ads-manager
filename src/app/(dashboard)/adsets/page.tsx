@@ -28,14 +28,15 @@ interface LaunchState {
   headlines: string[];
   callToAction: string;
   websiteUrl: string;
-  utmSource: string;
-  utmMedium: string;
-  utmCampaign: string;
+  urlParameters: string;
   displayLink: string;
   pageId: string;
+  dailyBudget: string;
   launchActive: boolean;
   images: QueuedImage[];
 }
+
+const DEFAULT_UTM_PARAMS = 'utm_source=facebook&utm_medium={{campaign.id}}&utm_campaign={{adset.id}}&utm_content={{ad.id}}&fbc_id={{adset.id}}&h_ad_id={{ad.id}}';
 
 const INITIAL_STATE: LaunchState = {
   sourceType: null,
@@ -45,13 +46,12 @@ const INITIAL_STATE: LaunchState = {
   targetCampaign: '',
   primaryTexts: ['', '', '', '', ''],
   headlines: ['', '', '', '', ''],
-  callToAction: 'LEARN_MORE',
-  websiteUrl: '',
-  utmSource: '',
-  utmMedium: '',
-  utmCampaign: '',
-  displayLink: '',
-  pageId: '',
+  callToAction: 'BOOK_NOW',
+  websiteUrl: 'https://www.wonderly.com',
+  urlParameters: DEFAULT_UTM_PARAMS,
+  displayLink: 'wonderly.com',
+  pageId: process.env.NEXT_PUBLIC_FACEBOOK_PAGE_ID || '',
+  dailyBudget: '',
   launchActive: false,
   images: [],
 };
@@ -114,15 +114,16 @@ export default function LaunchPage() {
     setSourceOptions(options);
   }, [state.sourceType, searchQuery, campaigns, adSets]);
 
-  /* ---------- Build final URL with UTM ---------- */
+  /* ---------- Build final URL with URL parameters ---------- */
   const buildFinalUrl = () => {
     if (!state.websiteUrl) return '';
     try {
-      const url = new URL(state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`);
-      if (state.utmSource) url.searchParams.set('utm_source', state.utmSource);
-      if (state.utmMedium) url.searchParams.set('utm_medium', state.utmMedium);
-      if (state.utmCampaign) url.searchParams.set('utm_campaign', state.utmCampaign);
-      return url.toString();
+      const base = state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`;
+      if (state.urlParameters) {
+        const separator = base.includes('?') ? '&' : '?';
+        return `${base}${separator}${state.urlParameters}`;
+      }
+      return base;
     } catch {
       return state.websiteUrl;
     }
@@ -488,7 +489,7 @@ export default function LaunchPage() {
                   <p className="text-xs text-gray-500 mt-2">Enter at least one headline. The first filled headline will be used.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   {/* Call to Action */}
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-1.5 block">Call to Action</label>
@@ -502,7 +503,6 @@ export default function LaunchPage() {
                   {/* Facebook Page ID */}
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                      <Tag className="h-4 w-4 text-gray-400" />
                       Facebook Page ID <span className="text-red-500">*</span>
                     </label>
                     <Input
@@ -511,67 +511,62 @@ export default function LaunchPage() {
                       placeholder="Your Facebook Page ID"
                     />
                   </div>
+
+                  {/* Daily Budget (optional) */}
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Daily Budget (optional)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <Input
+                        type="number"
+                        value={state.dailyBudget}
+                        onChange={(e) => setState((prev) => ({ ...prev, dailyBudget: e.target.value }))}
+                        placeholder="e.g. 500"
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Leave blank to keep source budget</p>
+                  </div>
                 </div>
 
-                {/* Website URL */}
+                {/* Web Link */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
                     <Globe className="h-4 w-4 text-gray-400" />
-                    Website URL
+                    Web Link
                   </label>
                   <Input
                     value={state.websiteUrl}
                     onChange={(e) => setState((prev) => ({ ...prev, websiteUrl: e.target.value }))}
-                    placeholder="https://yoursite.com"
+                    placeholder="https://www.wonderly.com"
                   />
                 </div>
 
-                {/* UTM Parameters */}
+                {/* URL Parameters */}
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">UTM Parameters (optional)</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">Source</label>
-                      <Input
-                        value={state.utmSource}
-                        onChange={(e) => setState((prev) => ({ ...prev, utmSource: e.target.value }))}
-                        placeholder="facebook"
-                        className="text-xs h-8"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">Medium</label>
-                      <Input
-                        value={state.utmMedium}
-                        onChange={(e) => setState((prev) => ({ ...prev, utmMedium: e.target.value }))}
-                        placeholder="paid_social"
-                        className="text-xs h-8"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-600 mb-1 block">Campaign</label>
-                      <Input
-                        value={state.utmCampaign}
-                        onChange={(e) => setState((prev) => ({ ...prev, utmCampaign: e.target.value }))}
-                        placeholder="spring_promo"
-                        className="text-xs h-8"
-                      />
-                    </div>
-                  </div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">URL Parameters</p>
+                  <p className="text-xs text-gray-500 mb-3">Meta dynamic parameters like {'{{campaign.id}}'} are replaced at impression time.</p>
+                  <textarea
+                    rows={2}
+                    value={state.urlParameters}
+                    onChange={(e) => setState((prev) => ({ ...prev, urlParameters: e.target.value }))}
+                    placeholder="utm_source=facebook&utm_medium={{campaign.id}}&..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
+                  />
                   {state.websiteUrl && (
                     <div className="mt-2 p-2 bg-white rounded border border-gray-200">
-                      <p className="text-xs text-gray-600 truncate">{buildFinalUrl()}</p>
+                      <p className="text-xs text-gray-600 break-all">{buildFinalUrl()}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Display Link */}
                 <div>
-                  <label className="text-xs text-gray-600 mb-1.5 block">Display Link (optional)</label>
+                  <label className="text-xs text-gray-600 mb-1.5 block">Display Link</label>
                   <Input
                     value={state.displayLink}
                     onChange={(e) => setState((prev) => ({ ...prev, displayLink: e.target.value }))}
-                    placeholder="yoursite.com"
+                    placeholder="wonderly.com"
                   />
                 </div>
               </div>

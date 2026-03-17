@@ -73,6 +73,7 @@ export const DATE_PRESETS = [
 
 export const CALL_TO_ACTION_TYPES = [
   'APPLY_NOW',
+  'BOOK_NOW',
   'BOOK_TRAVEL',
   'BUY_NOW',
   'CONTACT_US',

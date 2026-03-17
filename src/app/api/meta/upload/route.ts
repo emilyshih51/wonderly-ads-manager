@@ -35,29 +35,39 @@ export async function POST(request: NextRequest) {
       const pageId = formData.get('page_id') as string;
       const message = formData.get('message') as string;
       const link = formData.get('link') as string;
+      const urlTags = formData.get('url_tags') as string;
       const headline = formData.get('headline') as string;
       const description = formData.get('description') as string;
+      const displayLink = formData.get('display_link') as string;
       const callToAction = formData.get('call_to_action') as string;
       const imageHash = formData.get('image_hash') as string;
       const status = formData.get('status') as string || 'PAUSED';
 
       // Create creative
-      const creative = await metaApi(`/act_${session.ad_account_id}/adcreatives`, session.meta_access_token, {
-        method: 'POST',
-        body: {
-          name: `${name} Creative`,
-          object_story_spec: {
-            page_id: pageId,
-            link_data: {
-              message,
-              link,
-              name: headline,
-              ...(description && { description }),
-              ...(imageHash && { image_hash: imageHash }),
-              call_to_action: { type: callToAction || 'LEARN_MORE' },
-            },
+      // Meta requires `link` to be a clean URL — tracking params go in `url_tags`
+      const creativeBody: any = {
+        name: `${name} Creative`,
+        object_story_spec: {
+          page_id: pageId,
+          link_data: {
+            message,
+            link,
+            name: headline,
+            ...(description && { description }),
+            ...(displayLink && { caption: displayLink }),
+            ...(imageHash && { image_hash: imageHash }),
+            call_to_action: { type: callToAction || 'LEARN_MORE' },
           },
         },
+      };
+      // url_tags is the Meta-supported way to add dynamic tracking params
+      if (urlTags) {
+        creativeBody.url_tags = urlTags;
+      }
+
+      const creative = await metaApi(`/act_${session.ad_account_id}/adcreatives`, session.meta_access_token, {
+        method: 'POST',
+        body: creativeBody,
       });
 
       // Create ad

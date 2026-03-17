@@ -214,11 +214,9 @@ export default function LaunchPage() {
       }
 
       // Step 2: Upload images and create ads
-      // Build the website URL - only add URL params if the base URL is provided
+      // link = clean base URL; url_tags = tracking/UTM params (Meta appends these)
       const baseUrl = state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`;
-      const finalUrl = state.urlParameters
-        ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${state.urlParameters}`
-        : baseUrl;
+      const urlTags = state.urlParameters || '';
       const primaryText = getFirstPrimaryText();
       const headline = getFirstHeadline();
 
@@ -248,8 +246,10 @@ export default function LaunchPage() {
           adForm.append('name', `${state.newName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
           adForm.append('page_id', state.pageId);
           adForm.append('message', primaryText);
-          adForm.append('link', finalUrl);
+          adForm.append('link', baseUrl);
+          if (urlTags) adForm.append('url_tags', urlTags);
           adForm.append('headline', headline);
+          if (state.displayLink) adForm.append('display_link', state.displayLink);
           adForm.append('call_to_action', state.callToAction);
           adForm.append('image_hash', imageHash);
           adForm.append('status', state.launchActive ? 'ACTIVE' : 'PAUSED');

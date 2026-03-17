@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { cookies } from 'next/headers';
 import {
@@ -34,10 +34,15 @@ export async function GET() {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
   }
 
+  // Read rules from per-rule cookies
   const cookieStore = await cookies();
-  const rulesCookie = cookieStore.get('wonderly_automation_rules');
-  const rules = rulesCookie ? JSON.parse(rulesCookie.value) : [];
-  const activeRules = rules.filter((r: any) => r.is_active);
+  const allRules: any[] = [];
+  for (const cookie of cookieStore.getAll()) {
+    if (cookie.name.startsWith('wonderly_rule_')) {
+      try { allRules.push(JSON.parse(cookie.value)); } catch { /* skip */ }
+    }
+  }
+  const activeRules = allRules.filter((r: any) => r.is_active);
 
   if (activeRules.length === 0) {
     return NextResponse.json({ evaluated: 0, results: [] });
@@ -55,7 +60,7 @@ export async function GET() {
 
   for (const rule of activeRules) {
     try {
-      const result = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap);
+      const result = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, false);
       results.push(...result);
     } catch (error) {
       console.error(`[Evaluate] Rule "${rule.name}" error:`, error);
@@ -67,13 +72,59 @@ export async function GET() {
 }
 
 /**
+ * POST /api/automations/evaluate
+ *
+ * Test a specific rule (dry run — no actions are taken, no Slack messages sent).
+ * Returns what WOULD happen if the rule were active.
+ *
+ * Body: { rule: RuleObject } — the full rule to test
+ */
+export async function POST(request: NextRequest) {
+  const session = await getSession();
+  const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;
+  const rawAdAccountId = session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
+
+  if (!accessToken || !rawAdAccountId) {
+    return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const rule = body.rule;
+
+  if (!rule) {
+    return NextResponse.json({ error: 'Rule required' }, { status: 400 });
+  }
+
+  let optimizationMap: Record<string, string> = {};
+  try {
+    optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
+  } catch (e) {
+    console.error('[Evaluate Test] Failed to get optimization map:', e);
+  }
+
+  try {
+    const results = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, true);
+    return NextResponse.json({
+      test: true,
+      dry_run: true,
+      rule_name: rule.name,
+      matched: results.length,
+      results,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+/**
  * Evaluate a single rule against all matching entities
  */
 async function evaluateRule(
   rule: any,
   adAccountId: string,
   accessToken: string,
-  optimizationMap: Record<string, string>
+  optimizationMap: Record<string, string>,
+  dryRun: boolean = false
 ): Promise<any[]> {
   const triggerNode = rule.nodes.find((n: any) => n.type === 'trigger');
   const conditionNodes = rule.nodes.filter((n: any) => n.type === 'condition');
@@ -181,7 +232,14 @@ async function evaluateRule(
     };
 
     try {
-      if (actionType === 'pause') {
+      if (dryRun) {
+        // Dry run — just report what WOULD happen
+        actionResult.action = `would_${actionType}`;
+        actionResult.dry_run = true;
+        if (actionType === 'promote' && !actionConfig.target_adset_id) {
+          actionResult.warning = 'No target ad set ID configured for promotion';
+        }
+      } else if (actionType === 'pause') {
         await updateStatus(entityId, accessToken, 'PAUSED');
         actionResult.action = 'paused';
       } else if (actionType === 'activate') {
@@ -202,17 +260,21 @@ async function evaluateRule(
 
       // Send Slack notification
       if (actionConfig.slack_channel && (actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true)) {
-        await sendSlackNotification(
-          actionConfig.slack_channel,
-          rule.name,
-          actionType,
-          entityType,
-          entityId,
-          entityName,
-          metrics,
-          adAccountId,
-          actionResult.duplicated_ad_id
-        );
+        if (!dryRun) {
+          await sendSlackNotification(
+            actionConfig.slack_channel,
+            rule.name,
+            actionType,
+            entityType,
+            entityId,
+            entityName,
+            metrics,
+            adAccountId,
+            actionResult.duplicated_ad_id,
+            actionConfig.slack_message
+          );
+        }
+        actionResult.slack_channel = actionConfig.slack_channel;
       }
     } catch (actionError) {
       actionResult.error = String(actionError);
@@ -275,7 +337,8 @@ async function sendSlackNotification(
   entityName: string,
   metrics: Record<string, number>,
   adAccountId: string,
-  duplicatedAdId?: string
+  duplicatedAdId?: string,
+  customMessage?: string
 ) {
   const adManagerLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&selected_ad_ids=${entityId}`;
 
@@ -292,9 +355,27 @@ async function sendSlackNotification(
   const resultDisplay = metrics.results || 0;
   const cpaDisplay = metrics.cost_per_result === 99999 ? 'N/A' : `$${metrics.cost_per_result.toFixed(2)}`;
 
-  let text = `${actionEmoji} *${ruleName}*\n`;
-  text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
-  text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
+  let text: string;
+
+  if (customMessage) {
+    // Replace template variables in custom message
+    text = customMessage
+      .replace(/\{rule_name\}/g, ruleName)
+      .replace(/\{action\}/g, actionVerb)
+      .replace(/\{entity_type\}/g, entityType)
+      .replace(/\{entity_name\}/g, entityName)
+      .replace(/\{ad_link\}/g, `<${adManagerLink}|${entityName}>`)
+      .replace(/\{spend\}/g, `$${metrics.spend.toFixed(2)}`)
+      .replace(/\{results\}/g, String(resultDisplay))
+      .replace(/\{cpa\}/g, cpaDisplay)
+      .replace(/\{clicks\}/g, String(metrics.clicks || 0))
+      .replace(/\{ctr\}/g, `${(metrics.ctr || 0).toFixed(2)}%`);
+  } else {
+    // Default message format
+    text = `${actionEmoji} *${ruleName}*\n`;
+    text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
+    text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
+  }
 
   if (duplicatedAdId) {
     const dupLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&selected_ad_ids=${duplicatedAdId}`;

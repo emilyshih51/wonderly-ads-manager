@@ -244,6 +244,11 @@ export default function AutomationsPage() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [nodeConfig, setNodeConfig] = useState<Record<string, string>>({});
 
+  // Test workflow state
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
 
   const onConnect = useCallback(
@@ -348,6 +353,32 @@ export default function AutomationsPage() {
       position: { x: 300, y: (nds.length + 1) * 160 },
       data: { ...defaults[type], config: {} },
     }]);
+  };
+
+  const handleTestWorkflow = async () => {
+    setTesting(true);
+    setTestResults(null);
+    try {
+      const rule = {
+        name: ruleName,
+        is_active: true,
+        nodes,
+        edges,
+      };
+      const res = await fetch('/api/automations/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rule }),
+      });
+      const data = await res.json();
+      setTestResults(data);
+      setTestDialogOpen(true);
+    } catch (err) {
+      setTestResults({ error: String(err) });
+      setTestDialogOpen(true);
+    } finally {
+      setTesting(false);
+    }
   };
 
   const onNodeDoubleClick = (_: React.MouseEvent, node: Node) => {
@@ -545,6 +576,10 @@ export default function AutomationsPage() {
                 placeholder="Rule name..."
               />
               <div className="w-px h-6 bg-gray-200" />
+              <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing} className="h-8">
+                <Play className="h-3.5 w-3.5 mr-1.5" />
+                {testing ? 'Testing...' : 'Test Workflow'}
+              </Button>
               <Button size="sm" onClick={handleSave} disabled={saving} className="h-8">
                 <Save className="h-3.5 w-3.5 mr-1.5" />
                 {saving ? 'Saving...' : 'Save Rule'}
@@ -728,15 +763,32 @@ export default function AutomationsPage() {
                   <span className="text-sm text-gray-700">Send Slack notification</span>
                 </label>
                 {nodeConfig.also_notify_slack === 'true' && (
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Slack Channel</label>
-                    <Input
-                      value={nodeConfig.slack_channel || ''}
-                      onChange={(e) => setNodeConfig({ ...nodeConfig, slack_channel: e.target.value })}
-                      className="mt-1 h-9"
-                      placeholder="#emily-space"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Slack Channel</label>
+                      <Input
+                        value={nodeConfig.slack_channel || ''}
+                        onChange={(e) => setNodeConfig({ ...nodeConfig, slack_channel: e.target.value })}
+                        className="mt-1 h-9"
+                        placeholder="#emily-space"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Custom Message <span className="normal-case text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <textarea
+                        value={nodeConfig.slack_message || ''}
+                        onChange={(e) => setNodeConfig({ ...nodeConfig, slack_message: e.target.value })}
+                        className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={3}
+                        placeholder="Leave empty for default. Variables: {rule_name} {action} {entity_name} {ad_link} {spend} {results} {cpa} {clicks} {ctr}"
+                      />
+                      <p className="mt-1 text-[10px] text-gray-400">
+                        Use {'{ad_link}'} to include a clickable link to the ad in Meta Ads Manager
+                      </p>
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -745,6 +797,68 @@ export default function AutomationsPage() {
               <Button variant="ghost" size="sm" onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
               <Button size="sm" onClick={saveNodeConfig}>Save</Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Test Results Dialog ─── */}
+      <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base">Test Results (Dry Run)</DialogTitle>
+            <DialogDescription className="text-xs">
+              No actions were taken. This shows what would happen if the rule were active right now.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 space-y-3 max-h-[400px] overflow-y-auto">
+            {testResults?.error ? (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                <p className="text-sm text-red-700">{testResults.error}</p>
+              </div>
+            ) : testResults?.matched === 0 ? (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center">
+                <p className="text-sm text-gray-600 font-medium">No ads matched the conditions</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Either no ads meet the thresholds, or check that the campaign ID is set in the trigger.
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium text-gray-900">{testResults?.matched || 0}</span> ad{testResults?.matched !== 1 ? 's' : ''} would be affected:
+                </p>
+                {testResults?.results?.map((r: any, i: number) => (
+                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.entity_name}</p>
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
+                        r.action?.includes('pause') ? 'bg-red-50 text-red-600' :
+                        r.action?.includes('promote') ? 'bg-emerald-50 text-emerald-600' :
+                        'bg-blue-50 text-blue-600'
+                      }`}>
+                        {r.action?.replace('would_', '→ ')}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
+                      <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
+                      <span>Results: {r.metrics?.results}</span>
+                      <span>CPA: {r.metrics?.cost_per_result === 'N/A' ? 'N/A' : `$${r.metrics?.cost_per_result}`}</span>
+                    </div>
+                    {r.warning && (
+                      <p className="mt-1 text-[10px] text-amber-600">{r.warning}</p>
+                    )}
+                    {r.slack_channel && (
+                      <p className="mt-1 text-[10px] text-gray-400">Slack → {r.slack_channel}</p>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button size="sm" onClick={() => setTestDialogOpen(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>

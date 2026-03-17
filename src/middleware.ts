@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = ['/login', '/api/auth', '/api/slack'];
+const publicPaths = ['/login', '/api/auth', '/api/slack', '/api/automations/evaluate'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

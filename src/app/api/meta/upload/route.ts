@@ -75,8 +75,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    const message = error?.response?.data?.error?.message || error?.message || 'Upload failed';
+    return NextResponse.json({ error: { message } }, { status: 500 });
   }
 }

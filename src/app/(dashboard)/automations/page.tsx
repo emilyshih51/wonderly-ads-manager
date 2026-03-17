@@ -42,20 +42,30 @@ interface AutomationTemplate {
   edges: Edge[];
 }
 
+/*
+ * NOTE: campaign_id and target_adset_id are stored in node configs.
+ * To reuse these rules for other campaigns, just change the campaign_id in the trigger
+ * and the target_adset_id in the action via the canvas editor.
+ *
+ * Default campaign: "Wonderly | Testing | Website Signup (D)"
+ * Default winners ad set: in "Wonderly | USA-CA | M-F | 18-65+ | Broad Targeting | 03/02 - Winners"
+ * These IDs will be populated when the user first configures the rules.
+ */
+
 const TEMPLATES: AutomationTemplate[] = [
   {
-    id: 'pause-high-spend-no-results',
-    name: 'Pause high spend with 0 results',
-    description: 'Pause any ad set spending over $40 with 0 link clicks and 0 conversions',
+    id: 'pause-zero-results',
+    name: 'Pause ad: spend ≥ $30, 0 results',
+    description: 'Pause any ad spending $30+ with zero conversions. Notifies Slack with a link to the ad.',
     icon: <ShieldAlert className="h-5 w-5" />,
     color: 'bg-gray-50 border border-gray-200',
     iconColor: 'text-red-500',
     category: 'protect',
     nodes: [
-      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ad Sets', config: { entity_type: 'adset', schedule: 'hourly' } } },
-      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Spend > $40', config: { metric: 'spend', operator: '>', threshold: '40' } } },
-      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: '0 Link Clicks', config: { metric: 'clicks', operator: '==', threshold: '0' } } },
-      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad Set', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Scan Ads in Campaign', config: { entity_type: 'ad', schedule: 'hourly', campaign_id: '' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Spend ≥ $30', config: { metric: 'spend', operator: '>=', threshold: '30' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: '0 Results', config: { metric: 'results', operator: '==', threshold: '0' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad + Slack', config: { action_type: 'pause', also_notify_slack: 'true', slack_channel: '#emily-space' } } },
     ],
     edges: [
       { id: 'e1', source: 't1', target: 'c1', animated: true },
@@ -65,35 +75,57 @@ const TEMPLATES: AutomationTemplate[] = [
   },
   {
     id: 'pause-high-cpa',
-    name: 'Pause if CPA too high',
-    description: 'Pause campaign or ad set if cost per result exceeds your target CPA',
+    name: 'Pause ad: spend ≥ $30, CPA ≥ $25',
+    description: 'Pause any ad spending $30+ with CPA at or above $25. Notifies Slack with a link to the ad.',
     icon: <DollarSign className="h-5 w-5" />,
     color: 'bg-gray-50 border border-gray-200',
     iconColor: 'text-amber-500',
     category: 'protect',
     nodes: [
-      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Campaigns', config: { entity_type: 'campaign', schedule: 'hourly' } } },
-      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'CPA > $50', config: { metric: 'cost_per_result', operator: '>', threshold: '50' } } },
-      { id: 'a1', type: 'action', position: { x: 300, y: 350 }, data: { label: 'Pause Campaign', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Scan Ads in Campaign', config: { entity_type: 'ad', schedule: 'hourly', campaign_id: '' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Spend ≥ $30', config: { metric: 'spend', operator: '>=', threshold: '30' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: 'CPA ≥ $25', config: { metric: 'cost_per_result', operator: '>=', threshold: '25' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad + Slack', config: { action_type: 'pause', also_notify_slack: 'true', slack_channel: '#emily-space' } } },
     ],
     edges: [
       { id: 'e1', source: 't1', target: 'c1', animated: true },
-      { id: 'e2', source: 'c1', target: 'a1', animated: true },
+      { id: 'e2', source: 'c1', target: 'c2', animated: true },
+      { id: 'e3', source: 'c2', target: 'a1', animated: true },
     ],
   },
   {
-    id: 'pause-fatigued-creatives',
-    name: 'Pause fatigued creatives',
-    description: 'Pause ads with frequency > 3.5 and declining CTR over 3 days',
+    id: 'promote-low-cpa-3',
+    name: 'Promote ad: CPA ≤ $15, results ≥ 3',
+    description: 'Pause the ad in testing and duplicate it to the Winners ad set. Notifies Slack.',
     icon: <TrendingDown className="h-5 w-5" />,
     color: 'bg-gray-50 border border-gray-200',
-    iconColor: 'text-violet-500',
+    iconColor: 'text-emerald-500',
     category: 'optimize',
     nodes: [
-      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Check Ads', config: { entity_type: 'ad', schedule: '6hours' } } },
-      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'Frequency > 3.5', config: { metric: 'frequency', operator: '>', threshold: '3.5' } } },
-      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: 'CTR Declining', config: { metric: 'ctr_trend', operator: '<', threshold: '0' } } },
-      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Pause Ad', config: { action_type: 'pause', also_notify_slack: 'true' } } },
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Scan Ads in Campaign', config: { entity_type: 'ad', schedule: 'hourly', campaign_id: '' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'CPA ≤ $15', config: { metric: 'cost_per_result', operator: '<=', threshold: '15' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: 'Results ≥ 3', config: { metric: 'results', operator: '>=', threshold: '3' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Promote to Winners', config: { action_type: 'promote', also_notify_slack: 'true', slack_channel: '#emily-space', target_adset_id: '' } } },
+    ],
+    edges: [
+      { id: 'e1', source: 't1', target: 'c1', animated: true },
+      { id: 'e2', source: 'c1', target: 'c2', animated: true },
+      { id: 'e3', source: 'c2', target: 'a1', animated: true },
+    ],
+  },
+  {
+    id: 'promote-low-cpa-5',
+    name: 'Promote ad: CPA ≤ $20, results ≥ 5',
+    description: 'Pause the ad in testing and duplicate it to the Winners ad set. Notifies Slack.',
+    icon: <TrendingDown className="h-5 w-5" />,
+    color: 'bg-gray-50 border border-gray-200',
+    iconColor: 'text-emerald-500',
+    category: 'optimize',
+    nodes: [
+      { id: 't1', type: 'trigger', position: { x: 300, y: 50 }, data: { label: 'Scan Ads in Campaign', config: { entity_type: 'ad', schedule: 'hourly', campaign_id: '' } } },
+      { id: 'c1', type: 'condition', position: { x: 300, y: 200 }, data: { label: 'CPA ≤ $20', config: { metric: 'cost_per_result', operator: '<=', threshold: '20' } } },
+      { id: 'c2', type: 'condition', position: { x: 300, y: 350 }, data: { label: 'Results ≥ 5', config: { metric: 'results', operator: '>=', threshold: '5' } } },
+      { id: 'a1', type: 'action', position: { x: 300, y: 500 }, data: { label: 'Promote to Winners', config: { action_type: 'promote', also_notify_slack: 'true', slack_channel: '#emily-space', target_adset_id: '' } } },
     ],
     edges: [
       { id: 'e1', source: 't1', target: 'c1', animated: true },
@@ -120,6 +152,7 @@ function ZapierTriggerNode({ data }: NodeProps) {
       <div className="px-4 py-2 text-xs text-gray-400">
         {data.config?.entity_type && <span className="capitalize">{data.config.entity_type}</span>}
         {data.config?.schedule && <span> · {data.config.schedule}</span>}
+        {data.config?.campaign_id && <span> · campaign {data.config.campaign_id.slice(-6)}</span>}
       </div>
       <Handle type="source" position={Position.Bottom} className="!bg-gray-300 !w-2.5 !h-2.5 !border-2 !border-white" />
     </div>
@@ -162,7 +195,8 @@ function ZapierActionNode({ data }: NodeProps) {
       </div>
       <div className="px-4 py-2 text-xs text-gray-400">
         {data.config?.action_type && <span className="capitalize">{data.config.action_type}</span>}
-        {data.config?.also_notify_slack === 'true' && <span> + Slack alert</span>}
+        {data.config?.also_notify_slack === 'true' && data.config?.slack_channel && <span> → {data.config.slack_channel}</span>}
+        {data.config?.also_notify_slack === 'true' && !data.config?.slack_channel && <span> + Slack</span>}
       </div>
     </div>
   );
@@ -446,7 +480,7 @@ export default function AutomationsPage() {
                               {rule.is_active ? 'Active' : 'Off'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
+                          <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400 flex-wrap">
                             <span>{trigger?.data?.config?.entity_type || 'adset'}</span>
                             <span>·</span>
                             <span>{SCHEDULE_LABELS[trigger?.data?.config?.schedule] || 'hourly'}</span>
@@ -454,6 +488,9 @@ export default function AutomationsPage() {
                             <span>{conditions.length} condition{conditions.length !== 1 ? 's' : ''}</span>
                             <span>·</span>
                             <span className="capitalize">{action?.data?.config?.action_type || 'pause'}</span>
+                            {action?.data?.config?.slack_channel && (
+                              <><span>·</span><span>{action.data.config.slack_channel}</span></>
+                            )}
                           </div>
                         </div>
 
@@ -583,6 +620,15 @@ export default function AutomationsPage() {
                   />
                 </div>
                 <div>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Campaign ID <span className="normal-case text-gray-400 font-normal">(scope to specific campaign)</span></label>
+                  <Input
+                    value={nodeConfig.campaign_id || ''}
+                    onChange={(e) => setNodeConfig({ ...nodeConfig, campaign_id: e.target.value })}
+                    className="mt-1 h-9"
+                    placeholder="Leave empty for all campaigns"
+                  />
+                </div>
+                <div>
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Check Frequency</label>
                   <SelectNative
                     value={nodeConfig.schedule || 'hourly'}
@@ -603,14 +649,14 @@ export default function AutomationsPage() {
                     onChange={(e) => setNodeConfig({ ...nodeConfig, metric: e.target.value })}
                     options={[
                       { label: 'Spend', value: 'spend' },
+                      { label: 'Results', value: 'results' },
+                      { label: 'Cost per Result (CPA)', value: 'cost_per_result' },
                       { label: 'Impressions', value: 'impressions' },
                       { label: 'Clicks', value: 'clicks' },
                       { label: 'CTR', value: 'ctr' },
                       { label: 'CPC', value: 'cpc' },
                       { label: 'CPM', value: 'cpm' },
                       { label: 'Frequency', value: 'frequency' },
-                      { label: 'Cost per Result', value: 'cost_per_result' },
-                      { label: 'CTR Trend (3-day)', value: 'ctr_trend' },
                     ]}
                     className="mt-1"
                   />
@@ -654,12 +700,24 @@ export default function AutomationsPage() {
                     onChange={(e) => setNodeConfig({ ...nodeConfig, action_type: e.target.value })}
                     options={[
                       { label: 'Pause', value: 'pause' },
+                      { label: 'Promote (pause + duplicate to winners)', value: 'promote' },
                       { label: 'Activate', value: 'activate' },
                       { label: 'Slack notification only', value: 'slack_notify' },
                     ]}
                     className="mt-1"
                   />
                 </div>
+                {nodeConfig.action_type === 'promote' && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Target Ad Set ID <span className="normal-case text-gray-400 font-normal">(winners ad set)</span></label>
+                    <Input
+                      value={nodeConfig.target_adset_id || ''}
+                      onChange={(e) => setNodeConfig({ ...nodeConfig, target_adset_id: e.target.value })}
+                      className="mt-1 h-9"
+                      placeholder="Ad set ID to duplicate winning ads into"
+                    />
+                  </div>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -667,8 +725,19 @@ export default function AutomationsPage() {
                     onChange={(e) => setNodeConfig({ ...nodeConfig, also_notify_slack: String(e.target.checked) })}
                     className="rounded border-gray-300 text-blue-600"
                   />
-                  <span className="text-sm text-gray-700">Also send Slack notification</span>
+                  <span className="text-sm text-gray-700">Send Slack notification</span>
                 </label>
+                {nodeConfig.also_notify_slack === 'true' && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Slack Channel</label>
+                    <Input
+                      value={nodeConfig.slack_channel || ''}
+                      onChange={(e) => setNodeConfig({ ...nodeConfig, slack_channel: e.target.value })}
+                      className="mt-1 h-9"
+                      placeholder="#emily-space"
+                    />
+                  </div>
+                )}
               </>
             )}
 

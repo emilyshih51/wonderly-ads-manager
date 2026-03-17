@@ -89,13 +89,23 @@ export async function GET(request: NextRequest) {
         ? JSON.parse(conditionsJson)
         : [];
 
-      // Fetch ad-level insights
-      const response = await getAdLevelInsights(rawAdAccountId, accessToken, datePreset);
-      let insightsData = response.data || [];
+      // Fetch ad-level insights — filter at API level when campaign is specified
+      let insightsData: any[] = [];
 
-      // Filter to campaign if specified
       if (campaignId) {
-        insightsData = insightsData.filter((row: any) => row.campaign_id === campaignId);
+        // Use campaign-scoped endpoint for accurate results (avoids pagination issues)
+        const response = await metaApi(`/${campaignId}/insights`, accessToken, {
+          params: {
+            fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
+            date_preset: datePreset,
+            level: 'ad',
+            limit: '500',
+          },
+        });
+        insightsData = response.data || [];
+      } else {
+        const response = await getAdLevelInsights(rawAdAccountId, accessToken, datePreset);
+        insightsData = response.data || [];
       }
 
       // Get optimization map for result counting

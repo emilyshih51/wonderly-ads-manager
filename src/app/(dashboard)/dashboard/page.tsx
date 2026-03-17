@@ -150,6 +150,51 @@ export default function DashboardPage() {
   const [drillAds, setDrillAds] = useState<AdRow[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
 
+  // Inline budget editing
+  const [editingBudget, setEditingBudget] = useState<{ id: string; type: 'adset' | 'campaign'; value: string } | null>(null);
+  const [savingBudget, setSavingBudget] = useState(false);
+
+  const handleBudgetSave = async () => {
+    if (!editingBudget) return;
+    setSavingBudget(true);
+    try {
+      const entity = editingBudget.type === 'adset'
+        ? drillAdSets.find((a) => a.id === editingBudget.id)
+        : campaigns.find((c) => c.id === editingBudget.id);
+      const entityName = entity ? ('name' in entity ? entity.name : editingBudget.id) : editingBudget.id;
+      const previousBudget = editingBudget.type === 'adset'
+        ? (entity as AdSetRow)?.daily_budget ? String(parseInt((entity as AdSetRow).daily_budget!) / 100) : undefined
+        : undefined;
+
+      await fetch('/api/meta/adsets/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adset_id: editingBudget.id,
+          adset_name: entityName,
+          daily_budget: editingBudget.value,
+          previous_budget: previousBudget,
+        }),
+      });
+
+      // Update local state
+      if (editingBudget.type === 'adset') {
+        setDrillAdSets((prev) =>
+          prev.map((a) =>
+            a.id === editingBudget.id
+              ? { ...a, daily_budget: String(Math.round(parseFloat(editingBudget.value) * 100)) }
+              : a
+          )
+        );
+      }
+      setEditingBudget(null);
+    } catch (e) {
+      console.error('Budget save failed:', e);
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
   /* -- Fetch campaigns + time series -- */
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -441,6 +486,7 @@ export default function DashboardPage() {
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Ad Set</th>
                       <th className="text-left py-3 px-2 text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Budget</th>
                       <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Spend</th>
                       <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Results</th>
                       <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">CPM</th>
@@ -451,9 +497,9 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {drillLoading ? (
-                      <tr><td colSpan={8} className="text-center py-8 text-gray-400">Loading ad sets...</td></tr>
+                      <tr><td colSpan={9} className="text-center py-8 text-gray-400">Loading ad sets...</td></tr>
                     ) : drillAdSets.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center py-8 text-gray-400">No ad sets found</td></tr>
+                      <tr><td colSpan={9} className="text-center py-8 text-gray-400">No ad sets found</td></tr>
                     ) : (
                       drillAdSets.map((adSet) => {
                         const i = adSet.insights;
@@ -461,6 +507,50 @@ export default function DashboardPage() {
                           <tr key={adSet.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                             <td className="py-3 px-4 font-medium text-gray-900">{adSet.name}</td>
                             <td className="py-3 px-2"><StatusBadge status={adSet.status} /></td>
+                            <td className="py-3 px-4 text-right">
+                              {editingBudget?.id === adSet.id ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-gray-400 text-sm">$</span>
+                                  <input
+                                    type="number"
+                                    className="w-20 text-right text-sm border border-blue-400 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    value={editingBudget.value}
+                                    onChange={(e) => setEditingBudget({ ...editingBudget, value: e.target.value })}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleBudgetSave();
+                                      if (e.key === 'Escape') setEditingBudget(null);
+                                    }}
+                                    autoFocus
+                                    disabled={savingBudget}
+                                  />
+                                  <button
+                                    onClick={handleBudgetSave}
+                                    className="text-green-600 hover:text-green-700 text-xs font-medium"
+                                    disabled={savingBudget}
+                                  >
+                                    {savingBudget ? '...' : '✓'}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingBudget(null)}
+                                    className="text-gray-400 hover:text-gray-600 text-xs"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="text-gray-700 hover:text-blue-600 hover:underline cursor-pointer"
+                                  onClick={() => setEditingBudget({
+                                    id: adSet.id,
+                                    type: 'adset',
+                                    value: adSet.daily_budget ? String(parseInt(adSet.daily_budget) / 100) : '',
+                                  })}
+                                  title="Click to edit budget"
+                                >
+                                  {adSet.daily_budget ? `$${(parseInt(adSet.daily_budget) / 100).toFixed(2)}` : '—'}
+                                </button>
+                              )}
+                            </td>
                             <td className="py-3 px-4 text-right text-gray-700">{formatCurrency(i?.spend)}</td>
                             <td className="py-3 px-4 text-right text-gray-700">{formatNumber(getResults(i?.actions, selectedResultActionType))}</td>
                             <td className="py-3 px-4 text-right text-gray-700">{formatCurrency(i?.cpm)}</td>

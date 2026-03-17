@@ -89,22 +89,31 @@ export async function GET(request: NextRequest) {
         ? JSON.parse(conditionsJson)
         : [];
 
-      // Fetch ad-level insights — filter at API level when campaign is specified
+      // Fetch ad-level insights — only for ACTIVE ads (skip paused/off ads)
       let insightsData: any[] = [];
+      const activeFilter = JSON.stringify([{ field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] }]);
 
       if (campaignId) {
-        // Use campaign-scoped endpoint for accurate results (avoids pagination issues)
         const response = await metaApi(`/${campaignId}/insights`, accessToken, {
           params: {
             fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
             date_preset: datePreset,
             level: 'ad',
             limit: '500',
+            filtering: activeFilter,
           },
         });
         insightsData = response.data || [];
       } else {
-        const response = await getAdLevelInsights(rawAdAccountId, accessToken, datePreset);
+        const response = await metaApi(`/act_${rawAdAccountId}/insights`, accessToken, {
+          params: {
+            fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
+            date_preset: datePreset,
+            level: 'ad',
+            limit: '500',
+            filtering: activeFilter,
+          },
+        });
         insightsData = response.data || [];
       }
 

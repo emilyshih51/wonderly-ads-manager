@@ -180,9 +180,7 @@ export default function LaunchPage() {
       if (!getFirstHeadline()) {
         throw new Error('Please enter at least one headline');
       }
-      if (!state.pageId) {
-        throw new Error('Please enter your Facebook Page ID');
-      }
+      // pageId is optional — we'll resolve it from the source ad set's existing ads
 
       // Step 1: Duplicate source
       const duplicateRes = await window.fetch('/api/meta/duplicate', {
@@ -232,6 +230,23 @@ export default function LaunchPage() {
         }
       }
 
+      // Step 1c: Fetch identity (page_id + instagram_actor_id) from source ad set's existing ads
+      // This ensures the new ads have the same Facebook Page + Instagram account as the originals
+      let resolvedPageId = state.pageId;
+      let instagramActorId = '';
+      try {
+        const identityRes = await window.fetch(`/api/meta/ads?adset_id=${state.sourceId}&fields=creative{object_story_spec}`);
+        const identityData = await identityRes.json();
+        const existingAds = identityData.data || [];
+        if (existingAds.length > 0) {
+          const oss = existingAds[0]?.creative?.object_story_spec;
+          if (oss?.page_id) resolvedPageId = oss.page_id;
+          if (oss?.instagram_actor_id) instagramActorId = oss.instagram_actor_id;
+        }
+      } catch (e) {
+        console.error('Failed to fetch source identity, using defaults:', e);
+      }
+
       // Step 2: Upload images and create ads
       // link = clean base URL; url_tags = tracking/UTM params (Meta appends these)
       const baseUrl = state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`;
@@ -258,17 +273,17 @@ export default function LaunchPage() {
             throw new Error(errMsg);
           }
 
-          // Create ad
+          // Create ad — using identity (page_id + instagram) from source ad set
           const adForm = new FormData();
           adForm.append('action', 'create_ad');
           adForm.append('adset_id', newAdSetId);
           adForm.append('name', `${state.newName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
-          adForm.append('page_id', state.pageId);
+          adForm.append('page_id', resolvedPageId);
+          if (instagramActorId) adForm.append('instagram_actor_id', instagramActorId);
           adForm.append('message', primaryText);
           adForm.append('link', baseUrl);
           if (urlTags) adForm.append('url_tags', urlTags);
           adForm.append('headline', headline);
-          if (state.displayLink) adForm.append('display_link', state.displayLink);
           adForm.append('call_to_action', state.callToAction);
           adForm.append('image_hash', imageHash);
           adForm.append('status', state.launchActive ? 'ACTIVE' : 'PAUSED');
@@ -316,7 +331,7 @@ export default function LaunchPage() {
   };
 
   /* ---------- Validation helpers ---------- */
-  const canLaunch = state.sourceId && state.newName && state.pageId && state.images.length > 0 && getFirstPrimaryText() && getFirstHeadline();
+  const canLaunch = state.sourceId && state.newName && state.images.length > 0 && getFirstPrimaryText() && getFirstHeadline();
   const uploadedCount = state.images.filter((img) => img.status === 'done').length;
   const errorCount = state.images.filter((img) => img.status === 'error').length;
 
@@ -712,7 +727,7 @@ export default function LaunchPage() {
                           )}
                         </div>
                         {img.status === 'error' && img.error && (
-                          <p className="text-xs text-red-600 p-1.5 truncate" title={img.error}>{img.error}</p>
+                          <p className="text-xs text-red-600 p-1.5 break-words whitespace-normal">{img.error}</p>
                         )}
                       </div>
                     ))}

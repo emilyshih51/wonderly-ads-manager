@@ -355,9 +355,9 @@ async function sendSlackNotification(
   customMessage?: string,
   prefix?: string
 ) {
-  // Use name filter so Meta Ads Manager shows only this ad (not all ads with one selected)
-  const nameFilter = encodeURIComponent(JSON.stringify([{field: 'ad.name', operator: 'CONTAIN', value: entityName}]));
-  const adManagerLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${nameFilter}`;
+  // Link to Meta Ads Manager with the ad name pre-filled in the search filter
+  const encodedName = encodeURIComponent(entityName);
+  const adManagerLink = `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=SEARCH_VALUE%3D%22${encodedName}%22`;
 
   let actionEmoji = '⏸️';
   let actionVerb = 'Paused';

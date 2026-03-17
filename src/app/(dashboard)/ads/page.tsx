@@ -4,18 +4,32 @@ import { useEffect, useState, useCallback } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAppStore } from '@/stores/app-store';
-import { formatCurrency, formatPercent, CALL_TO_ACTION_TYPES } from '@/lib/utils';
-import { Plus, RefreshCw, Upload, Image as ImageIcon } from 'lucide-react';
+import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS, getResultsFromActions } from '@/lib/utils';
+import { RefreshCw, Loader2, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
+
+interface Campaign {
+  id: string;
+  name: string;
+}
+
+interface AdInsight {
+  spend: string;
+  impressions: string;
+  clicks: string;
+  ctr: string;
+  cpc: string;
+  actions?: Array<{ action_type: string; value: string }>;
+  cost_per_action_type?: Array<{ action_type: string; value: string }>;
+}
 
 interface Ad {
   id: string;
   name: string;
-  adset_id: string;
+  campaign_id: string;
+  campaign_name?: string;
   status: string;
   creative?: {
     title?: string;
@@ -23,307 +37,262 @@ interface Ad {
     thumbnail_url?: string;
     image_url?: string;
   };
-  insights?: {
-    spend: string;
-    ctr: string;
-    cpc: string;
-    impressions: string;
-    clicks: string;
-  } | null;
+  insights?: AdInsight | null;
 }
 
-interface AdSet {
-  id: string;
-  name: string;
+interface RankedAd extends Ad {
+  results: number;
+  cpa: number | null;
+  rank: number;
 }
 
-export default function AdsPage() {
-  const { datePreset } = useAppStore();
-  const [ads, setAds] = useState<Ad[]>([]);
-  const [adSets, setAdSets] = useState<AdSet[]>([]);
+const DATE_PRESET_OPTIONS = DATE_PRESETS.map(p => ({ label: p.label, value: p.value }));
+
+export default function TopPerformingAdsPage() {
+  const { datePreset: storeDatePreset, setDatePreset } = useAppStore();
+  const [localDatePreset, setLocalDatePreset] = useState('last_7d');
+  const [selectedCampaign, setSelectedCampaign] = useState('all');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [ads, setAds] = useState<RankedAd[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [imageHash, setImageHash] = useState('');
-  const [imagePreview, setImagePreview] = useState('');
 
-  // Form state
-  const [form, setForm] = useState({
-    name: '',
-    adset_id: '',
-    page_id: '',
-    message: '',
-    link: '',
-    headline: '',
-    description: '',
-    call_to_action: 'LEARN_MORE',
-  });
-
-  const fetchAds = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [adsRes, adSetsRes] = await Promise.all([
-        fetch(`/api/meta/ads?with_insights=true&date_preset=${datePreset}`),
-        fetch('/api/meta/adsets'),
+      // Fetch campaigns and ads in parallel
+      const [campaignsRes, adsRes] = await Promise.all([
+        fetch('/api/meta/campaigns'),
+        fetch(`/api/meta/ads?with_insights=true&date_preset=${localDatePreset}`),
       ]);
+
+      const campaignsData = await campaignsRes.json();
       const adsData = await adsRes.json();
-      const adSetsData = await adSetsRes.json();
-      setAds(adsData.data || []);
-      setAdSets(adSetsData.data || []);
+
+      setCampaigns(campaignsData.data || []);
+
+      // Process ads: filter, calculate results, rank, and sort
+      let processedAds = (adsData.data || []) as Ad[];
+
+      // Filter by campaign if selected
+      if (selectedCampaign !== 'all') {
+        processedAds = processedAds.filter(ad => ad.campaign_id === selectedCampaign);
+      }
+
+      // Map to ranked ads with results and CPA
+      const rankedAds = processedAds
+        .map((ad, idx) => {
+          const results = getResultsFromActions(ad.insights?.actions);
+          const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
+          const cpa = results > 0 ? spend / results : null;
+
+          return {
+            ...ad,
+            results,
+            cpa,
+            rank: idx + 1,
+          };
+        })
+        // Filter to only ads with results
+        .filter(ad => ad.results > 0)
+        // Sort by results DESC, then by CPA ASC (lower cost per result is better)
+        .sort((a, b) => {
+          if (b.results !== a.results) {
+            return b.results - a.results;
+          }
+          if (a.cpa === null && b.cpa === null) return 0;
+          if (a.cpa === null) return 1;
+          if (b.cpa === null) return -1;
+          return a.cpa - b.cpa;
+        })
+        // Re-rank after sorting
+        .map((ad, idx) => ({
+          ...ad,
+          rank: idx + 1,
+        }))
+        // Take top 50
+        .slice(0, 50);
+
+      setAds(rankedAds);
     } catch (error) {
-      console.error('Failed to fetch ads:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
-  }, [datePreset]);
+  }, [localDatePreset, selectedCampaign]);
 
   useEffect(() => {
-    fetchAds();
-  }, [fetchAds]);
+    fetchData();
+  }, [fetchData]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingImage(true);
-    setImagePreview(URL.createObjectURL(file));
-
-    try {
-      const formData = new FormData();
-      formData.append('action', 'upload_image');
-      formData.append('file', file);
-
-      const res = await fetch('/api/meta/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-
-      if (data.images) {
-        const hash = Object.values(data.images)[0] as { hash: string };
-        setImageHash(hash.hash);
-      }
-    } catch (error) {
-      console.error('Image upload failed:', error);
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleCreateAd = async () => {
-    setCreating(true);
-    try {
-      const formData = new FormData();
-      formData.append('action', 'create_ad');
-      formData.append('name', form.name);
-      formData.append('adset_id', form.adset_id);
-      formData.append('page_id', form.page_id);
-      formData.append('message', form.message);
-      formData.append('link', form.link);
-      formData.append('headline', form.headline);
-      formData.append('description', form.description);
-      formData.append('call_to_action', form.call_to_action);
-      formData.append('status', 'PAUSED');
-      if (imageHash) formData.append('image_hash', imageHash);
-
-      const res = await fetch('/api/meta/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-
-      if (data.id) {
-        setCreateDialogOpen(false);
-        setForm({ name: '', adset_id: '', page_id: '', message: '', link: '', headline: '', description: '', call_to_action: 'LEARN_MORE' });
-        setImageHash('');
-        setImagePreview('');
-        fetchAds();
-      }
-    } catch (error) {
-      console.error('Create ad failed:', error);
-    } finally {
-      setCreating(false);
-    }
+  const handleDatePresetChange = (value: string) => {
+    setLocalDatePreset(value);
+    setDatePreset(value);
   };
 
   return (
     <div>
-      <Header title="Ads" description="View ads and create new ones with image upload">
-        <Button variant="outline" size="sm" onClick={fetchAds} disabled={loading}>
+      <Header title="Top Performing Ads" description="Your best performing ads ranked by results">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchData}
+          disabled={loading}
+        >
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
-        </Button>
-        <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Ad
         </Button>
       </Header>
 
       <div className="p-8">
-        {/* Ad Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {loading ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <div className="h-48 bg-gray-100 rounded-t-xl" />
-                <CardContent className="p-4 space-y-2">
-                  <div className="h-4 bg-gray-100 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-1/2" />
-                </CardContent>
-              </Card>
-            ))
-          ) : ads.length === 0 ? (
-            <div className="col-span-full text-center py-16 text-gray-400">
-              <ImageIcon className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-              <p className="text-lg font-medium">No ads found</p>
-              <p className="text-sm">Create your first ad to get started.</p>
-            </div>
-          ) : (
-            ads.map((ad) => (
-              <Card key={ad.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                {/* Image */}
-                <div className="relative h-48 bg-gray-100 flex items-center justify-center">
-                  {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
-                    <img
-                      src={ad.creative.thumbnail_url || ad.creative.image_url}
-                      alt={ad.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon className="h-8 w-8 text-gray-300" />
-                  )}
-                  <div className="absolute top-2 right-2">
-                    <StatusBadge status={ad.status} />
-                  </div>
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h3>
-                  {ad.creative?.body && (
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ad.creative.body}</p>
-                  )}
-                  {ad.insights && (
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-gray-400 block">Spend</span>
-                        <span className="font-medium text-gray-700">{formatCurrency(ad.insights.spend)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400 block">CTR</span>
-                        <span className="font-medium text-gray-700">{formatPercent(ad.insights.ctr)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400 block">CPC</span>
-                        <span className="font-medium text-gray-700">{formatCurrency(ad.insights.cpc)}</span>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Create Ad Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create New Ad</DialogTitle>
-            <DialogDescription>Upload a creative and set up your ad copy.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 mt-4">
-            {/* Image Upload */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Ad Image</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                {imagePreview ? (
-                  <div className="relative">
-                    <img src={imagePreview} alt="Preview" className="max-h-48 mx-auto rounded-lg" />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute top-0 right-0"
-                      onClick={() => { setImagePreview(''); setImageHash(''); }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer block">
-                    <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-500">
-                      {uploadingImage ? 'Uploading...' : 'Click to upload an image'}
-                    </span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  </label>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Ad Name</label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" placeholder="My Ad" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Ad Set</label>
-                <SelectNative
-                  value={form.adset_id}
-                  onChange={(e) => setForm({ ...form, adset_id: e.target.value })}
-                  options={[{ label: 'Select ad set...', value: '' }, ...adSets.map((a) => ({ label: a.name, value: a.id }))]}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Facebook Page ID</label>
-              <Input value={form.page_id} onChange={(e) => setForm({ ...form, page_id: e.target.value })} className="mt-1" placeholder="Your Facebook Page ID" />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">Primary Text</label>
-              <textarea
-                value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={3}
-                placeholder="Your ad copy text..."
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Headline</label>
-                <Input value={form.headline} onChange={(e) => setForm({ ...form, headline: e.target.value })} className="mt-1" placeholder="Your Business Software..." />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Website URL</label>
-                <Input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} className="mt-1" placeholder="https://www.wonderly.com" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Description (optional)</label>
-                <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Call to Action</label>
-                <SelectNative
-                  value={form.call_to_action}
-                  onChange={(e) => setForm({ ...form, call_to_action: e.target.value })}
-                  options={CALL_TO_ACTION_TYPES.map((cta) => ({ label: cta.replace(/_/g, ' '), value: cta }))}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreateAd} disabled={creating || !form.name || !form.adset_id || !form.page_id}>
-                {creating ? 'Creating...' : 'Create Ad'}
-              </Button>
-            </div>
+        {/* Filters Row */}
+        <div className="mb-6 flex flex-wrap gap-4 items-center bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Campaign</label>
+            <SelectNative
+              value={selectedCampaign}
+              onChange={(e) => setSelectedCampaign(e.target.value)}
+              options={[
+                { label: 'All Campaigns', value: 'all' },
+                ...campaigns.map(c => ({ label: c.name, value: c.id })),
+              ]}
+            />
           </div>
-        </DialogContent>
-      </Dialog>
+
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Date Range</label>
+            <SelectNative
+              value={localDatePreset}
+              onChange={(e) => handleDatePresetChange(e.target.value)}
+              options={DATE_PRESET_OPTIONS}
+            />
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          </div>
+        ) : ads.length === 0 ? (
+          /* Empty State */
+          <Card className="border-dashed">
+            <CardContent className="py-16 text-center">
+              <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <p className="text-lg font-medium text-gray-700">No ads with results found for this period</p>
+              <p className="text-sm text-gray-500 mt-1">Try adjusting your filters or date range</p>
+            </CardContent>
+          </Card>
+        ) : (
+          /* Table */
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-12">#</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-12">Image</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Ad Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Campaign</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-20">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-24">Results</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-20">CPA</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-20">Spend</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-16">CTR %</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-16">Clicks</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-24">Impressions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ads.map((ad, idx) => (
+                  <tr
+                    key={ad.id}
+                    className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${
+                      idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    }`}
+                  >
+                    {/* Rank */}
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                      {ad.rank}
+                    </td>
+
+                    {/* Thumbnail */}
+                    <td className="px-6 py-4">
+                      {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
+                        <img
+                          src={ad.creative.thumbnail_url || ad.creative.image_url}
+                          alt={ad.name}
+                          className="h-10 w-10 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
+                          <ImageIcon className="h-5 w-5 text-gray-300" />
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Ad Name */}
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900 max-w-xs truncate">{ad.name}</p>
+                      {ad.creative?.body && (
+                        <p className="text-xs text-gray-500 line-clamp-1">{ad.creative.body}</p>
+                      )}
+                    </td>
+
+                    {/* Campaign Name */}
+                    <td className="px-6 py-4 text-sm text-gray-700">
+                      {ad.campaign_name || '—'}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-6 py-4">
+                      <StatusBadge status={ad.status} />
+                    </td>
+
+                    {/* Results - Highlighted with badge */}
+                    <td className="px-6 py-4 text-right">
+                      <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="font-bold text-sm">{formatNumber(ad.results)}</span>
+                      </div>
+                    </td>
+
+                    {/* CPA */}
+                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                      {ad.cpa !== null ? formatCurrency(ad.cpa) : '—'}
+                    </td>
+
+                    {/* Spend */}
+                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                      {ad.insights?.spend ? formatCurrency(ad.insights.spend) : '—'}
+                    </td>
+
+                    {/* CTR % */}
+                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                      {ad.insights?.ctr ? formatPercent(ad.insights.ctr) : '—'}
+                    </td>
+
+                    {/* Clicks */}
+                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                      {ad.insights?.clicks ? formatNumber(ad.insights.clicks) : '—'}
+                    </td>
+
+                    {/* Impressions */}
+                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                      {ad.insights?.impressions ? formatNumber(ad.insights.impressions) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Summary */}
+        {!loading && ads.length > 0 && (
+          <div className="mt-6 text-sm text-gray-600">
+            Showing <span className="font-semibold text-gray-900">{ads.length}</span> top performing ads
+          </div>
+        )}
+      </div>
     </div>
   );
 }

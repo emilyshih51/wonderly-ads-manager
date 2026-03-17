@@ -709,7 +709,10 @@ export default function AutomationsPage() {
       const res = await fetch('/api/automations/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rule: { name: ruleName, is_active: true, nodes, edges } }),
+        body: JSON.stringify({
+          rule: { name: ruleName, is_active: true, nodes, edges },
+          send_slack: true, // Send real Slack messages during test
+        }),
       });
       const data = await res.json();
       setTestResults(data);
@@ -1226,13 +1229,61 @@ export default function AutomationsPage() {
                           <textarea
                             value={config.slack_message}
                             onChange={(e) => updateConfig({ slack_message: e.target.value })}
-                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                             rows={3}
-                            placeholder="Leave empty for default. Variables: {rule_name} {action} {entity_name} {ad_link} {spend} {results} {cpa}"
+                            placeholder="Leave empty for default message"
                           />
-                          <p className="mt-1 text-[10px] text-gray-400">
-                            {'{ad_link}'} = clickable link to the ad in Meta Ads Manager
-                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {[
+                              { var: '{rule_name}', label: 'Rule Name' },
+                              { var: '{action}', label: 'Action' },
+                              { var: '{entity_name}', label: 'Ad Name' },
+                              { var: '{ad_link}', label: 'Ad Link' },
+                              { var: '{spend}', label: 'Spend' },
+                              { var: '{results}', label: 'Results' },
+                              { var: '{cpa}', label: 'CPA' },
+                              { var: '{clicks}', label: 'Clicks' },
+                              { var: '{ctr}', label: 'CTR' },
+                            ].map((v) => (
+                              <button
+                                key={v.var}
+                                type="button"
+                                onClick={() => updateConfig({ slack_message: (config.slack_message || '') + v.var })}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-medium hover:bg-blue-100 transition-colors"
+                              >
+                                <Plus className="h-2.5 w-2.5" />{v.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Live preview with matched ad data */}
+                          {(config.slack_message || previewAds.length > 0) && (
+                            <div className="mt-3">
+                              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">Message Preview</p>
+                              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700 whitespace-pre-wrap">
+                                {(() => {
+                                  const sampleAd = previewAds[0];
+                                  const actionVerb = config.action_type === 'promote' ? 'Promoted' : config.action_type === 'pause' ? 'Paused' : config.action_type === 'activate' ? 'Activated' : 'Notified';
+                                  const msg = config.slack_message || `${config.action_type === 'promote' ? '🚀' : '⏸️'} *${ruleName}*\n${actionVerb} ad: ${sampleAd ? sampleAd.ad_name : '<ad name>'}\nSpend: $${sampleAd?.spend || '0.00'} · Results: ${sampleAd?.results ?? 0} · CPA: ${sampleAd?.cpa === 'N/A' ? 'N/A' : `$${sampleAd?.cpa || '0.00'}`}`;
+                                  return msg
+                                    .replace(/\{rule_name\}/g, ruleName || 'Rule Name')
+                                    .replace(/\{action\}/g, actionVerb)
+                                    .replace(/\{entity_name\}/g, sampleAd?.ad_name || '<ad name>')
+                                    .replace(/\{ad_link\}/g, sampleAd?.ad_name || '<ad name>')
+                                    .replace(/\{spend\}/g, `$${sampleAd?.spend || '0.00'}`)
+                                    .replace(/\{results\}/g, String(sampleAd?.results ?? 0))
+                                    .replace(/\{cpa\}/g, sampleAd?.cpa === 'N/A' ? 'N/A' : `$${sampleAd?.cpa || '0.00'}`)
+                                    .replace(/\{clicks\}/g, String(sampleAd?.clicks ?? 0))
+                                    .replace(/\{ctr\}/g, `${sampleAd?.ctr || '0.00'}%`);
+                                })()}
+                              </div>
+                              {previewAds.length > 0 && (
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  Previewing with: {previewAds[0].ad_name}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1280,7 +1331,7 @@ export default function AutomationsPage() {
                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
                   <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
                     <Play className="h-3.5 w-3.5 mr-1.5" />
-                    {testing ? 'Testing...' : 'Test Rule (Dry Run)'}
+                    {testing ? 'Testing...' : 'Test Rule'}
                   </Button>
                   <Button size="sm" onClick={handleSave} disabled={saving}>
                     <Save className="h-3.5 w-3.5 mr-1.5" />
@@ -1297,9 +1348,9 @@ export default function AutomationsPage() {
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">Test Results (Dry Run)</DialogTitle>
+            <DialogTitle className="text-base">Test Results</DialogTitle>
             <DialogDescription className="text-xs">
-              No actions were taken. This shows what would happen if the rule were active right now.
+              Ads were not paused/promoted. Slack notifications were sent so you can preview them.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-2 space-y-3 max-h-[400px] overflow-y-auto">
@@ -1335,6 +1386,9 @@ export default function AutomationsPage() {
                       <span>CPA: {r.metrics?.cost_per_result === 'N/A' ? 'N/A' : `$${r.metrics?.cost_per_result}`}</span>
                     </div>
                     {r.warning && <p className="mt-1 text-[10px] text-amber-600">{r.warning}</p>}
+                    {r.slack_sent && r.slack_channel && (
+                      <p className="mt-1 text-[10px] text-emerald-600">Slack sent to {r.slack_channel}</p>
+                    )}
                   </div>
                 ))}
               </>

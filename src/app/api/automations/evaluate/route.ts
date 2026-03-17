@@ -146,13 +146,21 @@ async function evaluateRule(
   if (entityType === 'ad') {
     const campaignId = triggerConfig.campaign_id;
 
-    // Fetch ad-level insights using the rule's configured performance period
-    const response = await getAdLevelInsights(adAccountId, accessToken, datePreset);
-    insightsData = response.data || [];
-
-    // Filter to specific campaign if configured
     if (campaignId) {
-      insightsData = insightsData.filter((row: any) => row.campaign_id === campaignId);
+      // Use campaign-scoped endpoint for accurate results (avoids pagination limits)
+      const response = await metaApi(`/${campaignId}/insights`, accessToken, {
+        params: {
+          fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
+          date_preset: datePreset,
+          level: 'ad',
+          limit: '500',
+        },
+      });
+      insightsData = response.data || [];
+    } else {
+      // No campaign filter — fetch account-wide
+      const response = await getAdLevelInsights(adAccountId, accessToken, datePreset);
+      insightsData = response.data || [];
     }
   } else if (entityType === 'adset') {
     const response = await metaApi(`/act_${adAccountId}/insights`, accessToken, {

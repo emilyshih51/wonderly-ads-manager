@@ -213,6 +213,23 @@ export default function LaunchPage() {
         }
       }
 
+      // Step 1b: Set daily budget on the new ad set if specified
+      if (state.dailyBudget) {
+        try {
+          await window.fetch('/api/meta/adsets/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              adset_id: newAdSetId,
+              adset_name: state.newName,
+              daily_budget: state.dailyBudget,
+            }),
+          });
+        } catch (e) {
+          console.error('Failed to set budget:', e);
+        }
+      }
+
       // Step 2: Upload images and create ads
       // link = clean base URL; url_tags = tracking/UTM params (Meta appends these)
       const baseUrl = state.websiteUrl.startsWith('http') ? state.websiteUrl : `https://${state.websiteUrl}`;
@@ -271,6 +288,20 @@ export default function LaunchPage() {
 
       if (successCount > 0) {
         setLaunchSuccess(true);
+        // Send Slack notification
+        try {
+          await window.fetch('/api/meta/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'launch',
+              adset_name: state.newName,
+              budget: state.dailyBudget || null,
+              ad_count: successCount,
+              status: state.launchActive ? 'ACTIVE' : 'PAUSED',
+            }),
+          });
+        } catch { /* Slack notification is best-effort */ }
       } else {
         setLaunchError('Ad set was duplicated but all ad creations failed. Check the error details on each image.');
       }

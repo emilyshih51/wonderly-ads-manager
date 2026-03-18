@@ -16,7 +16,9 @@ import {
 interface Campaign { id: string; name: string; status: string; }
 interface AdSet { id: string; name: string; campaign_id: string; campaign?: { name: string }; status: string; }
 interface SourceOption { id: string; name: string; type: 'adset' | 'campaign'; campaignName?: string; }
-interface QueuedImage { id: string; file: File; preview: string; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string; }
+interface QueuedMedia { id: string; file: File; preview: string; mediaType: 'image' | 'video'; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string; }
+// Keep backward compat alias
+type QueuedImage = QueuedMedia;
 
 interface LaunchState {
   sourceType: 'adset' | 'campaign' | 'existing' | null;
@@ -70,6 +72,39 @@ export default function LaunchPage() {
   const [launchError, setLaunchError] = useState('');
   const [launchSuccess, setLaunchSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [hasDefaults, setHasDefaults] = useState(false);
+
+  // Load saved defaults indicator on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wonderly_default_adtext');
+      setHasDefaults(!!saved);
+    } catch { /* ignore */ }
+  }, []);
+
+  const saveDefaults = () => {
+    try {
+      const defaults = {
+        primaryTexts: state.primaryTexts,
+        headlines: state.headlines,
+      };
+      localStorage.setItem('wonderly_default_adtext', JSON.stringify(defaults));
+      setHasDefaults(true);
+    } catch { /* ignore */ }
+  };
+
+  const loadDefaults = () => {
+    try {
+      const saved = localStorage.getItem('wonderly_default_adtext');
+      if (!saved) return;
+      const defaults = JSON.parse(saved);
+      setState((prev) => ({
+        ...prev,
+        primaryTexts: defaults.primaryTexts || prev.primaryTexts,
+        headlines: defaults.headlines || prev.headlines,
+      }));
+    } catch { /* ignore */ }
+  };
 
   /* ---------- Fetch campaigns and ad sets ---------- */
   useEffect(() => {
@@ -131,17 +166,18 @@ export default function LaunchPage() {
     }
   };
 
-  /* ---------- Handle image upload ---------- */
-  const handleImageFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /* ---------- Handle media upload (images + videos) ---------- */
+  const handleMediaFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    const newImages: QueuedImage[] = Array.from(files).map((file, i) => ({
+    const newMedia: QueuedMedia[] = Array.from(files).map((file, i) => ({
       id: `${Date.now()}-${i}`,
       file,
       preview: URL.createObjectURL(file),
+      mediaType: file.type.startsWith('video/') ? 'video' as const : 'image' as const,
       status: 'pending' as const,
     }));
-    setState((prev) => ({ ...prev, images: [...prev.images, ...newImages] }));
+    setState((prev) => ({ ...prev, images: [...prev.images, ...newMedia] }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -267,16 +303,33 @@ export default function LaunchPage() {
         updateImage(img.id, { status: 'uploading' });
 
         try {
-          // Upload image
-          const imgForm = new FormData();
-          imgForm.append('action', 'upload_image');
-          imgForm.append('file', img.file);
-          const imgRes = await window.fetch('/api/meta/upload', { method: 'POST', body: imgForm });
-          const imgData = await imgRes.json();
-          const imageHash = imgData.images ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash : null;
-          if (!imageHash) {
-            const errMsg = imgData.error?.message || imgData.error?.error_user_msg || JSON.stringify(imgData.error) || 'Image upload failed — no hash returned';
-            throw new Error(errMsg);
+          let imageHash: string | null = null;
+          let videoId: string | null = null;
+
+          if (img.mediaType === 'video') {
+            // Upload video to Meta
+            const vidForm = new FormData();
+            vidForm.append('action', 'upload_video');
+            vidForm.append('file', img.file);
+            const vidRes = await window.fetch('/api/meta/upload', { method: 'POST', body: vidForm });
+            const vidData = await vidRes.json();
+            if (!vidData.id) {
+              const errMsg = vidData.error?.message || vidData.error?.detail || JSON.stringify(vidData.error) || 'Video upload failed';
+              throw new Error(errMsg);
+            }
+            videoId = vidData.id;
+          } else {
+            // Upload image to Meta
+            const imgForm = new FormData();
+            imgForm.append('action', 'upload_image');
+            imgForm.append('file', img.file);
+            const imgRes = await window.fetch('/api/meta/upload', { method: 'POST', body: imgForm });
+            const imgData = await imgRes.json();
+            imageHash = imgData.images ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash : null;
+            if (!imageHash) {
+              const errMsg = imgData.error?.message || imgData.error?.detail || JSON.stringify(imgData.error) || 'Image upload failed — no hash returned';
+              throw new Error(errMsg);
+            }
           }
 
           // Create ad — using identity (page_id + instagram) from source ad set
@@ -292,7 +345,8 @@ export default function LaunchPage() {
           if (urlTags) adForm.append('url_tags', urlTags);
           adForm.append('headline', headline);
           adForm.append('call_to_action', state.callToAction);
-          adForm.append('image_hash', imageHash);
+          if (imageHash) adForm.append('image_hash', imageHash);
+          if (videoId) adForm.append('video_id', videoId);
           adForm.append('status', state.launchActive ? 'ACTIVE' : 'PAUSED');
 
           const adRes = await window.fetch('/api/meta/upload', { method: 'POST', body: adForm });
@@ -538,6 +592,24 @@ export default function LaunchPage() {
               </h2>
 
               <div className="space-y-5">
+                {/* Default text actions */}
+                <div className="flex items-center gap-2">
+                  {hasDefaults && (
+                    <button
+                      onClick={loadDefaults}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium px-3 py-1.5 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                      Load Saved Defaults
+                    </button>
+                  )}
+                  <button
+                    onClick={saveDefaults}
+                    className="text-xs text-gray-600 hover:text-gray-700 font-medium px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    {hasDefaults ? 'Update Defaults' : 'Save as Default'}
+                  </button>
+                </div>
+
                 {/* Primary Texts */}
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -677,7 +749,7 @@ export default function LaunchPage() {
             <CardContent className="p-6">
               <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Image className="h-4 w-4 text-blue-600" />
-                Upload Images
+                Upload Media
               </h2>
 
               {state.images.length === 0 ? (
@@ -687,19 +759,19 @@ export default function LaunchPage() {
                     <p className="text-sm font-medium text-gray-700">Drop images here or click to upload</p>
                     <p className="text-xs text-gray-500 mt-1">Each image becomes one ad variation</p>
                   </div>
-                  <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleImageFiles} />
+                  <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={handleMediaFiles} />
                 </label>
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-gray-600">
-                      {state.images.length} image{state.images.length !== 1 ? 's' : ''} uploaded
+                      {state.images.length} file{state.images.length !== 1 ? 's' : ''} uploaded
                       {uploadedCount > 0 && ` • ${uploadedCount} processed`}
                       {errorCount > 0 && ` • ${errorCount} failed`}
                     </p>
                     <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-xs font-medium transition-colors">
                       <Plus className="h-3.5 w-3.5" /> Add More
-                      <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleImageFiles} />
+                      <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={handleMediaFiles} />
                     </label>
                   </div>
 
@@ -718,7 +790,11 @@ export default function LaunchPage() {
                         }`}
                       >
                         <div className="relative aspect-square bg-gray-100">
-                          <img src={img.preview} alt="ad" className="w-full h-full object-cover" />
+                          {img.mediaType === 'video' ? (
+                            <video src={img.preview} className="w-full h-full object-cover" muted />
+                          ) : (
+                            <img src={img.preview} alt="ad" className="w-full h-full object-cover" />
+                          )}
                           {img.status === 'uploading' && (
                             <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                               <Loader2 className="h-5 w-5 text-white animate-spin" />
@@ -837,7 +913,7 @@ export default function LaunchPage() {
       </div>
 
       {/* Hidden file input */}
-      <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleImageFiles} />
+      <input ref={fileInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={handleMediaFiles} />
     </div>
   );
 }

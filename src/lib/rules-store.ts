@@ -54,6 +54,7 @@ function getCookieOptions() {
 export interface StoredRule {
   id: string;
   user_id?: string;
+  ad_account_id?: string; // Which ad account this rule belongs to
   name: string;
   is_active: boolean;
   nodes: any[];

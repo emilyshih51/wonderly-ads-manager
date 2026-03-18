@@ -28,40 +28,52 @@ export async function GET() {
   // Try session first, fall back to system token for cron jobs
   const session = await getSession();
   const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;
-  const rawAdAccountId = session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
+  const defaultAdAccountId = session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
 
-  if (!accessToken || !rawAdAccountId) {
+  if (!accessToken) {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
   }
 
-  // Read active rules from persistent KV store (works for both cron and manual triggers)
+  // Read ALL active rules (across all accounts)
   const activeRules = await getActiveRules();
 
   if (activeRules.length === 0) {
     return NextResponse.json({ evaluated: 0, results: [] });
   }
 
-  // Get optimization map once for all rules (to compute results/CPA)
-  let optimizationMap: Record<string, string> = {};
-  try {
-    optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
-  } catch (e) {
-    console.error('[Evaluate] Failed to get optimization map:', e);
+  // Group rules by ad account ID
+  const rulesByAccount: Record<string, typeof activeRules> = {};
+  for (const rule of activeRules) {
+    const accountId = rule.ad_account_id || defaultAdAccountId;
+    if (!accountId) continue;
+    if (!rulesByAccount[accountId]) rulesByAccount[accountId] = [];
+    rulesByAccount[accountId].push(rule);
   }
 
   const results: any[] = [];
 
-  for (const rule of activeRules) {
+  // Evaluate rules for each account
+  for (const [adAccountId, accountRules] of Object.entries(rulesByAccount)) {
+    // Get optimization map for this account
+    let optimizationMap: Record<string, string> = {};
     try {
-      const result = await evaluateRule(rule, rawAdAccountId, accessToken, optimizationMap, false);
-      results.push(...result);
-    } catch (error) {
-      console.error(`[Evaluate] Rule "${rule.name}" error:`, error);
-      results.push({ rule: rule.name, error: String(error) });
+      optimizationMap = await getCampaignOptimizationMap(adAccountId, accessToken);
+    } catch (e) {
+      console.error(`[Evaluate] Failed to get optimization map for account ${adAccountId}:`, e);
+    }
+
+    for (const rule of accountRules) {
+      try {
+        const result = await evaluateRule(rule, adAccountId, accessToken, optimizationMap, false);
+        results.push(...result);
+      } catch (error) {
+        console.error(`[Evaluate] Rule "${rule.name}" (account ${adAccountId}) error:`, error);
+        results.push({ rule: rule.name, account: adAccountId, error: String(error) });
+      }
     }
   }
 
-  return NextResponse.json({ evaluated: activeRules.length, results });
+  return NextResponse.json({ evaluated: activeRules.length, accounts: Object.keys(rulesByAccount).length, results });
 }
 
 /**

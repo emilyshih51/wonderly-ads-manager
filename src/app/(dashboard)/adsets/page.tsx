@@ -19,7 +19,7 @@ interface SourceOption { id: string; name: string; type: 'adset' | 'campaign'; c
 interface QueuedImage { id: string; file: File; preview: string; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string; }
 
 interface LaunchState {
-  sourceType: 'adset' | 'campaign' | null;
+  sourceType: 'adset' | 'campaign' | 'existing' | null;
   sourceId: string;
   sourceName: string;
   newName: string;
@@ -99,7 +99,7 @@ export default function LaunchPage() {
     const options: SourceOption[] = [];
     const query = searchQuery.toLowerCase();
 
-    if (state.sourceType === 'adset') {
+    if (state.sourceType === 'adset' || state.sourceType === 'existing') {
       adSets.forEach((a) => {
         if (!query || a.name.toLowerCase().includes(query)) {
           options.push({ id: a.id, name: a.name, type: 'adset', campaignName: a.campaign?.name });
@@ -182,51 +182,57 @@ export default function LaunchPage() {
       }
       // pageId is optional — we'll resolve it from the source ad set's existing ads
 
-      // Step 1: Duplicate source
-      const duplicateRes = await window.fetch('/api/meta/duplicate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: state.sourceType,
-          id: state.sourceId,
-          newName: state.newName,
-          ...(state.sourceType === 'adset' && state.targetCampaign && { targetCampaignId: state.targetCampaign }),
-        }),
-      });
-      const duplicateData = await duplicateRes.json();
-      if (!duplicateData.id) {
-        throw new Error(duplicateData.error || 'Failed to duplicate source');
-      }
+      let newAdSetId: string;
 
-      let newAdSetId = duplicateData.id;
-
-      // If we duplicated a campaign, we need to get the ad set inside it
-      if (state.sourceType === 'campaign') {
-        // Fetch ad sets in the new campaign to find the duplicated ad set
-        const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${newAdSetId}`);
-        const adSetsData = await adSetsRes.json();
-        const campaignAdSets = adSetsData.data || [];
-        if (campaignAdSets.length > 0) {
-          newAdSetId = campaignAdSets[0].id; // Use first ad set in the duplicated campaign
-        } else {
-          throw new Error('Duplicated campaign has no ad sets. Please duplicate an ad set instead.');
+      if (state.sourceType === 'existing') {
+        // Adding to existing ad set — no duplication needed
+        newAdSetId = state.sourceId;
+      } else {
+        // Step 1: Duplicate source
+        const duplicateRes = await window.fetch('/api/meta/duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: state.sourceType,
+            id: state.sourceId,
+            newName: state.newName,
+            ...(state.sourceType === 'adset' && state.targetCampaign && { targetCampaignId: state.targetCampaign }),
+          }),
+        });
+        const duplicateData = await duplicateRes.json();
+        if (!duplicateData.id) {
+          throw new Error(duplicateData.error || 'Failed to duplicate source');
         }
-      }
 
-      // Step 1b: Set daily budget on the new ad set if specified
-      if (state.dailyBudget) {
-        try {
-          await window.fetch('/api/meta/adsets/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              adset_id: newAdSetId,
-              adset_name: state.newName,
-              daily_budget: state.dailyBudget,
-            }),
-          });
-        } catch (e) {
-          console.error('Failed to set budget:', e);
+        newAdSetId = duplicateData.id;
+
+        // If we duplicated a campaign, we need to get the ad set inside it
+        if (state.sourceType === 'campaign') {
+          const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${newAdSetId}`);
+          const adSetsData = await adSetsRes.json();
+          const campaignAdSets = adSetsData.data || [];
+          if (campaignAdSets.length > 0) {
+            newAdSetId = campaignAdSets[0].id;
+          } else {
+            throw new Error('Duplicated campaign has no ad sets. Please duplicate an ad set instead.');
+          }
+        }
+
+        // Set daily budget on the new ad set if specified
+        if (state.dailyBudget) {
+          try {
+            await window.fetch('/api/meta/adsets/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                adset_id: newAdSetId,
+                adset_name: state.newName,
+                daily_budget: state.dailyBudget,
+              }),
+            });
+          } catch (e) {
+            console.error('Failed to set budget:', e);
+          }
         }
       }
 
@@ -277,7 +283,8 @@ export default function LaunchPage() {
           const adForm = new FormData();
           adForm.append('action', 'create_ad');
           adForm.append('adset_id', newAdSetId);
-          adForm.append('name', `${state.newName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
+          const adBaseName = state.sourceType === 'existing' ? state.sourceName : state.newName;
+          adForm.append('name', `${adBaseName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
           adForm.append('page_id', resolvedPageId);
           if (instagramActorId) adForm.append('instagram_actor_id', instagramActorId);
           adForm.append('message', primaryText);
@@ -331,7 +338,7 @@ export default function LaunchPage() {
   };
 
   /* ---------- Validation helpers ---------- */
-  const canLaunch = state.sourceId && state.newName && state.images.length > 0 && getFirstPrimaryText() && getFirstHeadline();
+  const canLaunch = state.sourceId && (state.sourceType === 'existing' || state.newName) && state.images.length > 0 && getFirstPrimaryText() && getFirstHeadline();
   const uploadedCount = state.images.filter((img) => img.status === 'done').length;
   const errorCount = state.images.filter((img) => img.status === 'error').length;
 
@@ -396,10 +403,21 @@ export default function LaunchPage() {
                 Select Source to Duplicate
               </h2>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                {/* Add to Existing Ad Set */}
+                <button
+                  onClick={() => setState((prev) => ({ ...prev, sourceType: state.sourceType === 'existing' as any ? null : 'existing' as any, sourceId: '', sourceName: '', newName: '', searchQuery: '' }))}
+                  className={`p-4 rounded-lg border-2 transition-all text-left ${
+                    state.sourceType === ('existing' as any) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900">Add to Ad Set</p>
+                  <p className="text-xs text-gray-500 mt-1">Upload new ads to an existing ad set</p>
+                </button>
+
                 {/* Duplicate Ad Set */}
                 <button
-                  onClick={() => setState((prev) => ({ ...prev, sourceType: state.sourceType === 'adset' ? null : 'adset', sourceId: '', searchQuery: '' }))}
+                  onClick={() => setState((prev) => ({ ...prev, sourceType: state.sourceType === 'adset' ? null : 'adset', sourceId: '', sourceName: '', newName: '', searchQuery: '' }))}
                   className={`p-4 rounded-lg border-2 transition-all text-left ${
                     state.sourceType === 'adset' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -410,7 +428,7 @@ export default function LaunchPage() {
 
                 {/* Duplicate Campaign */}
                 <button
-                  onClick={() => setState((prev) => ({ ...prev, sourceType: state.sourceType === 'campaign' ? null : 'campaign', sourceId: '', searchQuery: '' }))}
+                  onClick={() => setState((prev) => ({ ...prev, sourceType: state.sourceType === 'campaign' ? null : 'campaign', sourceId: '', sourceName: '', newName: '', searchQuery: '' }))}
                   className={`p-4 rounded-lg border-2 transition-all text-left ${
                     state.sourceType === 'campaign' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -446,7 +464,7 @@ export default function LaunchPage() {
                               ...prev,
                               sourceId: option.id,
                               sourceName: option.name,
-                              newName: `${option.name} (Copy)`,
+                              newName: prev.sourceType === 'existing' ? option.name : `${option.name} (Copy)`,
                               targetCampaign: option.type === 'adset' ? (adSets.find((a) => a.id === option.id)?.campaign_id || '') : '',
                             }));
                             setSearchQuery('');
@@ -470,8 +488,8 @@ export default function LaunchPage() {
                     </div>
                   )}
 
-                  {/* New name input */}
-                  {state.sourceId && (
+                  {/* New name input (not needed for "Add to Existing") */}
+                  {state.sourceId && state.sourceType !== 'existing' && (
                     <div>
                       <label className="text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
                         <Tag className="h-4 w-4 text-gray-400" />

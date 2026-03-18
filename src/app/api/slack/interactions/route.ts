@@ -108,12 +108,14 @@ async function processInteraction(payload: any) {
         if (!budget || budget <= 0) {
           throw new Error('Invalid budget amount');
         }
-        const budgetCents = Math.round(budget * 100).toString();
+        // Round to whole dollar — never set fractional budgets
+        const wholeBudget = Math.round(budget);
+        const budgetCents = (wholeBudget * 100).toString();
         await metaApi(`/${objectId}`, metaSystemToken, {
           method: 'POST',
           body: { daily_budget: budgetCents },
         });
-        result = `✅ Set daily budget of "${objectName || objectId}" to $${budget.toFixed(2)}`;
+        result = `✅ Set daily budget of "${objectName || objectId}" to $${wholeBudget.toFixed(2)}`;
         break;
       }
 

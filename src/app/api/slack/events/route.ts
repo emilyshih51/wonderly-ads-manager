@@ -16,6 +16,7 @@ import {
   getAccountInsights,
   getCampaignOptimizationMap,
   getDailyInsights,
+  getCampaigns,
 } from '@/lib/meta-api';
 import { generateMockChatData } from '../../chat/data/mock';
 
@@ -234,6 +235,8 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
       getDailyInsights(adAccountId, accessToken, 'last_30d', 'account'),
       getDailyInsights(adAccountId, accessToken, 'last_30d', 'campaign'),
       getDailyInsights(adAccountId, accessToken, 'last_7d', 'adset'),
+      // [17] Fetch campaign objects with daily_budget for budget adjustment context
+      getCampaigns(adAccountId, accessToken),
     ]);
 
     const extract = (index: number) => {
@@ -249,6 +252,7 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
     return {
       date: { today: todayStr, yesterday: yesterdayStr, thirtyDaysAgo: thirtyDaysAgoStr },
       optimizationMap,
+      campaignObjects: extract(17), // Campaign objects with daily_budget
       today: {
         campaigns: extract(0),
         adSets: extract(2),
@@ -361,12 +365,19 @@ function formatContextForClaude(data: any): string {
     allCampaignIds.add(c.campaign_id);
   }
 
+  // Build a map of campaign_id -> daily_budget from campaign objects
+  const budgetMap: Record<string, string> = {};
+  for (const c of (data.campaignObjects || [])) {
+    if (c.daily_budget) budgetMap[c.id] = `$${(parseInt(c.daily_budget) / 100).toFixed(0)}`;
+  }
+
   for (const cid of allCampaignIds) {
     const t = (data.today.campaigns || []).find((c: any) => c.campaign_id === cid);
     const y = (data.yesterday.campaigns || []).find((c: any) => c.campaign_id === cid);
     const name = t?.campaign_name || y?.campaign_name || cid;
+    const dailyBudget = budgetMap[cid] || 'N/A';
 
-    let line = `Campaign "${name}" (ID: ${cid}):`;
+    let line = `Campaign "${name}" (ID: ${cid}, Daily Budget: ${dailyBudget}):`;
     if (t) {
       const tResults = getResultsFromRow(t, optMap);
       line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${tResults}, Cost/Result $${getCostPerResult(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(t.cpc) || 0).toFixed(2)}, Frequency ${t.frequency || 'N/A'}`;

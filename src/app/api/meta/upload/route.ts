@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { metaApi } from '@/lib/meta-api';
 
+// Allow larger file uploads (videos can be 50MB+)
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -46,7 +49,22 @@ export async function POST(request: NextRequest) {
         `https://graph.facebook.com/v21.0/act_${session.ad_account_id}/advideos`,
         { method: 'POST', body: videoFormData }
       );
-      const data = await response.json();
+
+      // Handle non-JSON responses (e.g., if Meta returns an HTML error)
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error('[upload_video] Non-JSON response:', responseText.substring(0, 500));
+        return NextResponse.json({
+          error: { message: `Video upload failed: ${response.status} ${response.statusText}` }
+        }, { status: 500 });
+      }
+
+      if (data.error) {
+        return NextResponse.json({ error: data.error }, { status: 400 });
+      }
       // Returns { id: "VIDEO_ID" }
       return NextResponse.json(data);
     }

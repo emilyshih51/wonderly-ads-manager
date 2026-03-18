@@ -17,6 +17,7 @@ import {
   getCampaignOptimizationMap,
   getDailyInsights,
   getCampaigns,
+  getAdAccount,
 } from '@/lib/meta-api';
 import { generateMockChatData } from '../../chat/data/mock';
 
@@ -122,12 +123,12 @@ async function processAppMention(event: any) {
   try {
     // Fetch ad data using system access token (no session needed)
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
-    // Strip act_ prefix if present — meta-api.ts functions add it themselves
-    const rawAdAccountId = process.env.META_AD_ACCOUNT_ID || '';
-    const adAccountId = rawAdAccountId.replace(/^act_/, '');
+    // Support multiple accounts: META_AD_ACCOUNT_IDS (comma-separated) or single META_AD_ACCOUNT_ID
+    const accountIdsRaw = process.env.META_AD_ACCOUNT_IDS || process.env.META_AD_ACCOUNT_ID || '';
+    const accountIds = accountIdsRaw.split(',').map((id) => id.trim().replace(/^act_/, '')).filter(Boolean);
 
-    if (!metaSystemToken || !adAccountId) {
-      console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID');
+    if (!metaSystemToken || accountIds.length === 0) {
+      console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID(S)');
       await postSlackMessage(
         channelId,
         'Sorry, the Slack integration is not fully configured. Please set META_SYSTEM_ACCESS_TOKEN and META_AD_ACCOUNT_ID in your environment.',
@@ -137,12 +138,22 @@ async function processAppMention(event: any) {
       return;
     }
 
-    // Fetch ad data and thread history in parallel
-    const [contextData, threadHistory] = await Promise.all([
-      fetchAdContextData(adAccountId, metaSystemToken),
+    // Fetch ad data for ALL accounts and thread history in parallel
+    const [threadHistory, ...contextResults] = await Promise.all([
       getThreadMessages(channelId, threadTs),
+      ...accountIds.map((id) => fetchAdContextData(id, metaSystemToken)),
     ]);
-    const contextText = formatContextForClaude(contextData);
+
+    // Combine context from all accounts
+    let contextText = '';
+    for (let i = 0; i < accountIds.length; i++) {
+      const data = contextResults[i] as any;
+      if (accountIds.length > 1) {
+        const accountName = data?.accountName || `Account ${accountIds[i]}`;
+        contextText += `\n\n===== AD ACCOUNT: ${accountName} (ID: ${accountIds[i]}) =====\n`;
+      }
+      contextText += formatContextForClaude(data);
+    }
 
     // Send to Claude
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -237,6 +248,8 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
       getDailyInsights(adAccountId, accessToken, 'last_7d', 'adset'),
       // [17] Fetch campaign objects with daily_budget for budget adjustment context
       getCampaigns(adAccountId, accessToken),
+      // [18] Fetch ad account name
+      getAdAccount(adAccountId, accessToken),
     ]);
 
     const extract = (index: number) => {
@@ -249,7 +262,10 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
       ? results[13].value as Record<string, string>
       : {};
 
+    const accountInfo = results[18].status === 'fulfilled' ? results[18].value : null;
+
     return {
+      accountName: accountInfo?.name || `Account ${adAccountId}`,
       date: { today: todayStr, yesterday: yesterdayStr, thirtyDaysAgo: thirtyDaysAgoStr },
       optimizationMap,
       campaignObjects: extract(17), // Campaign objects with daily_budget

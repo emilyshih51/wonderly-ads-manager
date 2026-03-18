@@ -53,13 +53,15 @@ export async function POST(request: NextRequest) {
         if (!action.budget || action.budget <= 0) {
           return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
         }
+        // Round to whole dollar amount — never set fractional budgets
+        const wholeBudget = Math.round(action.budget);
         // Meta API expects budget in cents
-        const budgetCents = Math.round(action.budget * 100).toString();
+        const budgetCents = (wholeBudget * 100).toString();
         await metaApi(`/${action.id}`, meta_access_token, {
           method: 'POST',
           body: { daily_budget: budgetCents },
         });
-        result = `✅ Set daily budget of "${action.name || action.id}" to $${action.budget.toFixed(2)}`;
+        result = `✅ Set daily budget of "${action.name || action.id}" to $${wholeBudget.toFixed(2)}`;
         break;
       }
 

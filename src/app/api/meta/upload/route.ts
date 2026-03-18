@@ -29,6 +29,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data);
     }
 
+    if (action === 'upload_video') {
+      // Upload video to Meta ad account
+      const file = formData.get('file') as File;
+      if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+
+      const bytes = await file.arrayBuffer();
+      const blob = new Blob([bytes], { type: file.type });
+
+      const videoFormData = new FormData();
+      videoFormData.append('source', blob, file.name);
+      videoFormData.append('title', file.name.replace(/\.[^.]+$/, ''));
+      videoFormData.append('access_token', session.meta_access_token);
+
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/act_${session.ad_account_id}/advideos`,
+        { method: 'POST', body: videoFormData }
+      );
+      const data = await response.json();
+      // Returns { id: "VIDEO_ID" }
+      return NextResponse.json(data);
+    }
+
     if (action === 'create_ad') {
       const adsetId = formData.get('adset_id') as string;
       const name = formData.get('name') as string;
@@ -41,26 +63,41 @@ export async function POST(request: NextRequest) {
       const description = formData.get('description') as string;
       const callToAction = formData.get('call_to_action') as string;
       const imageHash = formData.get('image_hash') as string;
+      const videoId = formData.get('video_id') as string;
       const status = formData.get('status') as string || 'PAUSED';
 
-      // Build link_data — only include fields that have actual values
-      const linkData: any = {
-        link,
-        call_to_action: { type: callToAction || 'LEARN_MORE' },
-      };
-      if (message) linkData.message = message;
-      if (headline) linkData.name = headline;
-      if (description) linkData.description = description;
-      if (imageHash) linkData.image_hash = imageHash;
-
-      // Create creative — copy identity (page_id + instagram) from the source ad set
+      // Build the creative based on whether it's an image or video ad
       const objectStorySpec: any = {
         page_id: pageId,
-        link_data: linkData,
       };
-      // Instagram actor ID enables Instagram placements (matches source ad set identity)
       if (instagramActorId) {
         objectStorySpec.instagram_actor_id = instagramActorId;
+      }
+
+      if (videoId) {
+        // Video ad — uses video_data instead of link_data
+        const videoData: any = {
+          video_id: videoId,
+          call_to_action: {
+            type: callToAction || 'LEARN_MORE',
+            value: { link },
+          },
+        };
+        if (message) videoData.message = message;
+        if (headline) videoData.title = headline;
+        if (description) videoData.link_description = description;
+        objectStorySpec.video_data = videoData;
+      } else {
+        // Image ad — uses link_data
+        const linkData: any = {
+          link,
+          call_to_action: { type: callToAction || 'LEARN_MORE' },
+        };
+        if (message) linkData.message = message;
+        if (headline) linkData.name = headline;
+        if (description) linkData.description = description;
+        if (imageHash) linkData.image_hash = imageHash;
+        objectStorySpec.link_data = linkData;
       }
 
       const creativeBody: any = {
@@ -69,7 +106,6 @@ export async function POST(request: NextRequest) {
       };
 
       // url_tags is the Meta-supported way to add dynamic tracking params
-      // Must be on the creative body, not inside link_data
       if (urlTags) {
         creativeBody.url_tags = urlTags;
       }
@@ -98,7 +134,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     console.error('Upload error:', error);
-    // Return the full Meta error details so the UI can show a useful message
     const metaError = error?.metaError;
     const message = metaError?.message || error?.message || 'Upload failed';
     const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';

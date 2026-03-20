@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * POST /api/meta/duplicate
+ *
+ * Duplicates a campaign or ad set via the Meta API.
+ * Required body fields: `type` (`"campaign"` | `"adset"`), `id`.
+ * Optional: `newName`, `targetCampaignId` (for ad set duplication).
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

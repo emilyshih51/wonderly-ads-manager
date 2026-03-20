@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+/**
+ * GET /api/auth/logout
+ *
+ * Clears the wonderly_session cookie and redirects to /login.
+ */
 export async function GET() {
   const cookieStore = await cookies();
 

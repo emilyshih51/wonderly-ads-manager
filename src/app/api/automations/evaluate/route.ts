@@ -7,6 +7,14 @@ import { createClient, type RedisClientType } from 'redis';
 
 export const maxDuration = 60;
 
+/**
+ * GET /api/automations/evaluate
+ *
+ * Cron endpoint — evaluates all active automation rules against live Meta
+ * data and executes the configured actions (pause, activate, promote).
+ * Runs every 5 minutes via Vercel cron. Optionally gated by CRON_SECRET.
+ * Capped at AUTOMATION_MAX_ACTIONS_PER_RUN (default 20) actions per run.
+ */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
 
@@ -99,6 +107,12 @@ export async function GET(request: NextRequest) {
   });
 }
 
+/**
+ * POST /api/automations/evaluate
+ *
+ * Manual test endpoint for a single rule. Body: `{ rule, send_slack?, live? }`.
+ * When `live` is false (default), runs in dry-run mode and reports what would happen.
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
   const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;

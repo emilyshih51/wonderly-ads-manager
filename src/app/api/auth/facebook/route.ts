@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 
+/**
+ * GET /api/auth/facebook
+ *
+ * Initiates the Facebook OAuth flow by redirecting the user to the
+ * Facebook authorization dialog. Requests ads_management, ads_read,
+ * business_management, and pages_read_engagement scopes.
+ */
 export async function GET() {
   const appId = process.env.META_APP_ID!;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/facebook/callback`;

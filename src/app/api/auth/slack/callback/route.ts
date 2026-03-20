@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 
+/**
+ * GET /api/auth/slack/callback
+ *
+ * Slack OAuth callback. Exchanges the authorization code for a bot
+ * access token and stores the Slack connection (team, channel, webhook URL)
+ * in the wonderly_slack cookie before redirecting to /settings?slack=connected.
+ * Requires an active Wonderly session.
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession();
 

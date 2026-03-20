@@ -4,6 +4,14 @@ import { SlackService } from '@/services/slack';
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
+/**
+ * POST /api/meta/notify
+ *
+ * Sends a Slack notification for Meta ad events. Currently supports:
+ * - `type: "launch"` — Posts an ad set launch message with budget and ad count.
+ *   Optional `custom_message` supports `{adset_name}`, `{budget}`, `{ad_count}`,
+ *   `{status}` placeholders.
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

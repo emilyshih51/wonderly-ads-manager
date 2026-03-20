@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * GET /api/meta/adsets
+ *
+ * Returns ad sets for the authenticated ad account, optionally filtered
+ * by campaign.
+ *
+ * Query params:
+ * - `campaign_id` — Filter to a specific campaign
+ * - `date_preset` — Meta date preset (default: `today`)
+ * - `with_insights=true` — Attach per-ad-set insights
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession();
 

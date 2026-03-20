@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * GET /api/meta/campaigns
+ *
+ * Returns all campaigns for the authenticated ad account.
+ *
+ * Query params:
+ * - `date_preset` — Meta date preset (default: `today`)
+ * - `with_insights=true` — Attach per-campaign insights and optimization map
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession();
 

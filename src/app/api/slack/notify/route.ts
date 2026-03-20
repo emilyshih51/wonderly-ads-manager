@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+/**
+ * POST /api/slack/notify
+ *
+ * Sends a Slack message using the OAuth connection stored in the
+ * wonderly_slack cookie. Uses the incoming webhook URL when available,
+ * otherwise falls back to the Slack Web API. Body: `{ message, channel? }`.
+ */
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();

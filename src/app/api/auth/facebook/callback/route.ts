@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+/**
+ * GET /api/auth/facebook/callback
+ *
+ * Facebook OAuth callback. Exchanges the authorization code for a
+ * long-lived access token, fetches user info and ad accounts, checks
+ * the optional ALLOWED_EMAILS allowlist, and writes the session cookie
+ * before redirecting to /dashboard.
+ */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
 

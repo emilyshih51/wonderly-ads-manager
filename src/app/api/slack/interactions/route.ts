@@ -8,6 +8,15 @@ async function getRawBody(request: NextRequest): Promise<string> {
   return Buffer.from(arrayBuffer).toString('utf-8');
 }
 
+/**
+ * POST /api/slack/interactions
+ *
+ * Handles Slack Block Kit button interactions (block_actions).
+ * Verifies the Slack request signature, acknowledges immediately with 200,
+ * then processes the action in the background. Supported actions:
+ * pause/resume campaign/ad set/ad, and adjust_budget.
+ * Access is gated by ALLOWED_SLACK_USER_IDS if configured.
+ */
 export async function POST(request: NextRequest) {
   const rawBody = await getRawBody(request);
 

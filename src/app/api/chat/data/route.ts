@@ -3,6 +3,14 @@ import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { generateMockChatData } from './mock';
 
+/**
+ * GET /api/chat/data
+ *
+ * Aggregates ad performance data for the Claude chat context. Fetches
+ * today/yesterday metrics at campaign, ad set, ad, and account levels,
+ * plus 30-day daily history and demographic breakdowns. Falls back to
+ * mock data when USE_MOCK_DATA is set or no real data is returned.
+ */
 export async function GET(request: NextRequest) {
   const useMock =
     process.env.USE_MOCK_DATA === 'true' || request.nextUrl.searchParams.get('mock') === 'true';

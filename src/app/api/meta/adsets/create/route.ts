@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * POST /api/meta/adsets/create
+ *
+ * Creates a new ad set under a campaign. Required body fields:
+ * `name`, `campaign_id`. Optional: `daily_budget`, `optimization_goal`,
+ * `billing_event`, `status`, `targeting`.
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * GET /api/meta/insights
+ *
+ * Returns account-level insights for the authenticated ad account.
+ *
+ * Query params:
+ * - `date_preset` — Meta date preset (default: `today`)
+ * - `time_increment` — Breakdown granularity (e.g. `1` for daily)
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession();
 

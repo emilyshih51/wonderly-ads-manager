@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
+/**
+ * GET /api/auth/slack/status
+ *
+ * Returns whether a Slack OAuth connection is stored in the session cookie.
+ * Response: `{ connected: boolean, info?: { team_name, channel_name } }`
+ */
 export async function GET() {
   const cookieStore = await cookies();
   const slackCookie = cookieStore.get('wonderly_slack');

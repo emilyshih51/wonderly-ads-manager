@@ -5,6 +5,16 @@ import { META_BASE_URL } from '@/services/meta/constants';
 
 export const maxDuration = 60;
 
+/**
+ * POST /api/meta/upload
+ *
+ * Multipart form handler for Meta ad creation. Dispatches on the `action` field:
+ * - `upload_image` — Uploads an image to adimages and returns the image hash.
+ * - `upload_video` — Uploads a video to advideos and returns the video ID.
+ * - `create_ad` — Creates an ad creative (image or video) and then an ad.
+ *
+ * Maximum serverless duration: 60 seconds (video uploads can be large).
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

@@ -5,6 +5,13 @@ import { SlackService } from '@/services/slack';
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
+/**
+ * POST /api/meta/adsets/update
+ *
+ * Updates a campaign or ad set (currently supports daily_budget).
+ * Posts a Slack notification to SLACK_NOTIFICATION_CHANNEL when a budget
+ * change is made. Required body field: `adset_id`, `campaign_id`, or `entity_id`.
+ */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 

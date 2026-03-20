@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
+/**
+ * GET /api/meta/debug
+ *
+ * Development/diagnostic endpoint. Returns raw campaign objects, campaign-level
+ * insights (today), ad sets, and ad set field coverage for the authenticated
+ * account. Useful for verifying Meta API connectivity and field availability.
+ */
 export async function GET() {
   const session = await getSession();
 

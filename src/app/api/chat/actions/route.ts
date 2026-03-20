@@ -9,6 +9,13 @@ interface ActionPayload {
   budget?: number;
 }
 
+/**
+ * POST /api/chat/actions
+ *
+ * Executes a Meta action suggested by the Claude chat. Supported action types:
+ * `pause_campaign`, `pause_ad_set`, `pause_ad`, `resume_campaign`,
+ * `resume_ad_set`, `resume_ad`, `adjust_budget`. Body: `{ action: ActionPayload }`.
+ */
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();

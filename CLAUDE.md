@@ -121,35 +121,7 @@ src/
 
 All secrets live in Vercel environment variables. **Never commit `.env` files.**
 
-```
-# Meta / Facebook
-META_APP_ID
-META_APP_SECRET
-META_AD_ACCOUNT_ID          # Primary account (format: act_XXXXXXXXX or raw ID)
-META_AD_ACCOUNT_IDS         # Multi-account, comma-separated
-META_SYSTEM_ACCESS_TOKEN    # Long-lived system user token — never expires on its own
-
-# Slack
-SLACK_BOT_TOKEN             # xoxb-... token
-SLACK_SIGNING_SECRET        # For HMAC request verification
-SLACK_CLIENT_ID
-SLACK_CLIENT_SECRET
-SLACK_NOTIFICATION_CHANNEL  # Default channel for launch/budget alerts
-
-# AI
-ANTHROPIC_API_KEY
-ANTHROPIC_MODEL             # Optional override, defaults to claude-sonnet-4-20250514
-
-# Storage
-REDIS_URL                   # Redis connection string
-
-# App
-NEXT_PUBLIC_APP_URL         # e.g. https://wonderly-ads-manager.vercel.app
-NEXT_PUBLIC_FACEBOOK_PAGE_ID
-# Dev
-NODE_ENV
-USE_MOCK_DATA               # Set to "true" to use mock data in development
-```
+See [`.env.example`](.env.example) for the full list of required variables and their descriptions.
 
 ---
 

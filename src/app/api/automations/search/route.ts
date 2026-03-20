@@ -35,13 +35,11 @@ interface AdSetResult {
  */
 export async function GET(request: NextRequest) {
   const session = await getSession();
-  const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;
-  const rawAdAccountId =
-    session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
 
-  if (!accessToken || !rawAdAccountId) {
-    return NextResponse.json({ error: 'No Meta credentials' }, { status: 401 });
-  }
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const accessToken = session.meta_access_token;
+  const rawAdAccountId = session.ad_account_id;
 
   const meta = new MetaService(accessToken, rawAdAccountId);
 

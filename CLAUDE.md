@@ -112,21 +112,22 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 4. **Never expose `META_SYSTEM_ACCESS_TOKEN` in client-side code** (no `NEXT_PUBLIC_` prefix, never passed to the browser).
 
-5. **Email allowlist:** `ALLOWED_EMAILS` gates Facebook login. If unset, any Facebook user can log in. Check is enforced in `/api/auth/facebook/callback/route.ts`.
+5. **System token scope:** `META_SYSTEM_ACCESS_TOKEN` is only for the cron evaluator (`GET /api/automations/evaluate`) and Slack bot routes (`/api/slack/events`, `/api/slack/interactions`). All user-facing API routes must use `session.meta_access_token` — never fall back to the system token.
 
-6. **Slack action allowlist:** `ALLOWED_SLACK_USER_IDS` gates button-triggered actions in `/api/slack/interactions`. If unset, any workspace member can pause/resume/adjust budgets.
+6. **Email allowlist:** `ALLOWED_EMAILS` gates Facebook login. If unset, any Facebook user can log in. Check is enforced in `/api/auth/facebook/callback/route.ts`.
 
-7. **Cookie security:** Session cookie is `httpOnly: true`, `secure: true` in production, `sameSite: lax`. Do not change these settings.
+7. **Slack action allowlist:** `ALLOWED_SLACK_USER_IDS` gates button-triggered actions in `/api/slack/interactions`. If unset, any workspace member can pause/resume/adjust budgets.
+
+8. **Cookie security:** Session cookie is `httpOnly: true`, `secure: true` in production, `sameSite: lax`. Do not change these settings.
 
 ---
 
 ## Known Issues (Do Not Introduce More)
 
-| Issue                                | Severity | Notes                                      |
-| ------------------------------------ | -------- | ------------------------------------------ |
-| Single system token for all accounts | High     | One compromised token affects all accounts |
-| No server-side sessions              | High     | Cannot remotely revoke access              |
-| No rollback mechanism                | Medium   | No batch-undo for automation actions       |
+| Issue                   | Severity | Notes                                |
+| ----------------------- | -------- | ------------------------------------ |
+| No server-side sessions | High     | Cannot remotely revoke access        |
+| No rollback mechanism   | Medium   | No batch-undo for automation actions |
 
 ---
 

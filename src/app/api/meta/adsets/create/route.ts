@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:AdSets');
 
 /**
  * POST /api/meta/adsets/create
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Create ad set error:', error);
+    logger.error('Create ad set error', error);
     const message = error instanceof Error ? error.message : 'Failed to create ad set';
 
     return NextResponse.json({ error: message }, { status: 500 });

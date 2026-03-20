@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Duplicate');
 
 /**
  * POST /api/meta/duplicate
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Duplicate error:', error);
+    logger.error('Duplicate error', error);
 
     return NextResponse.json({ error: 'Failed to duplicate' }, { status: 500 });
   }

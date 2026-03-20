@@ -4,6 +4,9 @@ import { MetaService } from '@/services/meta';
 import { SlackService } from '@/services/slack';
 import { RulesStoreService } from '@/services/rules-store';
 import { createClient, type RedisClientType } from 'redis';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Automations:Evaluate');
 
 export const maxDuration = 60;
 
@@ -42,7 +45,7 @@ export async function GET(request: NextRequest) {
       redisClient = createClient({ url: process.env.REDIS_URL }) as RedisClientType;
       await redisClient.connect();
     } catch (e) {
-      console.error('[Evaluate] Redis connection error:', e);
+      logger.error('Redis connection error', e);
       redisClient = null;
     }
   }
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest) {
     try {
       optimizationMap = await meta.getCampaignOptimizationMap();
     } catch (e) {
-      console.error(`[Evaluate] Failed to get optimization map for account ${adAccountId}:`, e);
+      logger.error(`Failed to get optimization map for account ${adAccountId}`, e);
     }
 
     for (const rule of accountRules) {
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
 
         results.push(...result);
       } catch (error) {
-        console.error(`[Evaluate] Rule "${rule.name}" (account ${adAccountId}) error:`, error);
+        logger.error(`Rule "${rule.name}" (account ${adAccountId}) error`, error);
         results.push({ rule: rule.name, account: adAccountId, error: String(error) });
       }
     }
@@ -138,7 +141,7 @@ export async function POST(request: NextRequest) {
   try {
     optimizationMap = await meta.getCampaignOptimizationMap();
   } catch (e) {
-    console.error('[Evaluate] Failed to get optimization map:', e);
+    logger.error('Failed to get optimization map', e);
   }
 
   try {
@@ -250,8 +253,8 @@ async function evaluateRule(
   }
 
   if (insightsData.length === 0 && !dryRun) {
-    console.warn(
-      `[Evaluate] No data returned for account ${adAccountId} (rule: "${rule.name}") — skipping to avoid false pauses`
+    logger.warn(
+      `No data returned for account ${adAccountId} (rule: "${rule.name}") — skipping to avoid false pauses`
     );
 
     return [{ rule: rule.name, skipped: 'no_data_returned', account: adAccountId }];
@@ -505,6 +508,6 @@ async function sendSlackNotification(
 
     await slack.postMessage(channel, text);
   } catch (e) {
-    console.error('[Evaluate] Slack notification failed:', e);
+    logger.error('Slack notification failed', e);
   }
 }

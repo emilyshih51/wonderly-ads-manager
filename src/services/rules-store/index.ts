@@ -16,12 +16,15 @@
  */
 
 import { type RedisClientType } from 'redis';
+import { createLogger } from '@/services/logger';
 import { RULE_COOKIE_PREFIX, RULES_REDIS_HASH_KEY, RULE_COOKIE_MAX_AGE } from './constants';
 import type { StoredRule, CookieStore, IRulesStoreService } from './types';
 
 export type { StoredRule, CookieStore, IRulesStoreService };
 
 export class RulesStoreService implements IRulesStoreService {
+  private readonly logger = createLogger('RulesStore');
+
   constructor(
     private readonly redis: RedisClientType | null = null,
     private readonly cookieStore: CookieStore | null = null
@@ -64,7 +67,7 @@ export class RulesStoreService implements IRulesStoreService {
 
         return rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
       } catch (e) {
-        console.error('[RulesStore] Redis read error:', e);
+        this.logger.error('Redis read error', e);
       }
     }
 
@@ -110,7 +113,7 @@ export class RulesStoreService implements IRulesStoreService {
 
         return data ? (JSON.parse(data) as StoredRule) : null;
       } catch (e) {
-        console.error('[RulesStore] Redis read error:', e);
+        this.logger.error('Redis read error', e);
       }
     }
 
@@ -134,7 +137,7 @@ export class RulesStoreService implements IRulesStoreService {
           path: '/',
         });
       } catch (e) {
-        console.error('[RulesStore] Cookie write error:', e);
+        this.logger.error('Cookie write error', e);
       }
     }
 
@@ -142,7 +145,7 @@ export class RulesStoreService implements IRulesStoreService {
       try {
         await this.redis.hSet(RULES_REDIS_HASH_KEY, rule.id, JSON.stringify(rule));
       } catch (e) {
-        console.error('[RulesStore] Redis write error:', e);
+        this.logger.error('Redis write error', e);
       }
     }
   }
@@ -157,7 +160,7 @@ export class RulesStoreService implements IRulesStoreService {
       try {
         this.cookieStore.delete(`${RULE_COOKIE_PREFIX}${ruleId}`);
       } catch (e) {
-        console.error('[RulesStore] Cookie delete error:', e);
+        this.logger.error('Cookie delete error', e);
       }
     }
 
@@ -165,7 +168,7 @@ export class RulesStoreService implements IRulesStoreService {
       try {
         await this.redis.hDel(RULES_REDIS_HASH_KEY, ruleId);
       } catch (e) {
-        console.error('[RulesStore] Redis delete error:', e);
+        this.logger.error('Redis delete error', e);
       }
     }
   }

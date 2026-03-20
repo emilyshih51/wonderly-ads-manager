@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Insights');
 
 /**
  * GET /api/meta/insights
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Insights fetch error:', error);
+    logger.error('Insights fetch error', error);
 
     return NextResponse.json({ error: 'Failed to fetch insights' }, { status: 500 });
   }

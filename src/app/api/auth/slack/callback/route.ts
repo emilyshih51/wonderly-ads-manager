@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Auth:Slack');
 
 /**
  * GET /api/auth/slack/callback
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('Slack OAuth error:', data.error);
+      logger.error('Slack OAuth error', data.error);
 
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_auth_failed`
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     return cookieResponse;
   } catch (error) {
-    console.error('Slack callback error:', error);
+    logger.error('Slack callback error', error);
 
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_callback_failed`

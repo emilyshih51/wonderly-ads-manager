@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:AdSets');
 
 /**
  * GET /api/meta/adsets
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
 
-    console.error('Ad set fetch error:', msg);
+    logger.error('Ad set fetch error', msg);
 
     return NextResponse.json({ error: `Failed to fetch ad sets: ${msg}` }, { status: 500 });
   }

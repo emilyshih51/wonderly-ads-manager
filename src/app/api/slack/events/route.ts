@@ -7,6 +7,9 @@ import { SYSTEM_PROMPT } from '@/app/api/chat/route';
 export const maxDuration = 60;
 import { MetaService } from '@/services/meta';
 import { generateMockChatData } from '@/app/api/chat/data/mock';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Slack:Events');
 
 /**
  * POST /api/slack/events
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
   // Handle URL verification challenge FIRST (before signature check)
   // Slack sends this during initial setup and needs the challenge echoed back
   if (body.type === 'url_verification') {
-    console.log('[Slack Events] URL verification challenge');
+    logger.info('URL verification challenge');
 
     return NextResponse.json({ challenge: body.challenge });
   }
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
   const isValid = slack.verifySignature(slackSignature, slackTimestamp, rawBody);
 
   if (!isValid) {
-    console.warn('[Slack Events] Invalid signature');
+    logger.warn('Invalid signature');
 
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -82,12 +85,12 @@ export async function POST(request: NextRequest) {
 
     // Deduplicate — Slack retries if it doesn't get a fast 200
     if (isDuplicateEvent(eventId)) {
-      console.log('[Slack Events] Duplicate event, skipping:', eventId);
+      logger.info('Duplicate event, skipping', eventId);
 
       return NextResponse.json({ ok: true });
     }
 
-    console.log('[Slack Events] Received app_mention:', {
+    logger.info('Received app_mention', {
       channel: event.channel,
       user: event.user,
       text: event.text,
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
       try {
         await processAppMention(event);
       } catch (error) {
-        console.error('[Slack Events] Background processing error:', error);
+        logger.error('Background processing error', error);
       }
     });
 
@@ -132,7 +135,7 @@ async function processAppMention(event: any) {
       .filter(Boolean);
 
     if (!metaSystemToken || accountIds.length === 0) {
-      console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID(S)');
+      logger.warn('Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID(S)');
       const slack = new SlackService(
         process.env.SLACK_BOT_TOKEN || '',
         process.env.SLACK_SIGNING_SECRET || ''
@@ -192,7 +195,7 @@ async function processAppMention(event: any) {
           history,
         });
       } catch (claudeError) {
-        console.error('[Slack Events] Claude API error:', claudeError);
+        logger.error('Claude API error', claudeError);
         analysisText = 'I encountered an error analyzing your ad data. Please try again.';
       }
     } else {
@@ -212,7 +215,7 @@ async function processAppMention(event: any) {
 
     await slack.postMessage(channelId, cleanText, blocks, threadTs);
   } catch (error) {
-    console.error('[Slack Events] Error processing mention:', error);
+    logger.error('Error processing mention', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
     const slack = new SlackService(
@@ -317,7 +320,7 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
       },
     };
   } catch (error) {
-    console.error('[Slack Events] Error fetching ad data:', error);
+    logger.error('Error fetching ad data', error);
 
     // Return empty structure, will fall back to mock
     return generateMockChatData();

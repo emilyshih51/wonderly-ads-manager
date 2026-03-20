@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Chat:Actions');
 
 interface ActionPayload {
   type: string;
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
-    console.error('[Chat Action] Error:', error);
+    logger.error('Error', error);
     const message = error instanceof Error ? error.message : 'Action failed';
 
     return NextResponse.json({ error: message }, { status: 500 });

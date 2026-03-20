@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { SlackService } from '@/services/slack';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:AdSets');
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
 
         await slack.postMessage(SLACK_CHANNEL, text);
       } catch (e) {
-        console.error('[Budget] Slack notification failed:', e);
+        logger.error('Slack notification failed', e);
       }
     }
 

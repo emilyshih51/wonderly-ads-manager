@@ -29,6 +29,9 @@ import {
   BarChart3,
   ArrowLeft,
 } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Dashboard');
 
 /* ---------- Types ---------- */
 
@@ -239,7 +242,7 @@ export default function DashboardPage() {
 
       setEditingBudget(null);
     } catch (e) {
-      console.error('Budget save failed:', e);
+      logger.error('Budget save failed', e);
     } finally {
       setSavingBudget(false);
     }
@@ -260,7 +263,7 @@ export default function DashboardPage() {
       setCampaigns(campaignsData.data || []);
       setTimeSeries(timeSeriesData.data || []);
     } catch (error) {
-      console.error('Dashboard fetch error:', error);
+      logger.error('Dashboard fetch error', error);
     } finally {
       setLoading(false);
     }
@@ -300,7 +303,7 @@ export default function DashboardPage() {
         setDrillAdSets(adSets);
         setDrillAds(filteredAds);
       } catch (error) {
-        console.error('Drill-down fetch error:', error);
+        logger.error('Drill-down fetch error', error);
       } finally {
         setDrillLoading(false);
       }

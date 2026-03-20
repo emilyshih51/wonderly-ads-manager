@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Chat');
 
 /**
  * AI Chat API — powered by Claude (Anthropic)
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
               controller.enqueue('data: [DONE]\n\n');
               controller.close();
             } catch (error) {
-              console.error('Stream error:', error);
+              logger.error('Stream error', error);
               controller.error(error);
             }
           },
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
           },
         });
       } catch (apiError) {
-        console.error('Claude API error:', apiError);
+        logger.error('Claude API error', apiError);
         // Fallback to built-in analysis on API error
         const reply = generateBuiltInAnalysis(message, context);
         const readable = new ReadableStream({
@@ -199,7 +202,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Chat API error:', error);
+    logger.error('Chat API error', error);
 
     return NextResponse.json({ error: 'Failed to process message' }, { status: 500 });
   }

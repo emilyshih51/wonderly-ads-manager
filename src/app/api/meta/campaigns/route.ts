@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Campaigns');
 
 /**
  * GET /api/meta/campaigns
@@ -48,7 +51,7 @@ export async function GET(request: NextRequest) {
       } catch (insightsError: unknown) {
         const msg = insightsError instanceof Error ? insightsError.message : 'Unknown';
 
-        console.error('Bulk campaign insights error:', msg);
+        logger.error('Bulk campaign insights error', msg);
         const campaignsNoInsights = (campaigns as Array<{ id: string }>).map((c) => ({
           ...c,
           insights: null,
@@ -62,7 +65,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
 
-    console.error('Campaign fetch error:', msg);
+    logger.error('Campaign fetch error', msg);
 
     return NextResponse.json({ error: `Failed to fetch campaigns: ${msg}` }, { status: 500 });
   }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Slack:Notify');
 
 /**
  * POST /api/slack/notify
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Slack notify error:', error);
+    logger.error('Slack notify error', error);
 
     return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
   }

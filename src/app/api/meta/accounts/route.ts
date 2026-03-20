@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, setSession } from '@/lib/session';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Accounts');
 
 /**
  * GET /api/meta/accounts — List all ad accounts the user has access to
@@ -27,7 +30,7 @@ export async function GET() {
 
     return NextResponse.json({ data: accounts, current: session.ad_account_id });
   } catch (error) {
-    console.error('Fetch accounts error:', error);
+    logger.error('Fetch accounts error', error);
 
     return NextResponse.json({ error: 'Failed to fetch ad accounts' }, { status: 500 });
   }
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
       ad_account_id: ad_account_id.replace('act_', ''),
     });
   } catch (error) {
-    console.error('Switch account error:', error);
+    logger.error('Switch account error', error);
 
     return NextResponse.json({ error: 'Failed to switch account' }, { status: 500 });
   }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { SlackService } from '@/services/slack';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Notify');
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Notification failed';
 
-    console.error('[Notify] Error:', error);
+    logger.error('Error', error);
 
     return NextResponse.json({ error: msg }, { status: 500 });
   }

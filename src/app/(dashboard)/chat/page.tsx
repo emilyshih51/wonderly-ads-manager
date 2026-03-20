@@ -23,6 +23,9 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Chat');
 
 /* ───── types ───── */
 interface ActionPayload {
@@ -819,7 +822,7 @@ export default function ChatPage() {
 
       setChatData(data);
     } catch (err) {
-      console.error('Failed to load chat data:', err);
+      logger.error('Failed to load chat data', err);
       setDataError('Could not load account data. Make sure you are logged in.');
     } finally {
       setDataLoading(false);

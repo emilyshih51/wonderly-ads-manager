@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { META_BASE_URL } from '@/services/meta/constants';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Upload');
 
 export const maxDuration = 60;
 
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
       try {
         data = JSON.parse(responseText);
       } catch {
-        console.error('[upload_video] Non-JSON response:', responseText.substring(0, 500));
+        logger.error('Non-JSON response', responseText.substring(0, 500));
 
         return NextResponse.json(
           { error: { message: `Video upload failed: ${response.status} ${response.statusText}` } },
@@ -137,7 +140,7 @@ export async function POST(request: NextRequest) {
 
       if (urlTags) creativeBody.url_tags = urlTags;
 
-      console.log('[create_ad] Creative body:', JSON.stringify(creativeBody, null, 2));
+      logger.info('Creative body', JSON.stringify(creativeBody, null, 2));
 
       const creative = await meta.request(`/act_${session.ad_account_id}/adcreatives`, {
         method: 'POST',
@@ -159,7 +162,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: unknown) {
-    console.error('Upload error:', error);
+    logger.error('Upload error', error);
     const metaError = (
       error as {
         metaError?: {

@@ -23,3 +23,6 @@ export type {
 
 export { RulesStoreService } from './rules-store';
 export type { IRulesStoreService, StoredRule, CookieStore } from './rules-store';
+
+export { Logger, createLogger } from './logger';
+export type { ILogger, LogLevel, LogEntry, LoggerOptions, ErrorReporter } from './logger';

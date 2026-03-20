@@ -35,6 +35,9 @@ import {
   ArrowRight,
   Wand2,
 } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Automations');
 
 /* ─────────── Types ─────────── */
 
@@ -893,7 +896,7 @@ export default function AutomationsPage() {
 
       setRules(data.data || []);
     } catch (err) {
-      console.error('Failed to fetch rules:', err);
+      logger.error('Failed to fetch rules', err);
     }
   }, []);
 
@@ -904,7 +907,7 @@ export default function AutomationsPage() {
 
       setActivityLog(data.data || []);
     } catch (err) {
-      console.error('Failed to fetch history:', err);
+      logger.error('Failed to fetch history', err);
     }
   }, []);
 
@@ -935,7 +938,7 @@ export default function AutomationsPage() {
       await fetchRules();
       setViewMode('list');
     } catch (err) {
-      console.error('Save failed:', err);
+      logger.error('Save failed', err);
     } finally {
       setSaving(false);
     }
@@ -947,7 +950,7 @@ export default function AutomationsPage() {
       fetchRules();
       if (selectedRule?.id === ruleId) setSelectedRule(null);
     } catch (err) {
-      console.error('Delete failed:', err);
+      logger.error('Delete failed', err);
     }
   };
 
@@ -960,7 +963,7 @@ export default function AutomationsPage() {
       });
       fetchRules();
     } catch (err) {
-      console.error('Toggle failed:', err);
+      logger.error('Toggle failed', err);
     }
   };
 
@@ -1030,7 +1033,7 @@ export default function AutomationsPage() {
       setPreviewTotal(data.total_ads || 0);
       setPreviewLoaded(true);
     } catch (err) {
-      console.error('Preview failed:', err);
+      logger.error('Preview failed', err);
     } finally {
       setPreviewLoading(false);
     }

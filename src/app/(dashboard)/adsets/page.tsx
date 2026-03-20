@@ -23,6 +23,9 @@ import {
   Search,
   Rocket,
 } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('AdSets');
 
 /* ---------- Types ---------- */
 interface Campaign {
@@ -337,7 +340,7 @@ export default function LaunchPage() {
               }),
             });
           } catch (e) {
-            console.error('Failed to set budget:', e);
+            logger.error('Failed to set budget', e);
           }
         }
       }
@@ -361,7 +364,7 @@ export default function LaunchPage() {
           if (oss?.instagram_actor_id) instagramActorId = oss.instagram_actor_id;
         }
       } catch (e) {
-        console.error('Failed to fetch source identity, using defaults:', e);
+        logger.error('Failed to fetch source identity, using defaults', e);
       }
 
       // Step 2: Upload images and create ads

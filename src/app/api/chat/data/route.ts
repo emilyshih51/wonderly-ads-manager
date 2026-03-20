@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { generateMockChatData } from './mock';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Chat:Data');
 
 /**
  * GET /api/chat/data
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
     process.env.USE_MOCK_DATA === 'true' || request.nextUrl.searchParams.get('mock') === 'true';
 
   if (useMock) {
-    console.log('[Chat Data] Using mock data for AI testing');
+    logger.info('Using mock data for AI testing');
 
     return NextResponse.json(generateMockChatData());
   }
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
 
   if (!session) {
-    console.log('[Chat Data] No session — falling back to mock data');
+    logger.info('No session — falling back to mock data');
 
     return NextResponse.json(generateMockChatData());
   }
@@ -113,14 +116,14 @@ export async function GET(request: NextRequest) {
       response.history.accountDaily.length > 0;
 
     if (!hasAnyData) {
-      console.log('[Chat Data] No real data returned — falling back to mock data');
+      logger.info('No real data returned — falling back to mock data');
 
       return NextResponse.json(generateMockChatData());
     }
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[Chat Data] Error fetching data:', error);
+    logger.error('Error fetching data', error);
 
     return NextResponse.json(generateMockChatData());
   }

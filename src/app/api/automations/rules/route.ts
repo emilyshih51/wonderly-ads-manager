@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { createClient, type RedisClientType } from 'redis';
 import { getSession } from '@/lib/session';
 import { RulesStoreService, type StoredRule } from '@/services/rules-store';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Automations:Rules');
 
 /**
  * Rules are stored in Vercel KV (persistent Redis).
@@ -24,7 +27,7 @@ async function createRulesStore(): Promise<{
       redis = createClient({ url: process.env.REDIS_URL }) as RedisClientType;
       await redis.connect();
     } catch (e) {
-      console.error('[Rules] Redis connection error:', e);
+      logger.error('Redis connection error', e);
       redis = null;
     }
   }
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(newRule);
   } catch (error) {
-    console.error('Create rule error:', error);
+    logger.error('Create rule error', error);
 
     return NextResponse.json({ error: 'Failed to create rule' }, { status: 500 });
   }
@@ -108,7 +111,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json(updatedRule);
   } catch (error) {
-    console.error('Update rule error:', error);
+    logger.error('Update rule error', error);
 
     return NextResponse.json({ error: 'Failed to update rule' }, { status: 500 });
   }
@@ -130,7 +133,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete rule error:', error);
+    logger.error('Delete rule error', error);
 
     return NextResponse.json({ error: 'Failed to delete rule' }, { status: 500 });
   }

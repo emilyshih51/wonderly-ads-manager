@@ -16,6 +16,9 @@ import {
   getResultsFromActions,
 } from '@/lib/utils';
 import { RefreshCw, Loader2, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Ads');
 
 interface Campaign {
   id: string;
@@ -124,7 +127,7 @@ export default function TopPerformingAdsPage() {
 
       setAds(rankedAds);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data', error);
     } finally {
       setLoading(false);
     }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Automations:Search');
 
 /**
  * GET /api/automations/search
@@ -210,7 +213,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
   } catch (error) {
-    console.error('[Automations Search]', error);
+    logger.error('Search error', error);
 
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }

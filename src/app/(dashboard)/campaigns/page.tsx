@@ -22,6 +22,9 @@ import {
   getCostPerResult,
 } from '@/lib/utils';
 import { Copy, RefreshCw } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Campaigns');
 
 interface Campaign {
   id: string;
@@ -58,7 +61,7 @@ export default function CampaignsPage() {
 
       setCampaigns(data.data || []);
     } catch (error) {
-      console.error('Failed to fetch campaigns:', error);
+      logger.error('Failed to fetch campaigns', error);
     } finally {
       setLoading(false);
     }
@@ -89,7 +92,7 @@ export default function CampaignsPage() {
         fetchCampaigns();
       }
     } catch (error) {
-      console.error('Duplicate failed:', error);
+      logger.error('Duplicate failed', error);
     } finally {
       setDuplicating(false);
     }

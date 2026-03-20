@@ -16,6 +16,9 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Sidebar');
 
 interface AdAccount {
   id: string;
@@ -70,7 +73,7 @@ export function Sidebar() {
       router.refresh();
       window.location.reload();
     } catch (e) {
-      console.error('Failed to switch account:', e);
+      logger.error('Failed to switch account', e);
     } finally {
       setSwitching(false);
     }

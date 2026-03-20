@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SlackService } from '@/services/slack';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Slack:Interactions');
 
 async function getRawBody(request: NextRequest): Promise<string> {
   const arrayBuffer = await request.arrayBuffer();
@@ -44,7 +47,7 @@ export async function POST(request: NextRequest) {
   const isValid = slack.verifySignature(slackSignature, slackTimestamp, rawBody);
 
   if (!isValid) {
-    console.warn('[Slack Interactions] Invalid signature');
+    logger.warn('Invalid signature');
 
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -52,7 +55,7 @@ export async function POST(request: NextRequest) {
   const ackResponse = NextResponse.json({ ok: true });
 
   processInteraction(payload, slack).catch((error) => {
-    console.error('[Slack Interactions] Background processing error:', error);
+    logger.error('Background processing error', error);
   });
 
   return ackResponse;
@@ -68,7 +71,7 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
   };
 
   if (type !== 'block_actions' || !actions || actions.length === 0) {
-    console.warn('[Slack Interactions] Unexpected interaction type');
+    logger.warn('Unexpected interaction type');
 
     return;
   }
@@ -83,7 +86,7 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
     thread_ts?: string;
   };
 
-  console.log('[Slack Interactions] Processing action:', {
+  logger.info('Processing action', {
     type: actionValue.action_type,
     id: actionValue.action_id,
     name: actionValue.action_name,
@@ -178,9 +181,9 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
       }
     }
 
-    console.log('[Slack Interactions] Action completed:', result);
+    logger.info('Action completed', result);
   } catch (error) {
-    console.error('[Slack Interactions] Error executing action:', error);
+    logger.error('Error executing action', error);
 
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     const channelId = actionValue.channel_id || (payload.channel as { id?: string })?.id;

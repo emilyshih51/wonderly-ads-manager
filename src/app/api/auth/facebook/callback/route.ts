@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Auth:Facebook');
 
 /**
  * GET /api/auth/facebook/callback
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
   } catch (error) {
-    console.error('Facebook auth error:', error);
+    logger.error('Facebook auth error', error);
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=auth_failed`);
   }

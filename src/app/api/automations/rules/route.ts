@@ -1,38 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createClient, type RedisClientType } from 'redis';
 import { getSession } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
 import { RulesStoreService, type StoredRule } from '@/services/rules-store';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Automations:Rules');
 
-/**
- * Rules are stored in Vercel KV (persistent Redis).
- * This allows the cron job at /api/automations/evaluate to read
- * active rules without browser cookies.
- *
- * Setup: Create a KV database in Vercel Dashboard → Storage → Create → KV
- */
+async function createRulesStore(): Promise<RulesStoreService> {
+  const [redis, cookieStore] = await Promise.all([getRedisClient(), cookies()]);
 
-async function createRulesStore(): Promise<{
-  store: RulesStoreService;
-  redis: RedisClientType | null;
-}> {
-  const cookieStore = await cookies();
-  let redis: RedisClientType | null = null;
-
-  if (process.env.REDIS_URL) {
-    try {
-      redis = createClient({ url: process.env.REDIS_URL }) as RedisClientType;
-      await redis.connect();
-    } catch (e) {
-      logger.error('Redis connection error', e);
-      redis = null;
-    }
-  }
-
-  return { store: new RulesStoreService(redis, cookieStore), redis };
+  return new RulesStoreService(redis, cookieStore);
 }
 
 export async function GET(_request: NextRequest) {
@@ -40,7 +18,7 @@ export async function GET(_request: NextRequest) {
 
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { store } = await createRulesStore();
+  const store = await createRulesStore();
   const allRules = await store.getAll();
   // Filter rules for the current ad account (rules without ad_account_id are shown to all — legacy rules)
   const rules = allRules.filter(
@@ -71,7 +49,7 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    const { store } = await createRulesStore();
+    const store = await createRulesStore();
 
     await store.save(newRule);
 
@@ -94,7 +72,7 @@ export async function PUT(request: NextRequest) {
 
     if (!ruleId) return NextResponse.json({ error: 'Rule ID required' }, { status: 400 });
 
-    const { store } = await createRulesStore();
+    const store = await createRulesStore();
     const existingRule = await store.get(ruleId);
 
     if (!existingRule) {
@@ -127,7 +105,7 @@ export async function DELETE(request: NextRequest) {
   if (!ruleId) return NextResponse.json({ error: 'Rule ID required' }, { status: 400 });
 
   try {
-    const { store } = await createRulesStore();
+    const store = await createRulesStore();
 
     await store.delete(ruleId);
 

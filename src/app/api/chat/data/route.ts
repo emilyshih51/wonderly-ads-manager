@@ -15,19 +15,17 @@ const logger = createLogger('Chat:Data');
  * mock data when USE_MOCK_DATA is set or no real data is returned.
  */
 export async function GET(request: NextRequest) {
+  const session = await getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const useMock =
     process.env.USE_MOCK_DATA === 'true' || request.nextUrl.searchParams.get('mock') === 'true';
 
   if (useMock) {
     logger.info('Using mock data for AI testing');
-
-    return NextResponse.json(generateMockChatData());
-  }
-
-  const session = await getSession();
-
-  if (!session) {
-    logger.info('No session — falling back to mock data');
 
     return NextResponse.json(generateMockChatData());
   }

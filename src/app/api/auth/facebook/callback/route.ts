@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { setSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -15,10 +16,20 @@ const logger = createLogger('Auth:Facebook');
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
+  const state = request.nextUrl.searchParams.get('state');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   if (!code) {
     return NextResponse.redirect(`${appUrl}/login?error=no_code`);
+  }
+
+  const cookieStore = await cookies();
+  const storedState = cookieStore.get('wonderly_oauth_state')?.value;
+
+  cookieStore.delete('wonderly_oauth_state');
+
+  if (!state || !storedState || state !== storedState) {
+    return NextResponse.redirect(`${appUrl}/login?error=invalid_state`);
   }
 
   try {
@@ -70,15 +81,7 @@ export async function GET(request: NextRequest) {
       ad_account_id: adAccountId ?? '',
     };
 
-    const cookieStore = await cookies();
-
-    cookieStore.set('wonderly_session', JSON.stringify(session), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
-      path: '/',
-    });
+    await setSession(session);
 
     return NextResponse.redirect(`${appUrl}/dashboard`);
   } catch (error) {

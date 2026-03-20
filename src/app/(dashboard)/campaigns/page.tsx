@@ -14,13 +14,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { useAppStore } from '@/stores/app-store';
-import {
-  formatCurrency,
-  formatPercent,
-  formatNumber,
-  getResultsFromActions,
-  getCostPerResult,
-} from '@/lib/utils';
+import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
+import { getResultCount, getCostPerResult } from '@/lib/automation-utils';
 import { Copy, RefreshCw } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
@@ -172,7 +167,13 @@ export default function CampaignsPage() {
                           {formatCurrency(campaign.insights?.spend)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {formatNumber(getResultsFromActions(campaign.insights?.actions))}
+                          {formatNumber(
+                            getResultCount(
+                              { actions: campaign.insights?.actions, campaign_id: campaign.id },
+                              campaign.id,
+                              {}
+                            )
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {formatPercent(campaign.insights?.ctr)}
@@ -182,7 +183,15 @@ export default function CampaignsPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           {formatCurrency(
-                            getCostPerResult(campaign.insights?.cost_per_action_type)
+                            getCostPerResult(
+                              {
+                                spend: campaign.insights?.spend || '0',
+                                actions: campaign.insights?.actions,
+                                campaign_id: campaign.id,
+                              },
+                              campaign.id,
+                              {}
+                            )
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">

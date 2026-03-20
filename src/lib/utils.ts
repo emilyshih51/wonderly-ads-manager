@@ -64,56 +64,6 @@ export function formatNumber(value: number | string | null | undefined): string 
   return new Intl.NumberFormat('en-US').format(num);
 }
 
-/**
- * Extract the result count from a Meta actions array.
- *
- * Searches for the first action type that represents a meaningful conversion result
- * (pixel lead, pixel purchase, complete registration, or link click).
- *
- * @param actions - The `actions` array from a Meta insights response.
- * @returns The integer result count, or `0` if no matching action is found.
- */
-export function getResultsFromActions(actions?: Array<{ action_type: string; value: string }>) {
-  if (!actions) return 0;
-  const resultAction = actions.find(
-    (a) =>
-      a.action_type === 'offsite_conversion.fb_pixel_lead' ||
-      a.action_type === 'lead' ||
-      a.action_type === 'offsite_conversion.fb_pixel_purchase' ||
-      a.action_type === 'purchase' ||
-      a.action_type === 'complete_registration' ||
-      a.action_type === 'link_click'
-  );
-
-  return resultAction ? parseInt(resultAction.value) : 0;
-}
-
-/**
- * Extract the cost-per-result from a Meta `cost_per_action_type` array.
- *
- * Searches for the first action type that represents a meaningful conversion result
- * (pixel lead, pixel purchase, complete registration, or link click).
- *
- * @param costPerActionType - The `cost_per_action_type` array from a Meta insights response.
- * @returns The cost per result as a float, or `null` if no matching action is found.
- */
-export function getCostPerResult(
-  costPerActionType?: Array<{ action_type: string; value: string }>
-) {
-  if (!costPerActionType) return null;
-  const resultCost = costPerActionType.find(
-    (a) =>
-      a.action_type === 'offsite_conversion.fb_pixel_lead' ||
-      a.action_type === 'lead' ||
-      a.action_type === 'offsite_conversion.fb_pixel_purchase' ||
-      a.action_type === 'purchase' ||
-      a.action_type === 'complete_registration' ||
-      a.action_type === 'link_click'
-  );
-
-  return resultCost ? parseFloat(resultCost.value) : null;
-}
-
 /** Available date presets for Meta API insight queries, ordered from shortest to longest window. */
 export const DATE_PRESETS = [
   { label: 'Today', value: 'today' },

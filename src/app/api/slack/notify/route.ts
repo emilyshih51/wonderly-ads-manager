@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getSession } from '@/lib/session';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Slack:Notify');
@@ -12,6 +13,12 @@ const logger = createLogger('Slack:Notify');
  * otherwise falls back to the Slack Web API. Body: `{ message, channel? }`.
  */
 export async function POST(request: NextRequest) {
+  const session = await getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const cookieStore = await cookies();
     const slackCookie = cookieStore.get('wonderly_slack');

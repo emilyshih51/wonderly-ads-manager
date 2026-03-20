@@ -166,13 +166,15 @@ export function Sidebar() {
 
         {/* Logout */}
         <div className="px-3 py-4">
-          <a
-            href="/api/auth/logout"
-            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-400 transition-all duration-200 hover:bg-gray-800/50 hover:text-gray-200"
-          >
-            <LogOut className="h-4.5 w-4.5 flex-shrink-0" />
-            <span className="font-medium">Sign Out</span>
-          </a>
+          <form action="/api/auth/logout" method="POST">
+            <button
+              type="submit"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-400 transition-all duration-200 hover:bg-gray-800/50 hover:text-gray-200"
+            >
+              <LogOut className="h-4.5 w-4.5 flex-shrink-0" />
+              <span className="font-medium">Sign Out</span>
+            </button>
+          </form>
         </div>
       </div>
     </aside>

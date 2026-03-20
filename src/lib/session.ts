@@ -14,7 +14,7 @@
  */
 
 import { cookies } from 'next/headers';
-import { createClient } from 'redis';
+import { getRedisClient } from '@/lib/redis';
 import { UserSession } from '@/types';
 import { createLogger } from '@/services/logger';
 
@@ -23,23 +23,6 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const REDIS_KEY_PREFIX = 'session:';
 
 const logger = createLogger('Session');
-
-/** Attempt to get a connected Redis client. Returns null if REDIS_URL is unset or connection fails. */
-async function getRedis() {
-  if (!process.env.REDIS_URL) return null;
-
-  try {
-    const client = createClient({ url: process.env.REDIS_URL });
-
-    await client.connect();
-
-    return client;
-  } catch (err) {
-    logger.warn('Redis unavailable — falling back to cookie-only sessions', err);
-
-    return null;
-  }
-}
 
 /**
  * Read and deserialize the current session.
@@ -55,20 +38,17 @@ export async function getSession(): Promise<UserSession | null> {
 
   if (!cookie) return null;
 
-  const redis = await getRedis();
+  const redis = await getRedisClient();
 
   if (redis) {
     try {
       const raw = await redis.get(`${REDIS_KEY_PREFIX}${cookie.value}`);
-
-      await redis.disconnect();
 
       if (!raw) return null;
 
       return JSON.parse(raw) as UserSession;
     } catch (err) {
       logger.error('Failed to read session from Redis', err);
-      await redis.disconnect().catch(() => {});
 
       return null;
     }
@@ -96,7 +76,7 @@ export async function getSession(): Promise<UserSession | null> {
  */
 export async function setSession(session: UserSession): Promise<void> {
   const cookieStore = await cookies();
-  const redis = await getRedis();
+  const redis = await getRedisClient();
 
   if (redis) {
     try {
@@ -105,7 +85,6 @@ export async function setSession(session: UserSession): Promise<void> {
       await redis.set(`${REDIS_KEY_PREFIX}${sessionId}`, JSON.stringify(session), {
         EX: SESSION_TTL_SECONDS,
       });
-      await redis.disconnect();
 
       cookieStore.set(SESSION_COOKIE, sessionId, {
         httpOnly: true,
@@ -118,7 +97,6 @@ export async function setSession(session: UserSession): Promise<void> {
       return;
     } catch (err) {
       logger.error('Failed to write session to Redis — falling back to cookie', err);
-      await redis.disconnect().catch(() => {});
     }
   }
 
@@ -143,11 +121,10 @@ export async function clearSession(): Promise<void> {
   const cookie = cookieStore.get(SESSION_COOKIE);
 
   if (cookie) {
-    const redis = await getRedis();
+    const redis = await getRedisClient();
 
     if (redis) {
       try {
-        // Only delete if this looks like a session ID (UUID), not a JSON blob (cookie-only fallback)
         const isSessionId = /^[0-9a-f-]{36}$/.test(cookie.value);
 
         if (isSessionId) {
@@ -155,8 +132,6 @@ export async function clearSession(): Promise<void> {
         }
       } catch (err) {
         logger.error('Failed to delete session from Redis', err);
-      } finally {
-        await redis.disconnect().catch(() => {});
       }
     }
   }

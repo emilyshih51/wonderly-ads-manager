@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { clearSession } from '@/lib/session';
 
 /**
- * GET /api/auth/logout
+ * POST /api/auth/logout
  *
- * Clears the wonderly_session cookie and redirects to /login.
+ * Clears the session and redirects to /login.
  */
-export async function GET() {
-  const cookieStore = await cookies();
-
-  cookieStore.delete('wonderly_session');
+export async function POST() {
+  await clearSession();
 
   return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login`);
 }

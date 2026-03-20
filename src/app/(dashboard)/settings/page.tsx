@@ -178,11 +178,11 @@ export default function SettingsPage() {
             <p className="text-sm text-gray-600">
               Signed in via Facebook. Your Meta access token refreshes automatically.
             </p>
-            <div className="mt-4">
-              <Button variant="destructive" size="sm" asChild>
-                <a href="/api/auth/logout">Sign Out</a>
+            <form action="/api/auth/logout" method="POST" className="mt-4">
+              <Button variant="destructive" size="sm" type="submit">
+                Sign Out
               </Button>
-            </div>
+            </form>
           </CardContent>
         </Card>
       </div>

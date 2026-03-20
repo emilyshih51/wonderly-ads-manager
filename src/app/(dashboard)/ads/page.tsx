@@ -8,13 +8,8 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { useAppStore } from '@/stores/app-store';
-import {
-  formatCurrency,
-  formatPercent,
-  formatNumber,
-  DATE_PRESETS,
-  getResultsFromActions,
-} from '@/lib/utils';
+import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS } from '@/lib/utils';
+import { getResultCount } from '@/lib/automation-utils';
 import { RefreshCw, Loader2, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
@@ -92,7 +87,11 @@ export default function TopPerformingAdsPage() {
       // Map to ranked ads with results and CPA
       const rankedAds = processedAds
         .map((ad, idx) => {
-          const results = getResultsFromActions(ad.insights?.actions);
+          const results = getResultCount(
+            { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
+            ad.campaign_id,
+            {}
+          );
           const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
           const cpa = results > 0 ? spend / results : null;
 

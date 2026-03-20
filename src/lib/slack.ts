@@ -9,15 +9,19 @@ const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || '';
  */
 export function verifySlackSignature(signature: string, timestamp: string, body: string): boolean {
   const signingSecret = SLACK_SIGNING_SECRET;
+
   if (!signingSecret) {
     console.warn('[Slack] No SLACK_SIGNING_SECRET configured');
+
     return false;
   }
 
   // Verify timestamp is not too old (more than 5 minutes)
   const now = Math.floor(Date.now() / 1000);
+
   if (Math.abs(now - parseInt(timestamp)) > 300) {
     console.warn('[Slack] Request timestamp too old');
+
     return false;
   }
 
@@ -44,6 +48,7 @@ export async function postSlackMessage(
 ): Promise<{ ts: string; channel: string } | null> {
   if (!SLACK_BOT_TOKEN) {
     console.warn('[Slack] No SLACK_BOT_TOKEN configured');
+
     return null;
   }
 
@@ -66,12 +71,14 @@ export async function postSlackMessage(
 
     if (!data.ok) {
       console.error('[Slack] Post message error:', data.error);
+
       return null;
     }
 
     return { ts: data.ts, channel: data.channel };
   } catch (error) {
     console.error('[Slack] Post message exception:', error);
+
     return null;
   }
 }
@@ -87,6 +94,7 @@ export async function updateSlackMessage(
 ): Promise<boolean> {
   if (!SLACK_BOT_TOKEN) {
     console.warn('[Slack] No SLACK_BOT_TOKEN configured');
+
     return false;
   }
 
@@ -109,12 +117,14 @@ export async function updateSlackMessage(
 
     if (!data.ok) {
       console.error('[Slack] Update message error:', data.error);
+
       return false;
     }
 
     return true;
   } catch (error) {
     console.error('[Slack] Update message exception:', error);
+
     return false;
   }
 }
@@ -142,6 +152,7 @@ export async function getThreadMessages(
     );
 
     const data = await response.json();
+
     if (!data.ok || !data.messages) return [];
 
     // Get bot user ID so we can identify our own messages
@@ -161,6 +172,7 @@ export async function getThreadMessages(
 
       const isBot = msg.bot_id || (botUserId && msg.user === botUserId);
       const text = (msg.text || '').replace(/<@.+?>/g, '').trim();
+
       if (!text) continue;
 
       messages.push({
@@ -177,6 +189,7 @@ export async function getThreadMessages(
     return messages;
   } catch (error) {
     console.error('[Slack] Failed to fetch thread messages:', error);
+
     return [];
   }
 }
@@ -225,9 +238,11 @@ export function parseActions(text: string): ActionBlock[] {
   const actionRegex = /:::action(\{.+?\}):::/g;
 
   let match;
+
   while ((match = actionRegex.exec(text)) !== null) {
     try {
       const action = JSON.parse(match[1]) as ActionBlock;
+
       actions.push(action);
     } catch (e) {
       console.error('[Slack] Failed to parse action:', match[1], e);
@@ -259,6 +274,7 @@ export function buildSlackBlocks(
   if (text.trim()) {
     const formatted = formatForSlack(text);
     const chunks = splitText(formatted, 2900);
+
     for (const chunk of chunks) {
       blocks.push({
         type: 'section',
@@ -339,22 +355,27 @@ function splitText(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
   let remaining = text;
+
   while (remaining.length > maxLen) {
     // Find a good break point (double newline, single newline, or space)
     let breakAt = remaining.lastIndexOf('\n\n', maxLen);
+
     if (breakAt < maxLen * 0.3) breakAt = remaining.lastIndexOf('\n', maxLen);
     if (breakAt < maxLen * 0.3) breakAt = remaining.lastIndexOf(' ', maxLen);
     if (breakAt < maxLen * 0.3) breakAt = maxLen;
     chunks.push(remaining.slice(0, breakAt).trim());
     remaining = remaining.slice(breakAt).trim();
   }
+
   if (remaining) chunks.push(remaining);
+
   return chunks;
 }
 
 function getActionLabel(action: ActionBlock): string {
   // Slack button text max 75 chars
   const name = action.name.length > 30 ? action.name.slice(0, 27) + '...' : action.name;
+
   switch (action.type) {
     case 'pause_campaign':
     case 'pause_ad_set':
@@ -375,8 +396,10 @@ function getActionStyle(actionType: string): string {
   if (actionType.startsWith('pause')) {
     return 'danger';
   }
+
   if (actionType === 'adjust_budget') {
     return 'primary';
   }
+
   return 'primary';
 }

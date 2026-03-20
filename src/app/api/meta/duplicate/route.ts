@@ -4,6 +4,7 @@ import { duplicateCampaign, duplicateAdSet } from '@/lib/meta-api';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Duplicate error:', error);
+
     return NextResponse.json({ error: 'Failed to duplicate' }, { status: 500 });
   }
 }

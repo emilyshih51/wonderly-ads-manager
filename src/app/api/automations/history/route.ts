@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
 
   // Clean up old entries (keep last 30)
   const existing: string[] = [];
+
   for (const cookie of cookieStore.getAll()) {
     if (cookie.name.startsWith('wonderly_history_')) {
       existing.push(cookie.name);
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     // Sort by name (which contains timestamp) and remove oldest
     existing.sort();
     const toRemove = existing.slice(0, existing.length - 29);
+
     for (const name of toRemove) {
       response.cookies.set(name, '', { path: '/', maxAge: 0 });
     }

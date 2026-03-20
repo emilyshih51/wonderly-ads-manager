@@ -20,11 +20,13 @@ interface ActionPayload {
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
+
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const { action } = (await request.json()) as { action: ActionPayload };
+
     if (!action?.type || !action?.id) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
     }
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
     switch (action.type) {
       case 'pause_campaign':
       case 'pause_ad_set':
+
       case 'pause_ad': {
         await updateStatus(action.id, meta_access_token, 'PAUSED');
         result = `✅ Paused "${action.name || action.id}"`;
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
 
       case 'resume_campaign':
       case 'resume_ad_set':
+
       case 'resume_ad': {
         await updateStatus(action.id, meta_access_token, 'ACTIVE');
         result = `✅ Resumed "${action.name || action.id}"`;
@@ -53,10 +57,12 @@ export async function POST(request: NextRequest) {
         if (!action.budget || action.budget <= 0) {
           return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
         }
+
         // Round to whole dollar amount — never set fractional budgets
         const wholeBudget = Math.round(action.budget);
         // Meta API expects budget in cents
         const budgetCents = (wholeBudget * 100).toString();
+
         await metaApi(`/${action.id}`, meta_access_token, {
           method: 'POST',
           body: { daily_budget: budgetCents },
@@ -73,6 +79,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Chat Action] Error:', error);
     const message = error instanceof Error ? error.message : 'Action failed';
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

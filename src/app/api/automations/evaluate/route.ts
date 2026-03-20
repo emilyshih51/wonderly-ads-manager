@@ -21,8 +21,10 @@ export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   // Protect against unauthorized cron triggers when CRON_SECRET is configured
   const cronSecret = process.env.CRON_SECRET;
+
   if (cronSecret) {
     const auth = request.headers.get('authorization');
+
     if (auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -47,8 +49,10 @@ export async function GET(request: NextRequest) {
 
   // Group rules by ad account ID
   const rulesByAccount: Record<string, typeof activeRules> = {};
+
   for (const rule of activeRules) {
     const accountId = rule.ad_account_id || defaultAdAccountId;
+
     if (!accountId) continue;
     if (!rulesByAccount[accountId]) rulesByAccount[accountId] = [];
     rulesByAccount[accountId].push(rule);
@@ -66,6 +70,7 @@ export async function GET(request: NextRequest) {
   for (const [adAccountId, accountRules] of Object.entries(rulesByAccount)) {
     // Get optimization map for this account
     let optimizationMap: Record<string, string> = {};
+
     try {
       optimizationMap = await getCampaignOptimizationMap(adAccountId, accessToken);
     } catch (e) {
@@ -83,6 +88,7 @@ export async function GET(request: NextRequest) {
           false,
           actionCap
         );
+
         results.push(...result);
       } catch (error) {
         console.error(`[Evaluate] Rule "${rule.name}" (account ${adAccountId}) error:`, error);
@@ -126,6 +132,7 @@ export async function POST(request: NextRequest) {
   }
 
   let optimizationMap: Record<string, string> = {};
+
   try {
     optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
   } catch (e) {
@@ -142,6 +149,7 @@ export async function POST(request: NextRequest) {
       dryRun,
       sendSlack || live
     );
+
     return NextResponse.json({
       test: !live,
       dry_run: dryRun,
@@ -205,6 +213,7 @@ async function evaluateRule(
           filtering: activeAdFilter,
         },
       });
+
       insightsData = response.data || [];
     } else {
       const response = await metaApi(`/act_${adAccountId}/insights`, accessToken, {
@@ -217,6 +226,7 @@ async function evaluateRule(
           filtering: activeAdFilter,
         },
       });
+
       insightsData = response.data || [];
     }
   } else if (entityType === 'adset') {
@@ -230,7 +240,9 @@ async function evaluateRule(
         filtering: activeAdSetFilter,
       },
     });
+
     insightsData = response.data || [];
+
     if (triggerConfig.campaign_id) {
       insightsData = insightsData.filter(
         (row: any) => row.campaign_id === triggerConfig.campaign_id
@@ -247,7 +259,9 @@ async function evaluateRule(
         filtering: activeCampaignFilter,
       },
     });
+
     insightsData = response.data || [];
+
     if (triggerConfig.campaign_id) {
       insightsData = insightsData.filter(
         (row: any) => row.campaign_id === triggerConfig.campaign_id
@@ -260,6 +274,7 @@ async function evaluateRule(
     console.warn(
       `[Evaluate] No data returned for account ${adAccountId} (rule: "${rule.name}") — skipping to avoid false pauses`
     );
+
     return [{ rule: rule.name, skipped: 'no_data_returned', account: adAccountId }];
   }
 
@@ -290,6 +305,7 @@ async function evaluateRule(
 
     // Evaluate ALL conditions (AND logic)
     let allConditionsMet = true;
+
     for (const condNode of conditionNodes) {
       const config = condNode.data?.config || {};
       const metric = config.metric || 'spend';
@@ -338,6 +354,7 @@ async function evaluateRule(
         // Dry run — just report what WOULD happen
         actionResult.action = `would_${actionType}`;
         actionResult.dry_run = true;
+
         if (actionType === 'promote' && !actionConfig.target_adset_id) {
           actionResult.warning = 'No target ad set ID configured for promotion';
         }
@@ -353,13 +370,16 @@ async function evaluateRule(
         // Promote = pause original + duplicate to winner ad set
         await updateStatus(entityId, accessToken, 'PAUSED');
         const targetAdSetId = actionConfig.target_adset_id;
+
         if (targetAdSetId) {
           const duplicated = await duplicateAd(entityId, targetAdSetId, adAccountId, accessToken);
+
           actionResult.action = 'promoted';
           actionResult.duplicated_ad_id = duplicated.id;
         } else {
           actionResult.action = 'paused (no target adset for duplication)';
         }
+
         if (actionCap) actionCap.executed++;
       }
 
@@ -370,6 +390,7 @@ async function evaluateRule(
       ) {
         if (!dryRun || sendSlack) {
           const testPrefix = dryRun ? '🧪 *[TEST]* ' : '';
+
           await sendSlackNotification(
             actionConfig.slack_channel,
             rule.name,
@@ -385,6 +406,7 @@ async function evaluateRule(
           );
           actionResult.slack_sent = true;
         }
+
         actionResult.slack_channel = actionConfig.slack_channel;
       }
     } catch (actionError) {
@@ -411,6 +433,7 @@ function getResultCount(
 
   if (resultType) {
     const found = row.actions.find((a: any) => a.action_type === resultType);
+
     return found ? parseInt(found.value) || 0 : 0;
   }
 
@@ -423,6 +446,7 @@ function getResultCount(
       !a.action_type.includes('page_engagement') &&
       !a.action_type.includes('link_click')
   );
+
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }
 
@@ -468,6 +492,7 @@ async function sendSlackNotification(
 
   let actionEmoji = '⏸️';
   let actionVerb = 'Paused';
+
   if (actionType === 'promote') {
     actionEmoji = '🚀';
     actionVerb = 'Promoted';
@@ -511,6 +536,7 @@ async function sendSlackNotification(
     const dupEncodedName = encodeURIComponent(`"[\\\"${entityName} [Winner Copy]\\\"]"`);
     const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
     const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
+
     text += `\n📋 Duplicated to winners ad set: <${dupLink}|View new ad>`;
   }
 

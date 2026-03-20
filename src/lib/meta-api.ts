@@ -11,6 +11,7 @@ export async function metaApi(endpoint: string, accessToken: string, options: Me
   const { method = 'GET', body, params = {} } = options;
 
   const url = new URL(`${META_BASE_URL}${endpoint}`);
+
   url.searchParams.set('access_token', accessToken);
   Object.entries(params).forEach(([key, value]) => {
     url.searchParams.set(key, value);
@@ -32,6 +33,7 @@ export async function metaApi(endpoint: string, accessToken: string, options: Me
 
   if (data.error) {
     const err: any = new Error(data.error.message || 'Meta API Error');
+
     err.metaError = data.error; // Preserve full Meta error object (error_subcode, error_user_title, etc.)
     throw err;
   }
@@ -135,6 +137,7 @@ export async function getCampaignOptimizationMap(
 
   for (const adset of data.data || []) {
     const campaignId = adset.campaign_id;
+
     if (map[campaignId]) continue; // Use first ad set per campaign
 
     const goal = adset.optimization_goal;
@@ -142,6 +145,7 @@ export async function getCampaignOptimizationMap(
 
     if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_event_type) {
       const actionType = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
+
       if (actionType) {
         map[campaignId] = actionType;
       } else {
@@ -242,6 +246,7 @@ export async function getAdInsights(
 // Upload ad image
 export async function uploadAdImage(adAccountId: string, accessToken: string, imageFile: File) {
   const formData = new FormData();
+
   formData.append('filename', imageFile);
   formData.append('access_token', accessToken);
 
@@ -329,6 +334,7 @@ export async function duplicateAd(
   });
 
   const creativeId = original.creative?.id;
+
   if (!creativeId) throw new Error(`Ad ${adId} has no creative`);
 
   const name = newName || `${original.name} [Winner Copy]`;
@@ -371,6 +377,7 @@ export async function getAccountInsights(
       'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
     date_preset: datePreset,
   };
+
   if (timeIncrement) params.time_increment = timeIncrement;
 
   return metaApi(`/act_${adAccountId}/insights`, accessToken, { params });
@@ -459,6 +466,7 @@ export async function getDailyInsights(
     time_increment: '1', // daily breakdown
     limit: '500',
   };
+
   if (level !== 'account') params.level = level;
 
   return metaApi(`/act_${adAccountId}/insights`, accessToken, { params });
@@ -507,6 +515,7 @@ export async function getInsightsForDateRange(
     time_range: JSON.stringify({ since, until }),
     limit: '500',
   };
+
   if (level !== 'account') params.level = level;
 
   return metaApi(`/act_${adAccountId}/insights`, accessToken, { params });

@@ -130,12 +130,15 @@ export async function POST(request: NextRequest) {
               for await (const event of stream) {
                 if (event.type === 'content_block_delta') {
                   const delta = event.delta as { type: string; text?: string };
+
                   if (delta.type === 'text_delta' && delta.text) {
                     const data = JSON.stringify({ text: delta.text });
+
                     controller.enqueue(`data: ${data}\n\n`);
                   }
                 }
               }
+
               controller.enqueue('data: [DONE]\n\n');
               controller.close();
             } catch (error) {
@@ -159,6 +162,7 @@ export async function POST(request: NextRequest) {
         const readable = new ReadableStream({
           start(controller) {
             const data = JSON.stringify({ text: reply });
+
             controller.enqueue(`data: ${data}\n\n`);
             controller.enqueue('data: [DONE]\n\n');
             controller.close();
@@ -180,6 +184,7 @@ export async function POST(request: NextRequest) {
     const readable = new ReadableStream({
       start(controller) {
         const data = JSON.stringify({ text: reply });
+
         controller.enqueue(`data: ${data}\n\n`);
         controller.enqueue('data: [DONE]\n\n');
         controller.close();
@@ -195,6 +200,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
+
     return NextResponse.json({ error: 'Failed to process message' }, { status: 500 });
   }
 }
@@ -287,9 +293,11 @@ function generateBuiltInAnalysis(question: string, context: string): string {
 
     if (totalTodayResults === 0 && totalTodaySpend === 0) {
       reply += `No spend or results recorded today yet. Your campaigns may not have started delivering, or it's still early in the day. Check back later or verify your campaigns are active.\n`;
+
       if (totalYesterdayResults > 0) {
         reply += `\nFor reference, yesterday you had **${totalYesterdayResults} results** across all campaigns.\n`;
       }
+
       return reply;
     }
 
@@ -309,6 +317,7 @@ function generateBuiltInAnalysis(question: string, context: string): string {
       reply += `**Campaigns with declining results:**\n`;
       droppedCampaigns.forEach((c) => {
         const drop = c.yesterdayResults - c.todayResults;
+
         reply += `- **${c.name}**: ${c.todayResults} results today vs ${c.yesterdayResults} yesterday (↓${drop}). CTR: ${c.todayCTR}% today vs ${c.yesterdayCTR}% yesterday.\n`;
       });
       reply += '\n';
@@ -316,6 +325,7 @@ function generateBuiltInAnalysis(question: string, context: string): string {
 
     // Find spending but no results
     const wasteful = campaigns.filter((c) => c.todaySpend > 5 && c.todayResults === 0);
+
     if (wasteful.length > 0) {
       reply += `**Spending without results:**\n`;
       wasteful.forEach((c) => {
@@ -356,6 +366,7 @@ function generateBuiltInAnalysis(question: string, context: string): string {
             : c.todayResults < c.yesterdayResults
               ? '📉'
               : '➡️';
+
         reply += `- ${resultEmoji} **${c.name}**: $${c.todaySpend.toFixed(2)} spent, ${c.todayResults} results (yesterday: ${c.yesterdayResults})\n`;
       });
     }
@@ -372,9 +383,11 @@ function generateBuiltInAnalysis(question: string, context: string): string {
     q.includes('efficient')
   ) {
     let reply = `**Cost Analysis**\n\n`;
+
     reply += `Total spend today: **$${totalTodaySpend.toFixed(2)}**\n\n`;
 
     const sorted = [...campaigns].sort((a, b) => b.todaySpend - a.todaySpend);
+
     sorted.forEach((c) => {
       reply += `- **${c.name}**: $${c.todaySpend.toFixed(2)} spent, ${c.todayResults} results, Cost/Result: $${c.todayCostPerResult}, CPC: $${c.todayCPC}\n`;
     });
@@ -389,10 +402,12 @@ function generateBuiltInAnalysis(question: string, context: string): string {
       .sort((a, b) => {
         const aCPR = parseFloat(a.todayCostPerResult) || Infinity;
         const bCPR = parseFloat(b.todayCostPerResult) || Infinity;
+
         return aCPR - bCPR;
       });
 
     let reply = `**Top Performers (by Cost per Result)**\n\n`;
+
     if (withResults.length === 0) {
       reply += `No campaigns with results today yet. Check back later or look at yesterday's data.\n`;
     } else {
@@ -400,11 +415,13 @@ function generateBuiltInAnalysis(question: string, context: string): string {
         reply += `${i + 1}. **${c.name}**: $${c.todayCostPerResult}/result, ${c.todayResults} results, $${c.todaySpend.toFixed(2)} spend\n`;
       });
     }
+
     return reply;
   }
 
   // Default
   let reply = `**Your Account Today**\n\n`;
+
   reply += `- **${campaigns.length}** campaigns tracked\n`;
   reply += `- **$${totalTodaySpend.toFixed(2)}** total spend\n`;
   reply += `- **${totalTodayResults}** total results (yesterday: ${totalYesterdayResults})\n\n`;

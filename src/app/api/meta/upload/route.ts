@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -17,10 +18,12 @@ export async function POST(request: NextRequest) {
       // Upload image to Meta
       const imageFormData = new FormData();
       const file = formData.get('file') as File;
+
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
       const blob = new Blob([bytes], { type: file.type });
+
       imageFormData.append('filename', blob, file.name);
       imageFormData.append('access_token', session.meta_access_token);
 
@@ -29,18 +32,21 @@ export async function POST(request: NextRequest) {
         { method: 'POST', body: imageFormData }
       );
       const data = await response.json();
+
       return NextResponse.json(data);
     }
 
     if (action === 'upload_video') {
       // Upload video to Meta ad account
       const file = formData.get('file') as File;
+
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
       const blob = new Blob([bytes], { type: file.type });
 
       const videoFormData = new FormData();
+
       videoFormData.append('source', blob, file.name);
       videoFormData.append('title', file.name.replace(/\.[^.]+$/, ''));
       videoFormData.append('access_token', session.meta_access_token);
@@ -53,10 +59,12 @@ export async function POST(request: NextRequest) {
       // Handle non-JSON responses (e.g., if Meta returns an HTML error)
       const responseText = await response.text();
       let data;
+
       try {
         data = JSON.parse(responseText);
       } catch {
         console.error('[upload_video] Non-JSON response:', responseText.substring(0, 500));
+
         return NextResponse.json(
           {
             error: {
@@ -70,6 +78,7 @@ export async function POST(request: NextRequest) {
       if (data.error) {
         return NextResponse.json({ error: data.error }, { status: 400 });
       }
+
       // Returns { id: "VIDEO_ID" }
       return NextResponse.json(data);
     }
@@ -93,6 +102,7 @@ export async function POST(request: NextRequest) {
       const objectStorySpec: any = {
         page_id: pageId,
       };
+
       if (instagramActorId) {
         objectStorySpec.instagram_actor_id = instagramActorId;
       }
@@ -106,6 +116,7 @@ export async function POST(request: NextRequest) {
             value: { link },
           },
         };
+
         if (message) videoData.message = message;
         if (headline) videoData.title = headline;
         if (description) videoData.link_description = description;
@@ -116,6 +127,7 @@ export async function POST(request: NextRequest) {
           link,
           call_to_action: { type: callToAction || 'LEARN_MORE' },
         };
+
         if (message) linkData.message = message;
         if (headline) linkData.name = headline;
         if (description) linkData.description = description;
@@ -164,6 +176,7 @@ export async function POST(request: NextRequest) {
     const metaError = error?.metaError;
     const message = metaError?.message || error?.message || 'Upload failed';
     const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
+
     return NextResponse.json(
       {
         error: {

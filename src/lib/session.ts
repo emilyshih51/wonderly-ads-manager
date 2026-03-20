@@ -6,7 +6,9 @@ const SESSION_COOKIE = 'wonderly_session';
 export async function getSession(): Promise<UserSession | null> {
   const cookieStore = await cookies();
   const session = cookieStore.get(SESSION_COOKIE);
+
   if (!session) return null;
+
   try {
     return JSON.parse(session.value) as UserSession;
   } catch {
@@ -16,6 +18,7 @@ export async function getSession(): Promise<UserSession | null> {
 
 export async function setSession(session: UserSession) {
   const cookieStore = await cookies();
+
   cookieStore.set(SESSION_COOKIE, JSON.stringify(session), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -27,5 +30,6 @@ export async function setSession(session: UserSession) {
 
 export async function clearSession() {
   const cookieStore = await cookies();
+
   cookieStore.delete(SESSION_COOKIE);
 }

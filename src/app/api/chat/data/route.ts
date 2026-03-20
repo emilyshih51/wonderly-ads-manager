@@ -32,12 +32,15 @@ export async function GET(request: NextRequest) {
 
   if (useMock) {
     console.log('[Chat Data] Using mock data for AI testing');
+
     return NextResponse.json(generateMockChatData());
   }
 
   const session = await getSession();
+
   if (!session) {
     console.log('[Chat Data] No session — falling back to mock data');
+
     return NextResponse.json(generateMockChatData());
   }
 
@@ -47,11 +50,13 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const yesterday = new Date(now);
+
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
   // Calculate 30 days ago for historical range
   const thirtyDaysAgo = new Date(now);
+
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
@@ -122,7 +127,9 @@ export async function GET(request: NextRequest) {
 
     const extract = (index: number) => {
       const r = results[index];
+
       if (r.status === 'fulfilled') return r.value?.data || [];
+
       return [];
     };
 
@@ -174,12 +181,14 @@ export async function GET(request: NextRequest) {
 
     if (!hasAnyData) {
       console.log('[Chat Data] No real data returned — falling back to mock data');
+
       return NextResponse.json(generateMockChatData());
     }
 
     return NextResponse.json(response);
   } catch (error) {
     console.error('[Chat Data] Error fetching data:', error);
+
     return NextResponse.json(generateMockChatData());
   }
 }

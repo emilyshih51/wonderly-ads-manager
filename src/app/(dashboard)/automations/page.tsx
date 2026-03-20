@@ -304,6 +304,7 @@ function configToNodes(config: RuleConfig) {
   });
 
   const edges: any[] = [];
+
   for (let i = 0; i < nodes.length - 1; i++) {
     edges.push({
       id: `e${i + 1}`,
@@ -372,15 +373,19 @@ function CampaignSearch({
         setOpen(false);
       }
     };
+
     document.addEventListener('mousedown', handleClick);
+
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   const searchCampaigns = useCallback(async (q: string) => {
     setLoading(true);
+
     try {
       const res = await fetch(`/api/automations/search?type=campaigns&q=${encodeURIComponent(q)}`);
       const data = await res.json();
+
       setResults(data.data || []);
     } catch {
       setResults([]);
@@ -489,18 +494,23 @@ function AdSetSearch({
         setOpen(false);
       }
     };
+
     document.addEventListener('mousedown', handleClick);
+
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   const searchAdSets = useCallback(
     async (q: string) => {
       setLoading(true);
+
       try {
         let url = `/api/automations/search?type=adsets&q=${encodeURIComponent(q)}`;
+
         if (campaignId) url += `&campaign_id=${campaignId}`;
         const res = await fetch(url);
         const data = await res.json();
+
         setResults(data.data || []);
       } catch {
         setResults([]);
@@ -591,6 +601,7 @@ function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleNam
 
   // Extract action type
   let actionType = 'pause';
+
   if (lowerText.match(/\b(promote|duplicate|scale)\b/)) {
     actionType = 'promote';
   } else if (lowerText.match(/\b(notify|alert|slack|send)\b/)) {
@@ -604,12 +615,14 @@ function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleNam
   const campaignMatch =
     text.match(/\bin\s+["']?([^"'\n]+?)["']?\s+campaign\b/i) ||
     text.match(/\bin\s+["']?([^"'\n]+?)["']?\s*(?:\.|$)/i);
+
   if (campaignMatch) {
     campaignName = campaignMatch[1].trim();
   }
 
   // Extract date preset
   let datePreset = 'last_7d';
+
   if (lowerText.match(/\blast\s+30\s*d(?:ays?)?\b/)) datePreset = 'last_30d';
   else if (lowerText.match(/\blast\s+14\s*d(?:ays?)?\b/)) datePreset = 'last_14d';
   else if (lowerText.match(/\blast\s+3\s*d(?:ays?)?\b/)) datePreset = 'last_3d';
@@ -646,6 +659,7 @@ function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleNam
     /(cpa|cost per result|cost per acquisition|spend|spending|spent|cost|results?|conversions?|leads?|registrations?|clicks?|ctr|click through rate|impressions?)\s+(?:is\s+)?(over|above|more than|greater than|exceeds?|under|below|less than|lower than|equal to|exactly|is|>=|<=|==)\s*(\$)?(\d+(?:\.\d+)?)/gi;
 
   let match;
+
   while ((match = simplifiedRegex.exec(text)) !== null) {
     const metricStr = match[1].trim().toLowerCase();
     const operatorStr = match[2].toLowerCase();
@@ -653,6 +667,7 @@ function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleNam
 
     // Find metric
     let metric = '';
+
     for (const [alias, value] of Object.entries(metricAliases)) {
       if (metricStr.includes(alias)) {
         metric = value;
@@ -663,6 +678,7 @@ function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleNam
     if (metric && thresholdStr) {
       // Determine operator
       let operator = '>=';
+
       if (operatorStr.match(/over|above|more|greater|exceeds|>=/)) operator = '>=';
       else if (operatorStr.match(/under|below|less|lower|<=/)) operator = '<=';
       else if (operatorStr.match(/equal|exactly|^is$/)) operator = '==';
@@ -874,6 +890,7 @@ export default function AutomationsPage() {
     try {
       const res = await fetch('/api/automations/rules');
       const data = await res.json();
+
       setRules(data.data || []);
     } catch (err) {
       console.error('Failed to fetch rules:', err);
@@ -884,6 +901,7 @@ export default function AutomationsPage() {
     try {
       const res = await fetch('/api/automations/history');
       const data = await res.json();
+
       setActivityLog(data.data || []);
     } catch (err) {
       console.error('Failed to fetch history:', err);
@@ -897,6 +915,7 @@ export default function AutomationsPage() {
 
   const handleSave = async () => {
     setSaving(true);
+
     try {
       const { nodes, edges } = configToNodes(config);
       const method = selectedRule ? 'PUT' : 'POST';
@@ -907,6 +926,7 @@ export default function AutomationsPage() {
         nodes,
         edges,
       };
+
       await fetch('/api/automations/rules', {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -976,6 +996,7 @@ export default function AutomationsPage() {
 
   const useCopilot = (input: string) => {
     const { config: parsedConfig, ruleName: parsedName } = parseCopilotInput(input);
+
     setSelectedRule(null);
     setRuleName(parsedName);
     setConfig({ ...DEFAULT_CONFIG, ...parsedConfig });
@@ -988,6 +1009,7 @@ export default function AutomationsPage() {
   /* ─── Preview Matching Ads ─── */
   const loadPreview = async () => {
     setPreviewLoading(true);
+
     try {
       const condParam = config.conditions
         .filter((c) => c.threshold)
@@ -998,10 +1020,12 @@ export default function AutomationsPage() {
         date_preset: config.date_preset || 'today',
         conditions: JSON.stringify(condParam),
       });
+
       if (config.campaign_id) params.set('campaign_id', config.campaign_id);
 
       const res = await fetch(`/api/automations/search?${params}`);
       const data = await res.json();
+
       setPreviewAds(data.data || []);
       setPreviewTotal(data.total_ads || 0);
       setPreviewLoaded(true);
@@ -1016,6 +1040,7 @@ export default function AutomationsPage() {
   const handleTestWorkflow = async () => {
     setTesting(true);
     setTestResults(null);
+
     try {
       const { nodes, edges } = configToNodes(config);
       const res = await fetch('/api/automations/evaluate', {
@@ -1027,6 +1052,7 @@ export default function AutomationsPage() {
         }),
       });
       const data = await res.json();
+
       setTestResults(data);
       setTestDialogOpen(true);
 
@@ -1055,6 +1081,7 @@ export default function AutomationsPage() {
     setRunningRuleId(rule.id);
     setRunResults(null);
     setConfirmRunRule(null);
+
     try {
       const res = await fetch('/api/automations/evaluate', {
         method: 'POST',
@@ -1071,6 +1098,7 @@ export default function AutomationsPage() {
         }),
       });
       const data = await res.json();
+
       setRunResults(data);
       setRunDialogOpen(true);
 
@@ -1130,6 +1158,7 @@ export default function AutomationsPage() {
   /* ─── Rule summary for list ─── */
   const getRuleSummary = (rule: Rule) => {
     const cfg = nodesToConfig(rule.nodes);
+
     return cfg;
   };
 
@@ -1234,6 +1263,7 @@ export default function AutomationsPage() {
                           `${METRIC_OPTIONS.find((m) => m.value === c.metric)?.label || c.metric} ${c.operator} ${c.threshold}`
                       )
                       .join(' AND ');
+
                     return (
                       <div
                         key={rule.id}
@@ -1355,6 +1385,7 @@ export default function AutomationsPage() {
                       hour12: true,
                     });
                     const isTest = event.type === 'test';
+
                     return (
                       <div
                         key={event.id}
@@ -1923,6 +1954,7 @@ export default function AutomationsPage() {
                                   const msg =
                                     config.slack_message ||
                                     `${config.action_type === 'promote' ? '🚀' : '⏸️'} *${ruleName}*\n${actionVerb} ad: ${sampleAd ? sampleAd.ad_name : '<ad name>'}\nSpend: $${sampleAd?.spend || '0.00'} · Results: ${sampleAd?.results ?? 0} · CPA: ${sampleAd?.cpa === 'N/A' ? 'N/A' : `$${sampleAd?.cpa || '0.00'}`}`;
+
                                   return msg
                                     .replace(/\{rule_name\}/g, ruleName || 'Rule Name')
                                     .replace(/\{action\}/g, actionVerb)

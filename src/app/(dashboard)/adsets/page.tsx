@@ -114,6 +114,7 @@ export default function LaunchPage() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('wonderly_default_adtext');
+
       setHasDefaults(!!saved);
     } catch {
       /* ignore */
@@ -126,6 +127,7 @@ export default function LaunchPage() {
         primaryTexts: state.primaryTexts,
         headlines: state.headlines,
       };
+
       localStorage.setItem('wonderly_default_adtext', JSON.stringify(defaults));
       setHasDefaults(true);
     } catch {
@@ -136,8 +138,10 @@ export default function LaunchPage() {
   const loadDefaults = () => {
     try {
       const saved = localStorage.getItem('wonderly_default_adtext');
+
       if (!saved) return;
       const defaults = JSON.parse(saved);
+
       setState((prev) => ({
         ...prev,
         primaryTexts: defaults.primaryTexts || prev.primaryTexts,
@@ -153,6 +157,7 @@ export default function LaunchPage() {
     const fetch = async () => {
       setLoading(true);
       setFetchError('');
+
       try {
         const [campaignsRes, adSetsRes] = await Promise.all([
           window.fetch('/api/meta/campaigns'),
@@ -160,6 +165,7 @@ export default function LaunchPage() {
         ]);
         const campaignsData = await campaignsRes.json();
         const adSetsData = await adSetsRes.json();
+
         setCampaigns(campaignsData.data || []);
         setAdSets(adSetsData.data || []);
       } catch (error) {
@@ -168,6 +174,7 @@ export default function LaunchPage() {
         setLoading(false);
       }
     };
+
     fetch();
   }, []);
 
@@ -201,14 +208,18 @@ export default function LaunchPage() {
   /* ---------- Build final URL with URL parameters ---------- */
   const buildFinalUrl = () => {
     if (!state.websiteUrl) return '';
+
     try {
       const base = state.websiteUrl.startsWith('http')
         ? state.websiteUrl
         : `https://${state.websiteUrl}`;
+
       if (state.urlParameters) {
         const separator = base.includes('?') ? '&' : '?';
+
         return `${base}${separator}${state.urlParameters}`;
       }
+
       return base;
     } catch {
       return state.websiteUrl;
@@ -218,6 +229,7 @@ export default function LaunchPage() {
   /* ---------- Handle media upload (images + videos) ---------- */
   const handleMediaFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
+
     if (!files) return;
     const newMedia: QueuedMedia[] = Array.from(files).map((file, i) => ({
       id: `${Date.now()}-${i}`,
@@ -226,6 +238,7 @@ export default function LaunchPage() {
       mediaType: file.type.startsWith('video/') ? ('video' as const) : ('image' as const),
       status: 'pending' as const,
     }));
+
     setState((prev) => ({ ...prev, images: [...prev.images, ...newMedia] }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -256,12 +269,15 @@ export default function LaunchPage() {
       if (!state.sourceId || !state.newName) {
         throw new Error('Please select a source and enter a new name');
       }
+
       if (state.images.length === 0) {
         throw new Error('Please upload at least one image');
       }
+
       if (!getFirstPrimaryText()) {
         throw new Error('Please enter at least one primary text');
       }
+
       if (!getFirstHeadline()) {
         throw new Error('Please enter at least one headline');
       }
@@ -286,6 +302,7 @@ export default function LaunchPage() {
           }),
         });
         const duplicateData = await duplicateRes.json();
+
         if (!duplicateData.id) {
           throw new Error(duplicateData.error || 'Failed to duplicate source');
         }
@@ -297,6 +314,7 @@ export default function LaunchPage() {
           const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${newAdSetId}`);
           const adSetsData = await adSetsRes.json();
           const campaignAdSets = adSetsData.data || [];
+
           if (campaignAdSets.length > 0) {
             newAdSetId = campaignAdSets[0].id;
           } else {
@@ -328,14 +346,17 @@ export default function LaunchPage() {
       // This ensures the new ads have the same Facebook Page + Instagram account as the originals
       let resolvedPageId = state.pageId;
       let instagramActorId = '';
+
       try {
         const identityRes = await window.fetch(
           `/api/meta/ads?adset_id=${state.sourceId}&fields=creative{object_story_spec}`
         );
         const identityData = await identityRes.json();
         const existingAds = identityData.data || [];
+
         if (existingAds.length > 0) {
           const oss = existingAds[0]?.creative?.object_story_spec;
+
           if (oss?.page_id) resolvedPageId = oss.page_id;
           if (oss?.instagram_actor_id) instagramActorId = oss.instagram_actor_id;
         }
@@ -365,6 +386,7 @@ export default function LaunchPage() {
           if (img.mediaType === 'video') {
             // Upload video to Meta
             const vidForm = new FormData();
+
             vidForm.append('action', 'upload_video');
             vidForm.append('file', img.file);
             const vidRes = await window.fetch('/api/meta/upload', {
@@ -372,18 +394,22 @@ export default function LaunchPage() {
               body: vidForm,
             });
             const vidData = await vidRes.json();
+
             if (!vidData.id) {
               const errMsg =
                 vidData.error?.message ||
                 vidData.error?.detail ||
                 JSON.stringify(vidData.error) ||
                 'Video upload failed';
+
               throw new Error(errMsg);
             }
+
             videoId = vidData.id;
           } else {
             // Upload image to Meta
             const imgForm = new FormData();
+
             imgForm.append('action', 'upload_image');
             imgForm.append('file', img.file);
             const imgRes = await window.fetch('/api/meta/upload', {
@@ -391,24 +417,29 @@ export default function LaunchPage() {
               body: imgForm,
             });
             const imgData = await imgRes.json();
+
             imageHash = imgData.images
               ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash
               : null;
+
             if (!imageHash) {
               const errMsg =
                 imgData.error?.message ||
                 imgData.error?.detail ||
                 JSON.stringify(imgData.error) ||
                 'Image upload failed — no hash returned';
+
               throw new Error(errMsg);
             }
           }
 
           // Create ad — using identity (page_id + instagram) from source ad set
           const adForm = new FormData();
+
           adForm.append('action', 'create_ad');
           adForm.append('adset_id', newAdSetId);
           const adBaseName = state.sourceType === 'existing' ? state.sourceName : state.newName;
+
           adForm.append('name', `${adBaseName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
           adForm.append('page_id', resolvedPageId);
           if (instagramActorId) adForm.append('instagram_actor_id', instagramActorId);
@@ -426,10 +457,12 @@ export default function LaunchPage() {
             body: adForm,
           });
           const adData = await adRes.json();
+
           if (!adData.id) {
             const errObj = adData.error || {};
             const errMsg =
               errObj.detail || errObj.message || JSON.stringify(errObj) || 'Ad creation failed';
+
             throw new Error(errMsg);
           }
 
@@ -445,6 +478,7 @@ export default function LaunchPage() {
 
       if (successCount > 0) {
         setLaunchSuccess(true);
+
         // Send Slack notification
         try {
           await window.fetch('/api/meta/notify', {
@@ -771,6 +805,7 @@ export default function LaunchPage() {
                         value={text}
                         onChange={(e) => {
                           const newTexts = [...state.primaryTexts];
+
                           newTexts[idx] = e.target.value;
                           setState((prev) => ({
                             ...prev,
@@ -801,6 +836,7 @@ export default function LaunchPage() {
                         value={headline}
                         onChange={(e) => {
                           const newHeadlines = [...state.headlines];
+
                           newHeadlines[idx] = e.target.value;
                           setState((prev) => ({
                             ...prev,

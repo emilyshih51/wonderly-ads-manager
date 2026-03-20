@@ -4,6 +4,7 @@ import { metaApi } from '@/lib/meta-api';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create ad set error:', error);
     const message = error instanceof Error ? error.message : 'Failed to create ad set';
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

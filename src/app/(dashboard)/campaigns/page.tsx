@@ -51,9 +51,11 @@ export default function CampaignsPage() {
 
   const fetchCampaigns = useCallback(async () => {
     setLoading(true);
+
     try {
       const res = await fetch(`/api/meta/campaigns?with_insights=true&date_preset=${datePreset}`);
       const data = await res.json();
+
       setCampaigns(data.data || []);
     } catch (error) {
       console.error('Failed to fetch campaigns:', error);
@@ -69,6 +71,7 @@ export default function CampaignsPage() {
   const handleDuplicate = async () => {
     if (!selectedCampaign) return;
     setDuplicating(true);
+
     try {
       const res = await fetch('/api/meta/duplicate', {
         method: 'POST',
@@ -80,6 +83,7 @@ export default function CampaignsPage() {
         }),
       });
       const data = await res.json();
+
       if (data.id) {
         setDuplicateDialogOpen(false);
         fetchCampaigns();

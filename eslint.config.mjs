@@ -42,6 +42,25 @@ const eslintConfig = defineConfig([
 
       // Prefer const over let when variable is never reassigned
       'prefer-const': 'error',
+
+      // Padding lines rules for better readability
+      'padding-line-between-statements': [
+        'warn',
+        // Require blank line after variable declarations
+        { blankLine: 'always', prev: ['const', 'let', 'var'], next: '*' },
+        { blankLine: 'any', prev: ['const', 'let', 'var'], next: ['const', 'let', 'var'] },
+        // Require blank line before return statements
+        { blankLine: 'always', prev: '*', next: 'return' },
+        // Require blank line after imports
+        { blankLine: 'always', prev: 'import', next: '*' },
+        { blankLine: 'any', prev: 'import', next: 'import' },
+        // Require blank line before and after blocks
+        { blankLine: 'always', prev: '*', next: 'block-like' },
+        { blankLine: 'always', prev: 'block-like', next: '*' },
+        // Require blank line after directives
+        { blankLine: 'always', prev: 'directive', next: '*' },
+        { blankLine: 'any', prev: 'directive', next: 'directive' },
+      ],
     },
   },
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'node_modules/**']),

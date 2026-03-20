@@ -4,6 +4,7 @@ import { getAccountInsights } from '@/lib/meta-api';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
@@ -16,9 +17,11 @@ export async function GET(request: NextRequest) {
       datePreset,
       timeIncrement
     );
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Insights fetch error:', error);
+
     return NextResponse.json({ error: 'Failed to fetch insights' }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@ import { getAdSets, getAdSetLevelInsights } from '@/lib/meta-api';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
+
   if (!session)
     return NextResponse.json({ error: 'Unauthorized — please log in again' }, { status: 401 });
 
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
 
         // Build a map of adset_id -> insights row
         const insightsMap: Record<string, unknown> = {};
+
         for (const row of bulkInsights.data || []) {
           insightsMap[row.adset_id] = row;
         }
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
           ...a,
           insights: null,
         }));
+
         return NextResponse.json({ data: adsetsNoInsights });
       }
     }
@@ -51,7 +54,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
+
     console.error('Ad set fetch error:', msg);
+
     return NextResponse.json({ error: `Failed to fetch ad sets: ${msg}` }, { status: 500 });
   }
 }

@@ -15,6 +15,7 @@ import { updateStatus, metaApi } from '@/lib/meta-api';
 // Helper to get raw request body
 async function getRawBody(request: NextRequest): Promise<string> {
   const arrayBuffer = await request.arrayBuffer();
+
   return Buffer.from(arrayBuffer).toString('utf-8');
 }
 
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   let payload: any;
+
   try {
     payload = JSON.parse(payloadString);
   } catch {
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
 
   if (!isValid) {
     console.warn('[Slack Interactions] Invalid signature');
+
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -62,6 +65,7 @@ async function processInteraction(payload: any) {
 
   if (type !== 'block_actions' || !actions || actions.length === 0) {
     console.warn('[Slack Interactions] Unexpected interaction type');
+
     return;
   }
 
@@ -80,9 +84,11 @@ async function processInteraction(payload: any) {
     .map((s) => s.trim())
     .filter(Boolean);
   const requestingUserId = payload.user?.id;
+
   if (allowedSlackUsers.length > 0 && !allowedSlackUsers.includes(requestingUserId)) {
     const channelId = actionValue.channel_id || channel?.id;
     const threadTs = actionValue.thread_ts;
+
     if (channelId) {
       await postSlackMessage(
         channelId,
@@ -91,11 +97,13 @@ async function processInteraction(payload: any) {
         threadTs
       );
     }
+
     return;
   }
 
   try {
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
+
     if (!metaSystemToken) {
       throw new Error('META_SYSTEM_ACCESS_TOKEN not configured');
     }
@@ -109,6 +117,7 @@ async function processInteraction(payload: any) {
     switch (actionType) {
       case 'pause_campaign':
       case 'pause_ad_set':
+
       case 'pause_ad': {
         await updateStatus(objectId, metaSystemToken, 'PAUSED');
         result = `✅ Paused "${objectName || objectId}"`;
@@ -117,6 +126,7 @@ async function processInteraction(payload: any) {
 
       case 'resume_campaign':
       case 'resume_ad_set':
+
       case 'resume_ad': {
         await updateStatus(objectId, metaSystemToken, 'ACTIVE');
         result = `✅ Resumed "${objectName || objectId}"`;
@@ -125,12 +135,15 @@ async function processInteraction(payload: any) {
 
       case 'adjust_budget': {
         const budget = actionValue.action_budget;
+
         if (!budget || budget <= 0) {
           throw new Error('Invalid budget amount');
         }
+
         // Round to whole dollar — never set fractional budgets
         const wholeBudget = Math.round(budget);
         const budgetCents = (wholeBudget * 100).toString();
+
         await metaApi(`/${objectId}`, metaSystemToken, {
           method: 'POST',
           body: { daily_budget: budgetCents },

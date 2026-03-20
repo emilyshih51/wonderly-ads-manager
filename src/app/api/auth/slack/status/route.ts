@@ -11,6 +11,7 @@ export async function GET() {
 
   try {
     const slack = JSON.parse(slackCookie.value);
+
     return NextResponse.json({
       connected: true,
       info: {

@@ -65,6 +65,7 @@ export default function TopPerformingAdsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+
     try {
       // Fetch campaigns and ads in parallel
       const [campaignsRes, adsRes] = await Promise.all([
@@ -106,9 +107,11 @@ export default function TopPerformingAdsPage() {
           if (b.results !== a.results) {
             return b.results - a.results;
           }
+
           if (a.cpa === null && b.cpa === null) return 0;
           if (a.cpa === null) return 1;
           if (b.cpa === null) return -1;
+
           return a.cpa - b.cpa;
         })
         // Re-rank after sorting

@@ -97,6 +97,7 @@ function getResults(
   // If we know the campaign's specific result action type, ONLY count that
   if (resultActionType) {
     const found = actions.find((a) => a.action_type === resultActionType);
+
     return found ? parseInt(found.value) : 0;
   }
 
@@ -108,6 +109,7 @@ function getResults(
         a.action_type.startsWith('onsite_conversion.')) &&
       !ENGAGEMENT_TYPES.has(a.action_type)
   );
+
   return conversion ? parseInt(conversion.value) : 0;
 }
 
@@ -140,6 +142,7 @@ function getCostPerResult(
   if (costPerAction) {
     if (resultActionType) {
       const found = costPerAction.find((a) => a.action_type === resultActionType);
+
       if (found) return parseFloat(found.value);
     } else {
       // Fallback: generic search
@@ -149,6 +152,7 @@ function getCostPerResult(
             a.action_type.startsWith('onsite_conversion.')) &&
           !ENGAGEMENT_TYPES.has(a.action_type)
       );
+
       if (conversion) return parseFloat(conversion.value);
     }
   }
@@ -156,6 +160,7 @@ function getCostPerResult(
   // Fallback: calculate spend / results when cost_per_action_type doesn't have a match
   if (spend && actions) {
     const results = getResults(actions, resultActionType);
+
     if (results > 0) {
       return parseFloat(spend) / results;
     }
@@ -189,6 +194,7 @@ export default function DashboardPage() {
   const handleBudgetSave = async () => {
     if (!editingBudget) return;
     setSavingBudget(true);
+
     try {
       const entity =
         editingBudget.type === 'adset'
@@ -230,6 +236,7 @@ export default function DashboardPage() {
           )
         );
       }
+
       setEditingBudget(null);
     } catch (e) {
       console.error('Budget save failed:', e);
@@ -241,6 +248,7 @@ export default function DashboardPage() {
   /* -- Fetch campaigns + time series -- */
   const fetchData = useCallback(async () => {
     setLoading(true);
+
     try {
       const [campaignsRes, timeSeriesRes] = await Promise.all([
         fetch(`/api/meta/campaigns?with_insights=true&date_preset=${datePreset}`),
@@ -248,6 +256,7 @@ export default function DashboardPage() {
       ]);
       const campaignsData = await campaignsRes.json();
       const timeSeriesData = await timeSeriesRes.json();
+
       setCampaigns(campaignsData.data || []);
       setTimeSeries(timeSeriesData.data || []);
     } catch (error) {
@@ -267,9 +276,12 @@ export default function DashboardPage() {
       if (campaignId === 'all') {
         setDrillAdSets([]);
         setDrillAds([]);
+
         return;
       }
+
       setDrillLoading(true);
+
       try {
         const [adSetsRes, adsRes] = await Promise.all([
           fetch(
@@ -326,10 +338,12 @@ export default function DashboardPage() {
         c.insights.actions
       );
       const res = getResults(c.insights.actions, c.result_action_type);
+
       if (cpr !== null && res > 0) {
         acc.costPerResultSum += cpr * res;
         acc.costPerResultCount += res;
       }
+
       return acc;
     },
     {
@@ -349,6 +363,7 @@ export default function DashboardPage() {
 
   if (selectedCampaign !== 'all' && activeCampaigns.length === 1 && activeCampaigns[0].insights) {
     const i = activeCampaigns[0].insights;
+
     displayCpm = formatCurrency(parseFloat(i.cpm || '0'));
     displayCtr = formatPercent(parseFloat(i.ctr || '0'));
     // Use cost_per_inline_link_click to match Meta UI's "CPC (cost per link click)"
@@ -360,6 +375,7 @@ export default function DashboardPage() {
     const totalLinkClicks = activeCampaigns.reduce((sum, c) => {
       return sum + parseInt(c.insights?.inline_link_clicks || '0');
     }, 0);
+
     displayCpm =
       totals.impressions > 0 ? formatCurrency((totals.spend / totals.impressions) * 1000) : '-';
     displayCtr =
@@ -605,6 +621,7 @@ export default function DashboardPage() {
                   ) : (
                     activeCampaigns.map((campaign) => {
                       const i = campaign.insights;
+
                       return (
                         <tr
                           key={campaign.id}
@@ -706,6 +723,7 @@ export default function DashboardPage() {
                     ) : (
                       drillAdSets.map((adSet) => {
                         const i = adSet.insights;
+
                         return (
                           <tr
                             key={adSet.id}
@@ -814,6 +832,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {drillAds.map((ad) => {
                   const i = ad.insights;
+
                   return (
                     <div
                       key={ad.id}

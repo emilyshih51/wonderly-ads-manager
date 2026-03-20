@@ -21,6 +21,7 @@ export function middleware(request: NextRequest) {
 
   if (!session) {
     const loginUrl = new URL('/login', request.url);
+
     return NextResponse.redirect(loginUrl);
   }
 

@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+
     if (allowedEmails.length > 0 && !allowedEmails.includes(userData.email)) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=unauthorized`);
     }
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
     };
 
     const cookieStore = await cookies();
+
     cookieStore.set('wonderly_session', JSON.stringify(session), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`);
   } catch (error) {
     console.error('Facebook auth error:', error);
+
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=auth_failed`);
   }
 }

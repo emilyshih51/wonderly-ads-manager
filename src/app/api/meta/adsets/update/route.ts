@@ -14,6 +14,7 @@ const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
  */
 export async function POST(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const updateBody: any = {};
+
     if (daily_budget !== undefined) {
       // Meta expects budget in cents
       updateBody.daily_budget = Math.round(parseFloat(daily_budget) * 100);
@@ -44,12 +46,15 @@ export async function POST(request: NextRequest) {
     if (SLACK_CHANNEL && daily_budget !== undefined) {
       const newBudgetDisplay = `$${parseFloat(daily_budget).toFixed(2)}`;
       let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newBudgetDisplay}/day`;
+
       if (previous_budget) {
         const prevDisplay = `$${parseFloat(previous_budget).toFixed(2)}`;
         const direction =
           parseFloat(daily_budget) > parseFloat(previous_budget) ? 'raised' : 'lowered';
+
         text = `💰 *[Wonderly]* ${entityName} ${direction} budget from ${prevDisplay} to ${newBudgetDisplay}/day`;
       }
+
       try {
         await postSlackMessage(SLACK_CHANNEL, text);
       } catch (e) {
@@ -60,6 +65,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...result });
   } catch (error: any) {
     const message = error?.metaError?.message || error?.message || 'Update failed';
+
     return NextResponse.json({ error: { message } }, { status: 500 });
   }
 }

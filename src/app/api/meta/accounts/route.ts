@@ -8,6 +8,7 @@ import { getSession, setSession } from '@/lib/session';
 
 export async function GET() {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -27,16 +28,19 @@ export async function GET() {
     return NextResponse.json({ data: accounts, current: session.ad_account_id });
   } catch (error) {
     console.error('Fetch accounts error:', error);
+
     return NextResponse.json({ error: 'Failed to fetch ad accounts' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const { ad_account_id } = await request.json();
+
     if (!ad_account_id) {
       return NextResponse.json({ error: 'ad_account_id required' }, { status: 400 });
     }
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Switch account error:', error);
+
     return NextResponse.json({ error: 'Failed to switch account' }, { status: 500 });
   }
 }

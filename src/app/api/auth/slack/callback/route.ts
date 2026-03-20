@@ -3,11 +3,13 @@ import { getSession } from '@/lib/session';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
+
   if (!session) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login`);
   }
 
   const code = request.nextUrl.searchParams.get('code');
+
   if (!code) {
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=no_code`);
   }
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (!data.ok) {
       console.error('Slack OAuth error:', data.error);
+
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_auth_failed`
       );
@@ -48,6 +51,7 @@ export async function GET(request: NextRequest) {
     const cookieResponse = NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/settings?slack=connected`
     );
+
     cookieResponse.cookies.set('wonderly_slack', JSON.stringify(slackConnection), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -59,6 +63,7 @@ export async function GET(request: NextRequest) {
     return cookieResponse;
   } catch (error) {
     console.error('Slack callback error:', error);
+
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_callback_failed`
     );

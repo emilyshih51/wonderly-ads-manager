@@ -25,6 +25,7 @@ const SelectNative = React.forwardRef<HTMLSelectElement, SelectProps>(
     );
   }
 );
+
 SelectNative.displayName = 'SelectNative';
 
 export { SelectNative };

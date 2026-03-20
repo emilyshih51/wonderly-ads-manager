@@ -34,6 +34,7 @@ export function StatusBadge({ status }: { status: string }) {
         : status === 'DELETED'
           ? 'deleted'
           : 'secondary';
+
   return <Badge variant={variant}>{status}</Badge>;
 }
 

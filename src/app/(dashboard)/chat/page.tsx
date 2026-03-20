@@ -133,6 +133,7 @@ function findConversionAction(
   if (resultActionType) {
     return actions.find((a) => a.action_type === resultActionType);
   }
+
   // Fallback: generic search for any conversion (used for account-level, breakdowns)
   return actions.find(
     (a) =>
@@ -145,13 +146,16 @@ function findConversionAction(
 function getResults(row: InsightRow, resultActionType?: string): number {
   if (!row.actions) return 0;
   const found = findConversionAction(row.actions, resultActionType);
+
   return found ? parseInt(found.value) : 0;
 }
 
 function getResultType(row: InsightRow, resultActionType?: string): string {
   if (!row.actions) return 'N/A';
   const found = findConversionAction(row.actions, resultActionType);
+
   if (!found) return 'N/A';
+
   return found.action_type
     .replace('offsite_conversion.fb_pixel_', '')
     .replace('offsite_conversion.', '')
@@ -162,13 +166,17 @@ function getCostPerResult(row: InsightRow, resultActionType?: string): string {
   // Try cost_per_action_type first
   if (row.cost_per_action_type) {
     const found = findConversionAction(row.cost_per_action_type, resultActionType);
+
     if (found) return parseFloat(found.value).toFixed(2);
   }
+
   // Fallback: calculate spend / results
   const results = getResults(row, resultActionType);
+
   if (results > 0) {
     return (parseFloat(row.spend) / results).toFixed(2);
   }
+
   return 'N/A';
 }
 
@@ -176,6 +184,7 @@ function pctChange(current: number, previous: number): string {
   if (previous === 0 && current === 0) return '0%';
   if (previous === 0) return '+∞';
   const pct = (((current - previous) / previous) * 100).toFixed(1);
+
   return (current >= previous ? '+' : '') + pct + '%';
 }
 
@@ -197,6 +206,7 @@ function buildRichContext(data: ChatData): string {
     month: 'short',
     day: 'numeric',
   });
+
   sections.push(
     `CURRENT TIME: ${timeStr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
   );
@@ -209,12 +219,14 @@ function buildRichContext(data: ChatData): string {
   const yesterdayAcct = yesterday.account[0];
 
   sections.push(`=== ACCOUNT OVERVIEW (${date.today}) ===`);
+
   if (todayAcct) {
     const tSpend = parseFloat(todayAcct.spend);
     const tClicks = parseInt(todayAcct.clicks);
     const tImpr = parseInt(todayAcct.impressions);
     const tResults = getResults(todayAcct);
     const tCpc = todayAcct.cost_per_inline_link_click || todayAcct.cpc;
+
     sections.push(
       `Today: Spend $${tSpend.toFixed(2)}, Impressions ${tImpr}, Clicks ${tClicks}, CTR ${todayAcct.ctr}%, CPC (link click) $${tCpc}, CPM $${todayAcct.cpm}, Results ${tResults}, Cost/Result $${getCostPerResult(todayAcct)}, Result Type: ${getResultType(todayAcct)}`
     );
@@ -225,6 +237,7 @@ function buildRichContext(data: ChatData): string {
       const yImpr = parseInt(yesterdayAcct.impressions);
       const yResults = getResults(yesterdayAcct);
       const yCpc = yesterdayAcct.cost_per_inline_link_click || yesterdayAcct.cpc;
+
       sections.push(
         `Yesterday: Spend $${ySpend.toFixed(2)}, Impressions ${yImpr}, Clicks ${yClicks}, CTR ${yesterdayAcct.ctr}%, CPC (link click) $${yCpc}, CPM $${yesterdayAcct.cpm}, Results ${yResults}, Cost/Result $${getCostPerResult(yesterdayAcct)}`
       );
@@ -242,6 +255,7 @@ function buildRichContext(data: ChatData): string {
     ...today.campaigns.map((c) => c.campaign_id),
     ...yesterday.campaigns.map((c) => c.campaign_id),
   ]);
+
   for (const cid of campaignIds) {
     const t = today.campaigns.find((c) => c.campaign_id === cid);
     const y = yesterday.campaigns.find((c) => c.campaign_id === cid);
@@ -255,6 +269,7 @@ function buildRichContext(data: ChatData): string {
       const yResults = getResults(y, r);
       const tClicks = parseInt(t.clicks);
       const yClicks = parseInt(y.clicks);
+
       sections.push(
         `Campaign "${name}": TODAY Spend $${tSpend.toFixed(2)}, Results ${tResults}, Clicks ${tClicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc}, CPM $${t.cpm}, Cost/Result $${getCostPerResult(t, r)} | ` +
           `YESTERDAY Spend $${ySpend.toFixed(2)}, Results ${yResults}, Clicks ${yClicks}, CTR ${y.ctr}%, CPC $${y.cost_per_inline_link_click || y.cpc}, CPM $${y.cpm}, Cost/Result $${getCostPerResult(y, r)} | ` +
@@ -262,11 +277,13 @@ function buildRichContext(data: ChatData): string {
       );
     } else if (t) {
       const r = rat(cid);
+
       sections.push(
         `Campaign "${name}": TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResults(t, r)}, Clicks ${t.clicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc} | YESTERDAY: No data`
       );
     } else if (y) {
       const r = rat(cid);
+
       sections.push(
         `Campaign "${name}": TODAY: No data yet | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResults(y, r)}, Clicks ${y.clicks}, CTR ${y.ctr}%`
       );
@@ -279,6 +296,7 @@ function buildRichContext(data: ChatData): string {
     ...today.adSets.map((a) => a.adset_id),
     ...yesterday.adSets.map((a) => a.adset_id),
   ]);
+
   for (const aid of adsetIds) {
     const t = today.adSets.find((a) => a.adset_id === aid);
     const y = yesterday.adSets.find((a) => a.adset_id === aid);
@@ -288,6 +306,7 @@ function buildRichContext(data: ChatData): string {
     if (t && y) {
       const tResults = getResults(t, r);
       const yResults = getResults(y, r);
+
       sections.push(
         `Ad Set "${name}": TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${tResults}, Clicks ${t.clicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc}, Cost/Result $${getCostPerResult(t, r)} | ` +
           `YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${yResults}, Clicks ${y.clicks}, CTR ${y.ctr}%, CPC $${y.cost_per_inline_link_click || y.cpc}, Cost/Result $${getCostPerResult(y, r)} | ` +
@@ -306,8 +325,10 @@ function buildRichContext(data: ChatData): string {
 
   // Ad-level data: today vs yesterday
   const adIds = new Set([...today.ads.map((a) => a.ad_id), ...yesterday.ads.map((a) => a.ad_id)]);
+
   if (adIds.size > 0) {
     sections.push('\n=== INDIVIDUAL ADS: TODAY vs YESTERDAY ===');
+
     for (const adId of adIds) {
       const t = today.ads.find((a) => a.ad_id === adId);
       const y = yesterday.ads.find((a) => a.ad_id === adId);
@@ -316,31 +337,38 @@ function buildRichContext(data: ChatData): string {
       const r = rat(cid);
 
       let line = `Ad "${name}" (ID: ${adId}, campaign ${cid}):`;
+
       if (t) {
         line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResults(t, r)}, Clicks ${t.clicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc}, Cost/Result $${getCostPerResult(t, r)}`;
       } else {
         line += ' TODAY: No data';
       }
+
       if (y) {
         line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResults(y, r)}, Clicks ${y.clicks}, CTR ${y.ctr}%, Cost/Result $${getCostPerResult(y, r)}`;
       } else {
         line += ' | YESTERDAY: No data';
       }
+
       sections.push(line);
     }
   }
 
   // Ad-level 7-day history (for accurate multi-day totals)
   const { history } = data;
+
   if (history?.adDaily && history.adDaily.length > 0) {
     sections.push('\n=== AD DAILY PERFORMANCE (LAST 7 DAYS) ===');
     // Group by ad_id, show totals
     const adMap = new Map<string, { name: string; rows: InsightRow[] }>();
+
     for (const row of history.adDaily) {
       const key = row.ad_id || 'unknown';
+
       if (!adMap.has(key)) adMap.set(key, { name: row.ad_name || key, rows: [] });
       adMap.get(key)!.rows.push(row);
     }
+
     for (const [_adId, { name, rows }] of adMap) {
       const totalSpend = rows.reduce((s, r) => s + parseFloat(r.spend || '0'), 0);
       const totalClicks = rows.reduce((s, r) => s + parseInt(r.clicks || '0'), 0);
@@ -348,6 +376,7 @@ function buildRichContext(data: ChatData): string {
       const rType = rat(cid);
       const totalResults = rows.reduce((s, r) => s + getResults(r, rType), 0);
       const cpr = totalResults > 0 ? (totalSpend / totalResults).toFixed(2) : 'N/A';
+
       sections.push(
         `Ad "${name}" (7-day total): Spend $${totalSpend.toFixed(2)}, Results ${totalResults}, Clicks ${totalClicks}, Cost/Result $${cpr}`
       );
@@ -355,6 +384,7 @@ function buildRichContext(data: ChatData): string {
       const sorted = [...rows].sort((a, b) =>
         (a.date_start || '').localeCompare(b.date_start || '')
       );
+
       for (const row of sorted) {
         sections.push(
           `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${getResults(row, rType)}, Clicks ${row.clicks}`
@@ -366,9 +396,11 @@ function buildRichContext(data: ChatData): string {
   // Hourly breakdown helper
   const formatHour = (h: string) => {
     const hourNum = parseInt(h?.split(':')[0] || '0');
+
     if (hourNum === 0) return '12am';
     if (hourNum < 12) return `${hourNum}am`;
     if (hourNum === 12) return '12pm';
+
     return `${hourNum - 12}pm`;
   };
 
@@ -399,8 +431,10 @@ function buildRichContext(data: ChatData): string {
 
       // Index by hour
       const todayByHour: Record<string, InsightRow> = {};
+
       for (const row of todayRows) todayByHour[getHourKey(row)] = row;
       const yesterdayByHour: Record<string, InsightRow> = {};
+
       for (const row of yesterdayRows) yesterdayByHour[getHourKey(row)] = row;
 
       // Get all hours present in either day, sorted
@@ -451,6 +485,7 @@ function buildRichContext(data: ChatData): string {
           const spendDelta = ySpend > 0 ? pctChange(tSpend, ySpend) : tSpend > 0 ? 'new' : '';
           const resultsDelta =
             yResults > 0 ? pctChange(tResults, yResults) : tResults > 0 ? 'new' : '';
+
           sections.push(
             `  ${hLabel}: TODAY $${tSpend.toFixed(2)} spend, ${tResults} results, ${tClicks} clicks, ${tImpr} impr, CTR ${t.ctr}%, CPC $${tCpc} | ` +
               `YESTERDAY $${ySpend.toFixed(2)} spend, ${yResults} results, ${yClicks} clicks, ${yImpr} impr, CTR ${y.ctr}%, CPC $${yCpc} | ` +
@@ -470,6 +505,7 @@ function buildRichContext(data: ChatData): string {
       // Campaign hourly summary
       const spendChg = yTotalSpend > 0 ? pctChange(tTotalSpend, yTotalSpend) : 'N/A';
       const resultsChg = yTotalResults > 0 ? pctChange(tTotalResults, yTotalResults) : 'N/A';
+
       sections.push(
         `  HOURLY TOTALS: TODAY $${tTotalSpend.toFixed(2)} spend / ${tTotalResults} results / ${tTotalClicks} clicks | ` +
           `YESTERDAY $${yTotalSpend.toFixed(2)} spend / ${yTotalResults} results / ${yTotalClicks} clicks | ` +
@@ -481,6 +517,7 @@ function buildRichContext(data: ChatData): string {
   // Breakdowns
   if (breakdowns.ageGender.length > 0) {
     sections.push('\n=== AGE & GENDER BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.ageGender) {
       sections.push(
         `${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -490,6 +527,7 @@ function buildRichContext(data: ChatData): string {
 
   if (breakdowns.device.length > 0) {
     sections.push('\n=== DEVICE BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.device) {
       sections.push(
         `${row.device_platform || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -499,6 +537,7 @@ function buildRichContext(data: ChatData): string {
 
   if (breakdowns.publisher.length > 0) {
     sections.push('\n=== PUBLISHER PLATFORM BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.publisher) {
       sections.push(
         `${row.publisher_platform || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -518,10 +557,12 @@ function buildRichContext(data: ChatData): string {
       const sorted = [...history.accountDaily].sort((a, b) =>
         a.date_start.localeCompare(b.date_start)
       );
+
       for (const row of sorted) {
         const results = getResults(row);
         const cpr = getCostPerResult(row);
         const cpc = row.cost_per_inline_link_click || row.cpc;
+
         sections.push(
           `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Impr ${row.impressions}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${cpc}, CPM $${row.cpm}, Results ${results}, Cost/Result $${cpr}`
         );
@@ -540,12 +581,15 @@ function buildRichContext(data: ChatData): string {
           `\n7-Day Averages: Spend $${avg(last7, 'spend').toFixed(2)}/day, Clicks ${avg(last7, 'clicks').toFixed(0)}/day, Impr ${avg(last7, 'impressions').toFixed(0)}/day, Results ${avgResults(last7).toFixed(1)}/day`
         );
       }
+
       if (last14.length >= 14) {
         sections.push(
           `14-Day Averages: Spend $${avg(last14, 'spend').toFixed(2)}/day, Clicks ${avg(last14, 'clicks').toFixed(0)}/day, Impr ${avg(last14, 'impressions').toFixed(0)}/day, Results ${avgResults(last14).toFixed(1)}/day`
         );
       }
+
       const all30 = sorted;
+
       if (all30.length >= 20) {
         sections.push(
           `30-Day Averages: Spend $${avg(all30, 'spend').toFixed(2)}/day, Clicks ${avg(all30, 'clicks').toFixed(0)}/day, Impr ${avg(all30, 'impressions').toFixed(0)}/day, Results ${avgResults(all30).toFixed(1)}/day`
@@ -558,8 +602,10 @@ function buildRichContext(data: ChatData): string {
       sections.push('\n=== DAILY CAMPAIGN PERFORMANCE (LAST 30 DAYS) ===');
       // Group by campaign
       const byCampaign: Record<string, InsightRow[]> = {};
+
       for (const row of history.campaignDaily) {
         const key = row.campaign_id || 'unknown';
+
         if (!byCampaign[key]) byCampaign[key] = [];
         byCampaign[key].push(row);
       }
@@ -568,10 +614,13 @@ function buildRichContext(data: ChatData): string {
         const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
         const name = sorted[0]?.campaign_name || cid;
         const r = rat(cid);
+
         sections.push(`\nCampaign "${name}" daily:`);
+
         for (const row of sorted) {
           const results = getResults(row, r);
           const cpr = getCostPerResult(row, r);
+
           sections.push(
             `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${row.cost_per_inline_link_click || row.cpc}, Cost/Result $${cpr}`
           );
@@ -583,8 +632,10 @@ function buildRichContext(data: ChatData): string {
     if (history.adsetDaily.length > 0) {
       sections.push('\n=== DAILY AD SET PERFORMANCE (LAST 7 DAYS) ===');
       const byAdset: Record<string, InsightRow[]> = {};
+
       for (const row of history.adsetDaily) {
         const key = row.adset_id || 'unknown';
+
         if (!byAdset[key]) byAdset[key] = [];
         byAdset[key].push(row);
       }
@@ -593,10 +644,13 @@ function buildRichContext(data: ChatData): string {
         const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
         const name = sorted[0]?.adset_name || aid;
         const r = rat(sorted[0]?.campaign_id);
+
         sections.push(`\nAd Set "${name}" daily:`);
+
         for (const row of sorted) {
           const results = getResults(row, r);
           const cpr = getCostPerResult(row, r);
+
           sections.push(
             `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, Cost/Result $${cpr}`
           );
@@ -688,15 +742,18 @@ function parseActionsFromReply(raw: string): { content: string; actions: ParsedA
     .replace(ACTION_RE, (_, json) => {
       try {
         const payload = JSON.parse(json) as ActionPayload;
+
         if (payload.type && payload.id) {
           actions.push({ payload, status: 'pending' });
         }
       } catch {
         /* ignore malformed */
       }
+
       return ''; // strip from visible text
     })
     .trim();
+
   return { content, actions };
 }
 
@@ -710,6 +767,7 @@ function actionLabel(a: ActionPayload): string {
     resume_ad: 'Resume Ad',
     adjust_budget: 'Adjust Budget',
   };
+
   return labels[a.type] || a.type;
 }
 
@@ -717,6 +775,7 @@ function actionIcon(type: string) {
   if (type.startsWith('pause')) return Pause;
   if (type.startsWith('resume')) return Play;
   if (type === 'adjust_budget') return DollarSign;
+
   return ChevronRight;
 }
 
@@ -724,6 +783,7 @@ function actionColor(type: string): string {
   if (type.startsWith('pause')) return 'border-orange-200 bg-orange-50';
   if (type.startsWith('resume')) return 'border-green-200 bg-green-50';
   if (type === 'adjust_budget') return 'border-blue-200 bg-blue-50';
+
   return 'border-gray-200 bg-gray-50';
 }
 
@@ -741,6 +801,7 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -749,10 +810,13 @@ export default function ChatPage() {
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     setDataError(null);
+
     try {
       const res = await fetch('/api/chat/data');
+
       if (!res.ok) throw new Error('Failed to load data');
       const data = await res.json();
+
       setChatData(data);
     } catch (err) {
       console.error('Failed to load chat data:', err);
@@ -793,13 +857,16 @@ export default function ChatPage() {
       prev.map((m) => {
         if (m.id !== msgId || !m.actions) return m;
         const newActions = [...m.actions];
+
         newActions[actionIdx] = { ...newActions[actionIdx], status: 'executing' };
+
         return { ...m, actions: newActions };
       })
     );
 
     const msg = messages.find((m) => m.id === msgId);
     const action = msg?.actions?.[actionIdx];
+
     if (!action) return;
 
     try {
@@ -814,11 +881,13 @@ export default function ChatPage() {
         prev.map((m) => {
           if (m.id !== msgId || !m.actions) return m;
           const newActions = [...m.actions];
+
           newActions[actionIdx] = {
             ...newActions[actionIdx],
             status: data.success ? 'done' : 'error',
             result: data.result || data.error || 'Unknown error',
           };
+
           return { ...m, actions: newActions };
         })
       );
@@ -830,11 +899,13 @@ export default function ChatPage() {
         prev.map((m) => {
           if (m.id !== msgId || !m.actions) return m;
           const newActions = [...m.actions];
+
           newActions[actionIdx] = {
             ...newActions[actionIdx],
             status: 'error',
             result: 'Network error',
           };
+
           return { ...m, actions: newActions };
         })
       );
@@ -846,7 +917,9 @@ export default function ChatPage() {
       prev.map((m) => {
         if (m.id !== msgId || !m.actions) return m;
         const newActions = [...m.actions];
+
         newActions[actionIdx] = { ...newActions[actionIdx], status: 'dismissed' };
+
         return { ...m, actions: newActions };
       })
     );
@@ -892,6 +965,7 @@ export default function ChatPage() {
 
       // Handle streaming response
       const reader = res.body?.getReader();
+
       if (!reader) throw new Error('No response body');
 
       let fullContent = '';
@@ -900,6 +974,7 @@ export default function ChatPage() {
       try {
         while (true) {
           const { done, value } = await reader.read();
+
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
@@ -908,10 +983,12 @@ export default function ChatPage() {
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim();
+
               if (data === '[DONE]') break;
 
               try {
                 const parsed = JSON.parse(data);
+
                 if (parsed.text) {
                   fullContent += parsed.text;
                   // Update message incrementally with streaming text
@@ -1005,6 +1082,7 @@ export default function ChatPage() {
         .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
       // Inline code
       html = html.replace(
         /`([^`]+)`/g,
@@ -1028,6 +1106,7 @@ export default function ChatPage() {
         );
       // Numbered
       const numMatch = line.match(/^(\d+)\.\s/);
+
       if (numMatch)
         return (
           <li
@@ -1052,6 +1131,7 @@ export default function ChatPage() {
           /Confidence:\s*Low/gi,
           '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Confidence: Low</span>'
         );
+
       return <p key={i} className="text-sm" dangerouslySetInnerHTML={{ __html: html }} />;
     });
   };
@@ -1189,6 +1269,7 @@ export default function ChatPage() {
               {SUGGESTED_PROMPTS.map((prompt, idx) => {
                 const Icon = prompt.icon;
                 const colorClasses = COLOR_MAP[prompt.color] || COLOR_MAP.blue;
+
                 return (
                   <button
                     key={idx}

@@ -47,6 +47,7 @@ export function Sidebar() {
       .then((r) => r.json())
       .then((data) => {
         const accts = data.data || [];
+
         setAccounts(accts);
         setCurrentAccount(accts.find((a: AdAccount) => a.is_current) || accts[0] || null);
       })
@@ -56,6 +57,7 @@ export function Sidebar() {
   const switchAccount = async (account: AdAccount) => {
     setSwitching(true);
     setShowAccountMenu(false);
+
     try {
       await fetch('/api/meta/accounts', {
         method: 'POST',

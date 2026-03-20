@@ -32,11 +32,13 @@ async function getRedis(): Promise<RedisClientType | null> {
     redisClient.on('error', (err) => console.error('[Redis] Client error:', err));
     await redisClient.connect();
     redisConnecting = false;
+
     return redisClient;
   } catch (e) {
     console.error('[Redis] Connection error:', e);
     redisConnecting = false;
     redisClient = null;
+
     return null;
   }
 }
@@ -72,6 +74,7 @@ export async function getAllRules(): Promise<StoredRule[]> {
   try {
     const cookieStore = await cookies();
     const rules: StoredRule[] = [];
+
     for (const cookie of cookieStore.getAll()) {
       if (cookie.name.startsWith(RULE_PREFIX)) {
         try {
@@ -81,8 +84,10 @@ export async function getAllRules(): Promise<StoredRule[]> {
         }
       }
     }
+
     if (rules.length > 0) {
       rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
       return rules;
     }
   } catch {
@@ -91,12 +96,16 @@ export async function getAllRules(): Promise<StoredRule[]> {
 
   // Fall back to Redis (for cron jobs where cookies aren't available)
   const redis = await getRedis();
+
   if (redis) {
     try {
       const data = await redis.hGetAll(RULES_HASH_KEY);
+
       if (!data || Object.keys(data).length === 0) return [];
       const rules = Object.values(data).map((v) => JSON.parse(v)) as StoredRule[];
+
       rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
       return rules;
     } catch (e) {
       console.error('[RulesStore] Redis read error:', e);
@@ -111,6 +120,7 @@ export async function getAllRules(): Promise<StoredRule[]> {
  */
 export async function getActiveRules(): Promise<StoredRule[]> {
   const all = await getAllRules();
+
   return all.filter((r) => r.is_active);
 }
 
@@ -122,6 +132,7 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
   try {
     const cookieStore = await cookies();
     const cookie = cookieStore.get(`${RULE_PREFIX}${ruleId}`);
+
     if (cookie) return JSON.parse(cookie.value);
   } catch {
     /* no cookies in cron */
@@ -129,9 +140,11 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
 
   // Fall back to Redis
   const redis = await getRedis();
+
   if (redis) {
     try {
       const data = await redis.hGet(RULES_HASH_KEY, ruleId);
+
       return data ? JSON.parse(data) : null;
     } catch (e) {
       console.error('[RulesStore] Redis read error:', e);
@@ -148,6 +161,7 @@ export async function saveRule(rule: StoredRule): Promise<void> {
   // Always write to cookies (immediate persistence for user)
   try {
     const cookieStore = await cookies();
+
     cookieStore.set(`${RULE_PREFIX}${rule.id}`, JSON.stringify(rule), getCookieOptions());
   } catch (e) {
     console.error('[RulesStore] Cookie write error:', e);
@@ -155,6 +169,7 @@ export async function saveRule(rule: StoredRule): Promise<void> {
 
   // Also write to Redis if available (for cron access)
   const redis = await getRedis();
+
   if (redis) {
     try {
       await redis.hSet(RULES_HASH_KEY, rule.id, JSON.stringify(rule));
@@ -170,12 +185,14 @@ export async function saveRule(rule: StoredRule): Promise<void> {
 export async function deleteRule(ruleId: string): Promise<void> {
   try {
     const cookieStore = await cookies();
+
     cookieStore.delete(`${RULE_PREFIX}${ruleId}`);
   } catch (e) {
     console.error('[RulesStore] Cookie delete error:', e);
   }
 
   const redis = await getRedis();
+
   if (redis) {
     try {
       await redis.hDel(RULES_HASH_KEY, ruleId);

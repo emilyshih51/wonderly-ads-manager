@@ -4,6 +4,7 @@ import { getCampaigns, getCampaignLevelInsights, getCampaignOptimizationMap } fr
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
 
         // Build a map of campaign_id -> insights row
         const insightsMap: Record<string, unknown> = {};
+
         for (const row of bulkInsights.data || []) {
           insightsMap[row.campaign_id] = row;
         }
@@ -37,11 +39,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data: campaignsWithInsights, optimizationMap });
       } catch (insightsError: unknown) {
         const msg = insightsError instanceof Error ? insightsError.message : 'Unknown';
+
         console.error('Bulk campaign insights error:', msg);
         const campaignsNoInsights = campaigns.map((c: { id: string }) => ({
           ...c,
           insights: null,
         }));
+
         return NextResponse.json({ data: campaignsNoInsights });
       }
     }
@@ -49,7 +53,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
+
     console.error('Campaign fetch error:', msg);
+
     return NextResponse.json({ error: `Failed to fetch campaigns: ${msg}` }, { status: 500 });
   }
 }

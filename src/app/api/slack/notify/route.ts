@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       });
 
       const data = await response.json();
+
       if (!data.ok) {
         throw new Error(data.error || 'Slack API error');
       }
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Slack notify error:', error);
+
     return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
   }
 }

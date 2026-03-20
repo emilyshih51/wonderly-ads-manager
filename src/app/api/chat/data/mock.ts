@@ -109,13 +109,16 @@ export function generateMockChatData() {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const yesterday = new Date(now);
+
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
   // Generate last 7 days
   const days: string[] = [];
+
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
+
     d.setDate(d.getDate() - i);
     days.push(d.toISOString().split('T')[0]);
   }
@@ -514,6 +517,7 @@ export function generateMockChatData() {
     const impr = h < 6 ? 200 : 800 + Math.floor(Math.random() * 300);
     const clicks = Math.floor(impr * 0.025);
     const leads = h < 6 ? 0 : Math.random() > 0.4 ? Math.ceil(Math.random() * 2) : 0;
+
     todayHourly.push(
       makeHourlyRow(h, '120211001', 'Lead Gen - Retargeting', spend, impr, clicks, leads, todayStr)
     );
@@ -525,6 +529,7 @@ export function generateMockChatData() {
     const impr = h < 6 ? 500 : 3000 + Math.floor(Math.random() * 1000);
     const clicks = Math.floor(impr * 0.009); // CTR dropping
     const leads = h === 8 ? 2 : h === 10 ? 1 : h === 11 ? 1 : 0; // Only 4 leads, all before noon
+
     todayHourly.push(
       makeHourlyRow(h, '120211002', 'Broad Prospecting - US', spend, impr, clicks, leads, todayStr)
     );
@@ -536,6 +541,7 @@ export function generateMockChatData() {
     const impr = 500 + Math.floor(Math.random() * 300);
     const clicks = Math.floor(impr * 0.02);
     const leads = h === 13 ? 1 : h === 16 ? 1 : h === 18 ? 1 : 0;
+
     todayHourly.push(
       makeHourlyRow(h, '120211003', 'Instagram Stories Test', spend, impr, clicks, leads, todayStr)
     );
@@ -548,6 +554,7 @@ export function generateMockChatData() {
     const aImpr = h < 6 ? 180 : 750 + Math.floor(Math.random() * 200);
     const aClicks = Math.floor(aImpr * 0.025);
     const aLeads = h < 6 ? 0 : Math.random() > 0.35 ? 1 : 0;
+
     yesterdayHourly.push(
       makeHourlyRow(
         h,
@@ -566,6 +573,7 @@ export function generateMockChatData() {
     const bImpr = h < 6 ? 400 : 2800 + Math.floor(Math.random() * 600);
     const bClicks = Math.floor(bImpr * 0.011); // Better CTR yesterday
     const bLeads = h < 6 ? 0 : h % 2 === 0 ? 1 : Math.random() > 0.5 ? 1 : 0; // Steady ~1/hr
+
     yesterdayHourly.push(
       makeHourlyRow(
         h,
@@ -585,6 +593,7 @@ export function generateMockChatData() {
       const cImpr = 400 + Math.floor(Math.random() * 200);
       const cClicks = Math.floor(cImpr * 0.02);
       const cLeads = h === 14 ? 1 : h === 17 ? 1 : 0;
+
       yesterdayHourly.push(
         makeHourlyRow(
           h,

@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       });
 
       let campaigns = data.data || [];
+
       if (query) {
         campaigns = campaigns.filter((c: any) => c.name.toLowerCase().includes(query));
       }
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
       });
 
       let adsets = data.data || [];
+
       if (query) {
         adsets = adsets.filter((a: any) => a.name.toLowerCase().includes(query));
       }
@@ -108,6 +110,7 @@ export async function GET(request: NextRequest) {
             filtering: activeFilter,
           },
         });
+
         insightsData = response.data || [];
       } else {
         const response = await metaApi(`/act_${rawAdAccountId}/insights`, accessToken, {
@@ -120,11 +123,13 @@ export async function GET(request: NextRequest) {
             filtering: activeFilter,
           },
         });
+
         insightsData = response.data || [];
       }
 
       // Get optimization map for result counting
       let optimizationMap: Record<string, string> = {};
+
       try {
         optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
       } catch {
@@ -157,8 +162,10 @@ export async function GET(request: NextRequest) {
             if (cond.metric === 'cost_per_result' && resultCount === 0) {
               return false;
             }
+
             const actual = metrics[cond.metric] ?? 0;
             const threshold = parseFloat(cond.threshold || '0');
+
             return evaluateCondition(actual, cond.operator, threshold);
           });
 
@@ -189,6 +196,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
   } catch (error) {
     console.error('[Automations Search]', error);
+
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
@@ -200,10 +208,13 @@ function getResultCount(
 ): number {
   if (!row.actions || !Array.isArray(row.actions)) return 0;
   const resultType = campaignId && optimizationMap[campaignId];
+
   if (resultType) {
     const found = row.actions.find((a: any) => a.action_type === resultType);
+
     return found ? parseInt(found.value) || 0 : 0;
   }
+
   const conversion = row.actions.find(
     (a: any) =>
       (a.action_type.startsWith('offsite_conversion.') ||
@@ -214,6 +225,7 @@ function getResultCount(
       !a.action_type.includes('page_engagement') &&
       !a.action_type.includes('link_click')
   );
+
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }
 

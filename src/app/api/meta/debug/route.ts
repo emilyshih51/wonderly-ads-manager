@@ -10,6 +10,7 @@ import { metaApi } from '@/lib/meta-api';
  */
 export async function GET() {
   const session = await getSession();
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const results: Record<string, unknown> = {
@@ -26,6 +27,7 @@ export async function GET() {
         params: { fields: 'id,name,status,objective', limit: '50' },
       }
     );
+
     results.campaigns = campaigns.data;
 
     // 2. For each campaign, fetch insights with date_preset=today
@@ -39,6 +41,7 @@ export async function GET() {
               date_preset: 'today',
             },
           });
+
           return {
             campaign_id: c.id,
             campaign_name: c.name,
@@ -54,6 +57,7 @@ export async function GET() {
         }
       })
     );
+
     results.campaign_insights = campaignInsights;
   } catch (err) {
     results.campaigns_error = err instanceof Error ? err.message : String(err);
@@ -71,6 +75,7 @@ export async function GET() {
         },
       }
     );
+
     results.adsets = adSets.data;
   } catch (err) {
     results.adsets_error = err instanceof Error ? err.message : String(err);
@@ -89,6 +94,7 @@ export async function GET() {
         },
       }
     );
+
     results.adsets_full_fields = { count: adSetsFull.data?.length, success: true };
   } catch (err) {
     results.adsets_full_fields_error = err instanceof Error ? err.message : String(err);

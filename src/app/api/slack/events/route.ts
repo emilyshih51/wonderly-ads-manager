@@ -44,17 +44,21 @@ const DEDUP_WINDOW_MS = 60_000; // 60 seconds
 function isDuplicateEvent(eventId: string): boolean {
   // Clean up old entries
   const now = Date.now();
+
   for (const [id, ts] of processedEvents) {
     if (now - ts > DEDUP_WINDOW_MS) processedEvents.delete(id);
   }
+
   if (processedEvents.has(eventId)) return true;
   processedEvents.set(eventId, now);
+
   return false;
 }
 
 // Helper to get raw request body for signature verification
 async function getRawBody(request: NextRequest): Promise<string> {
   const arrayBuffer = await request.arrayBuffer();
+
   return Buffer.from(arrayBuffer).toString('utf-8');
 }
 
@@ -72,6 +76,7 @@ export async function POST(request: NextRequest) {
   // Slack sends this during initial setup and needs the challenge echoed back
   if (body.type === 'url_verification') {
     console.log('[Slack Events] URL verification challenge');
+
     return NextResponse.json({ challenge: body.challenge });
   }
 
@@ -82,6 +87,7 @@ export async function POST(request: NextRequest) {
 
   if (!isValid) {
     console.warn('[Slack Events] Invalid signature');
+
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -93,6 +99,7 @@ export async function POST(request: NextRequest) {
     // Deduplicate — Slack retries if it doesn't get a fast 200
     if (isDuplicateEvent(eventId)) {
       console.log('[Slack Events] Duplicate event, skipping:', eventId);
+
       return NextResponse.json({ ok: true });
     }
 
@@ -148,6 +155,7 @@ async function processAppMention(event: any) {
         undefined,
         threadTs
       );
+
       return;
     }
 
@@ -159,12 +167,16 @@ async function processAppMention(event: any) {
 
     // Combine context from all accounts
     let contextText = '';
+
     for (let i = 0; i < accountIds.length; i++) {
       const data = contextResults[i] as any;
+
       if (accountIds.length > 1) {
         const accountName = data?.accountName || `Account ${accountIds[i]}`;
+
         contextText += `\n\n===== AD ACCOUNT: ${accountName} (ID: ${accountIds[i]}) =====\n`;
       }
+
       contextText += formatContextForClaude(data);
     }
 
@@ -179,9 +191,11 @@ async function processAppMention(event: any) {
 
         // Build message history from thread for conversation memory
         const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
         for (const msg of threadHistory) {
           messages.push({ role: msg.role, content: msg.text });
         }
+
         // Add the current question
         messages.push({ role: 'user', content: question });
 
@@ -220,6 +234,7 @@ async function processAppMention(event: any) {
   } catch (error) {
     console.error('[Slack Events] Error processing mention:', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+
     await postSlackMessage(
       channelId,
       `Sorry, I encountered an error: ${errorMsg}`,
@@ -236,10 +251,12 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const yesterday = new Date(now);
+
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
   const thirtyDaysAgo = new Date(now);
+
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
@@ -271,7 +288,9 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
 
     const extract = (index: number) => {
       const r = results[index];
+
       if (r.status === 'fulfilled') return r.value?.data || [];
+
       return [];
     };
 
@@ -312,6 +331,7 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
     };
   } catch (error) {
     console.error('[Slack Events] Error fetching ad data:', error);
+
     // Return empty structure, will fall back to mock
     return generateMockChatData();
   }
@@ -330,6 +350,7 @@ function getResultsFromRow(row: any, optimizationMap?: Record<string, string>): 
   // This matches the dashboard's getResults() behavior exactly
   if (resultType) {
     const found = row.actions.find((a: any) => a.action_type === resultType);
+
     return found ? parseInt(found.value) || 0 : 0;
   }
 
@@ -346,12 +367,15 @@ function getResultsFromRow(row: any, optimizationMap?: Record<string, string>): 
       !a.action_type.includes('page_engagement') &&
       !a.action_type.includes('link_click')
   );
+
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }
 
 function getCostPerResult(row: any, optimizationMap?: Record<string, string>): string {
   const results = getResultsFromRow(row, optimizationMap);
+
   if (results === 0) return 'N/A';
+
   return (parseFloat(row.spend) / results).toFixed(2);
 }
 
@@ -376,6 +400,7 @@ function formatContextForClaude(data: any): string {
     day: 'numeric',
     timeZone: 'America/Los_Angeles',
   });
+
   sections.push(
     `CURRENT TIME: ${timeStr} PT on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
   );
@@ -398,14 +423,17 @@ function formatContextForClaude(data: any): string {
     const spend = parseFloat(todayAcct.spend);
     const costPerResult =
       todayCampaignResults > 0 ? (spend / todayCampaignResults).toFixed(2) : 'N/A';
+
     sections.push(
       `ACCOUNT TODAY: Spend $${spend.toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${todayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`
     );
   }
+
   if (yesterdayAcct) {
     const spend = parseFloat(yesterdayAcct.spend);
     const costPerResult =
       yesterdayCampaignResults > 0 ? (spend / yesterdayCampaignResults).toFixed(2) : 'N/A';
+
     sections.push(
       `ACCOUNT YESTERDAY: Spend $${spend.toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${yesterdayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`
     );
@@ -414,12 +442,14 @@ function formatContextForClaude(data: any): string {
   // Campaign breakdown — today vs yesterday
   sections.push('\n--- CAMPAIGNS (TODAY vs YESTERDAY) ---');
   const allCampaignIds = new Set<string>();
+
   for (const c of [...(data.today.campaigns || []), ...(data.yesterday.campaigns || [])]) {
     allCampaignIds.add(c.campaign_id);
   }
 
   // Build a map of campaign_id -> daily_budget from campaign objects
   const budgetMap: Record<string, string> = {};
+
   for (const c of data.campaignObjects || []) {
     if (c.daily_budget) budgetMap[c.id] = `$${(parseInt(c.daily_budget) / 100).toFixed(0)}`;
   }
@@ -431,18 +461,23 @@ function formatContextForClaude(data: any): string {
     const dailyBudget = budgetMap[cid] || 'N/A';
 
     let line = `Campaign "${name}" (ID: ${cid}, Daily Budget: ${dailyBudget}):`;
+
     if (t) {
       const tResults = getResultsFromRow(t, optMap);
+
       line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${tResults}, Cost/Result $${getCostPerResult(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(t.cpc) || 0).toFixed(2)}, Frequency ${t.frequency || 'N/A'}`;
     } else {
       line += ' TODAY: No data yet';
     }
+
     if (y) {
       const yResults = getResultsFromRow(y, optMap);
+
       line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${yResults}, Cost/Result $${getCostPerResult(y, optMap)}, Clicks ${y.clicks}, CTR ${(parseFloat(y.ctr) || 0).toFixed(2)}%`;
     } else {
       line += ' | YESTERDAY: No data';
     }
+
     sections.push(line);
   }
 
@@ -450,20 +485,25 @@ function formatContextForClaude(data: any): string {
   if (data.today.adSets?.length > 0 || data.yesterday.adSets?.length > 0) {
     sections.push('\n--- AD SETS (TODAY vs YESTERDAY) ---');
     const allAdSetIds = new Set<string>();
+
     for (const a of [...(data.today.adSets || []), ...(data.yesterday.adSets || [])]) {
       allAdSetIds.add(a.adset_id);
     }
+
     for (const asid of allAdSetIds) {
       const t = (data.today.adSets || []).find((a: any) => a.adset_id === asid);
       const y = (data.yesterday.adSets || []).find((a: any) => a.adset_id === asid);
       const name = t?.adset_name || y?.adset_name || asid;
       let line = `Ad Set "${name}" (ID: ${asid}):`;
+
       if (t) {
         line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResultsFromRow(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%`;
       }
+
       if (y) {
         line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResultsFromRow(y, optMap)}, Clicks ${y.clicks}`;
       }
+
       sections.push(line);
     }
   }
@@ -472,23 +512,28 @@ function formatContextForClaude(data: any): string {
   if (data.today.ads?.length > 0 || data.yesterday.ads?.length > 0) {
     sections.push('\n--- ADS (TODAY vs YESTERDAY) ---');
     const allAdIds = new Set<string>();
+
     for (const a of [...(data.today.ads || []), ...(data.yesterday.ads || [])]) {
       allAdIds.add(a.ad_id);
     }
+
     for (const adId of allAdIds) {
       const t = (data.today.ads || []).find((a: any) => a.ad_id === adId);
       const y = (data.yesterday.ads || []).find((a: any) => a.ad_id === adId);
       const name = t?.ad_name || y?.ad_name || adId;
       const cid = t?.campaign_id || y?.campaign_id;
       let line = `Ad "${name}" (ID: ${adId}, campaign ${cid}):`;
+
       if (t) {
         line += ` TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResultsFromRow(t, optMap)}, Clicks ${t.clicks}, CTR ${(parseFloat(t.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(t.cpc) || 0).toFixed(2)}`;
       } else {
         line += ' TODAY: No data';
       }
+
       if (y) {
         line += ` | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResultsFromRow(y, optMap)}, Clicks ${y.clicks}`;
       }
+
       sections.push(line);
     }
   }
@@ -496,8 +541,10 @@ function formatContextForClaude(data: any): string {
   // Historical daily data (last 30 days account level)
   if (data.history?.accountDaily?.length > 0) {
     sections.push('\n--- DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ---');
+
     for (const row of data.history.accountDaily) {
       const results = getResultsFromRow(row);
+
       sections.push(
         `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(row.cpc) || 0).toFixed(2)}`
       );
@@ -507,6 +554,7 @@ function formatContextForClaude(data: any): string {
   // Breakdowns
   if (data.breakdowns?.ageGender?.length > 0) {
     sections.push('\n--- AUDIENCE BREAKDOWN (TODAY) ---');
+
     for (const row of data.breakdowns.ageGender) {
       sections.push(
         `${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%`

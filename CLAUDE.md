@@ -42,7 +42,7 @@ src/
 │   ├── session.ts             # Server-side session management — Redis-backed with cookie-only fallback
 │   ├── slack-context.ts       # fetchAdContextData, formatContextForClaude (used by Slack bot)
 │   └── utils.ts               # Shared utilities (cn, formatCurrency, etc.)
-├── middleware.ts               # Auth redirect + per-IP rate limiting (60 req/min)
+├── proxy.ts                   # Auth redirect + per-IP rate limiting (60 req/min)
 ├── services/
 │   ├── anthropic/             # AnthropicService — Claude API wrapper
 │   ├── logger/                # createLogger() — structured console logger
@@ -120,8 +120,6 @@ All external API calls go through service classes. Never call `fetch()` directly
 7. **Slack action allowlist:** `ALLOWED_SLACK_USER_IDS` gates button-triggered actions in `/api/slack/interactions`. If unset, any workspace member can pause/resume/adjust budgets.
 
 8. **Cookie security:** Session cookie is `httpOnly: true`, `secure: true` in production, `sameSite: lax`. Do not change these settings.
-
----
 
 ---
 

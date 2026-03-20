@@ -233,6 +233,32 @@ Each service has a test file:
 
 ---
 
+## Commit Conventions
+
+Commits are enforced by commitlint (`@commitlint/config-conventional`). The format is:
+
+```
+<type>(<scope>): <Subject starting with capital letter>
+```
+
+**Type** — must be one of: `build` `chore` `ci` `docs` `feat` `fix` `perf` `refactor` `revert` `style` `test`
+
+**Scope** — optional, lowercase. Use the area being changed: `ui`, `api`, `auth`, `meta`, `slack`, `automations`, `chat`, `dashboard`, `deps`, etc.
+
+**Subject** — sentence-case (first word capitalised, rest lower). Max header length: 120 chars.
+
+Examples:
+
+```
+feat(ui): Add dark/light theme toggle to sidebar
+fix(auth): Return 401 when session cookie is missing
+perf(meta): Cache campaign insights for 10 minutes
+refactor(automations): Extract condition evaluator into pure function
+chore(deps): Upgrade next to 16.1.0
+```
+
+---
+
 ## What NOT to Do
 
 - Do not store secrets in code, env files committed to git, or `NEXT_PUBLIC_` variables.

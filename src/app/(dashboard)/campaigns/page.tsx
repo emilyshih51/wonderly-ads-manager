@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,24 +15,30 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { TableSkeleton } from '@/components/skeletons/table-skeleton';
+import { CampaignsSkeleton } from '@/components/skeletons/campaigns-skeleton';
 import { useAppStore } from '@/stores/app-store';
 import { useCampaigns, type CampaignRow } from '@/lib/queries/meta/use-campaigns';
 import { apiPost } from '@/lib/queries/api-fetch';
 import { queryKeys } from '@/lib/queries/keys';
 import { formatCurrency, formatPercent, formatNumber, cn } from '@/lib/utils';
 import { getResultCount, getCostPerResult } from '@/lib/automation-utils';
-import { Copy, RefreshCw } from 'lucide-react';
+import { Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Campaigns');
 
 export default function CampaignsPage() {
-  const { datePreset } = useAppStore();
+  const router = useRouter();
+  const { datePreset, setFilterCampaignId } = useAppStore();
   const { data: campaigns = [], isLoading, isFetching, refetch } = useCampaigns(datePreset);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignRow | null>(null);
   const [newName, setNewName] = useState('');
+
+  const handleViewAds = (campaign: CampaignRow) => {
+    setFilterCampaignId(campaign.id);
+    router.push('/ads');
+  };
 
   const queryClient = useQueryClient();
   const duplicateMutation = useMutation({
@@ -64,39 +71,39 @@ export default function CampaignsPage() {
 
       <div className="p-8">
         {isLoading ? (
-          <TableSkeleton columns={8} rows={6} />
+          <CampaignsSkeleton />
         ) : (
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <tr className="border-b border-[var(--color-border)] bg-[var(--color-muted)]">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Name
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Status
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Objective
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Spend
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Results
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         CTR
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         CPC
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Cost/Result
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-center text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Actions
                       </th>
                     </tr>
@@ -104,7 +111,10 @@ export default function CampaignsPage() {
                   <tbody>
                     {campaigns.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-gray-400">
+                        <td
+                          colSpan={9}
+                          className="py-12 text-center text-[var(--color-muted-foreground)]"
+                        >
                           No campaigns found
                         </td>
                       </tr>
@@ -112,15 +122,15 @@ export default function CampaignsPage() {
                       campaigns.map((campaign) => (
                         <tr
                           key={campaign.id}
-                          className="border-b border-gray-50 hover:bg-gray-50/50"
+                          className="border-b border-[var(--color-border)] hover:bg-[var(--color-accent)]"
                         >
-                          <td className="max-w-[250px] truncate px-4 py-3 font-medium text-gray-900">
+                          <td className="max-w-[250px] truncate px-4 py-3 font-medium text-[var(--color-foreground)]">
                             {campaign.name}
                           </td>
                           <td className="px-4 py-3">
                             <StatusBadge status={campaign.status} />
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-500">
+                          <td className="px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
                             {campaign.objective?.replace('OUTCOME_', '')}
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -156,17 +166,26 @@ export default function CampaignsPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedCampaign(campaign);
-                                setNewName(`${campaign.name} (Copy)`);
-                                setDuplicateDialogOpen(true);
-                              }}
-                            >
-                              <Copy className="mr-1 h-4 w-4" /> Duplicate
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewAds(campaign)}
+                              >
+                                <ExternalLink className="mr-1 h-4 w-4" /> Ads
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedCampaign(campaign);
+                                  setNewName(`${campaign.name} (Copy)`);
+                                  setDuplicateDialogOpen(true);
+                                }}
+                              >
+                                <Copy className="mr-1 h-4 w-4" /> Duplicate
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -191,7 +210,9 @@ export default function CampaignsPage() {
           </DialogHeader>
           <div className="mt-4 space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700">New campaign name</label>
+              <label className="text-sm font-medium text-[var(--color-foreground)]">
+                New campaign name
+              </label>
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}

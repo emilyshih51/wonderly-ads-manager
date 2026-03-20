@@ -2,8 +2,41 @@
 
 @theme inline {
   --font-sans: var(--font-inter);
+
+  /* Light mode tokens (default) */
   --color-background: #ffffff;
   --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-muted: #f8fafc;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-destructive: #ef4444;
+  --color-sidebar: #0f172a;
+  --color-sidebar-foreground: #e2e8f0;
+}
+
+.dark {
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #1e293b;
+  --color-card-foreground: #f8fafc;
+  --color-border: #334155;
+  --color-input: #334155;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #1e293b;
+  --color-accent-foreground: #f8fafc;
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
+  --color-destructive: #f87171;
+  --color-sidebar: #020617;
+  --color-sidebar-foreground: #cbd5e1;
 }
 
 body {
@@ -11,7 +44,7 @@ body {
   color: var(--color-foreground);
 }
 
-/* React Flow overrides for light theme */
+/* React Flow overrides */
 .react-flow__node {
   cursor: grab;
 }
@@ -21,14 +54,15 @@ body {
 }
 
 .react-flow__controls button {
-  background: white !important;
-  border-color: #e5e7eb !important;
+  background: var(--color-card) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-foreground) !important;
 }
 
 .react-flow__controls button:hover {
-  background: #f9fafb !important;
+  background: var(--color-accent) !important;
 }
 
 .react-flow__minimap {
-  background: white !important;
+  background: var(--color-card) !important;
 }

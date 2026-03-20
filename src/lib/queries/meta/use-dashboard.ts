@@ -3,7 +3,9 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { apiFetch, apiPost } from '@/lib/queries/api-fetch';
+import { getPriorPeriodDates } from '@/lib/theme';
 import type { MetaInsightsRow } from '@/types';
+import type { CampaignRow } from './use-campaigns';
 import type { AdSetRow } from './use-adsets';
 import type { AdRow } from './use-ads';
 
@@ -21,6 +23,32 @@ export function useDashboardInsights(datePreset: string) {
         `/api/meta/insights?date_preset=${datePreset}&time_increment=1`
       ),
     select: (res) => res.data,
+  });
+}
+
+/**
+ * Fetch campaigns for the prior period matching the given date preset.
+ * Used for trend arrows and percentage-change indicators on metric cards.
+ * Returns null data when a prior period is not applicable (e.g. 'today').
+ *
+ * @param datePreset - Current date preset (e.g. 'last_7d')
+ * @returns TanStack Query result with prior-period campaign rows.
+ */
+export function useCampaignsPriorPeriod(datePreset: string) {
+  const priorRange = getPriorPeriodDates(datePreset);
+
+  return useQuery({
+    queryKey: ['campaigns', 'prior', datePreset],
+    enabled: !!priorRange,
+    queryFn: () => {
+      const { since, until } = priorRange!;
+
+      return apiFetch<{ data: CampaignRow[] }>(
+        `/api/meta/campaigns?since=${since}&until=${until}&with_insights=true`
+      );
+    },
+    select: (res) => res.data,
+    staleTime: 10 * 60_000, // prior data doesn't change
   });
 }
 

@@ -26,16 +26,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(makeQueryClient);
   const [persister] = useState(() => {
     if (typeof window === 'undefined') return null;
+
     return createSyncStoragePersister({ storage: window.sessionStorage });
   });
 
   // SSR: persister is unavailable — wrap with plain QueryClientProvider so hooks work
   if (!persister) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
 
   return (

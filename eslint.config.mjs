@@ -8,6 +8,11 @@ const eslintConfig = defineConfig([
   ...nextTs,
   eslintPluginPrettierRecommended,
   {
+    settings: {
+      react: {
+        version: '19',
+      },
+    },
     rules: {
       // Disallow any types on domain objects — use proper types from src/types/index.ts
       // Warn only (not error) since Meta API responses legitimately need any in some places

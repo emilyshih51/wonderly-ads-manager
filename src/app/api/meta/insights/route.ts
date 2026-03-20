@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getAccountInsights } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -10,13 +10,10 @@ export async function GET(request: NextRequest) {
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const timeIncrement = request.nextUrl.searchParams.get('time_increment') || undefined;
 
+  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+
   try {
-    const data = await getAccountInsights(
-      session.ad_account_id,
-      session.meta_access_token,
-      datePreset,
-      timeIncrement
-    );
+    const data = await meta.getAccountInsights(datePreset, timeIncrement);
 
     return NextResponse.json(data);
   } catch (error) {

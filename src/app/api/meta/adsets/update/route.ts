@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { metaApi } from '@/lib/meta-api';
-import { postSlackMessage } from '@/lib/slack';
+import { MetaService } from '@/services/meta';
+import { SlackService } from '@/services/slack';
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
-/**
- * Update budget (and other fields) for an ad set or campaign.
- * Sends Slack notification on budget changes.
- *
- * Body: { adset_id: string, adset_name?: string, daily_budget?: string, previous_budget?: string }
- * Note: `adset_id` can be any Meta entity ID (ad set ID or campaign ID) — it just calls POST /{id}
- */
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
@@ -30,19 +23,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const updateBody: any = {};
+    const updateBody: Record<string, unknown> = {};
 
     if (daily_budget !== undefined) {
-      // Meta expects budget in cents
       updateBody.daily_budget = Math.round(parseFloat(daily_budget) * 100);
     }
 
-    const result = await metaApi(`/${entityId}`, session.meta_access_token, {
-      method: 'POST',
-      body: updateBody,
-    });
+    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    const result = await meta.request(`/${entityId}`, { method: 'POST', body: updateBody });
 
-    // Send Slack notification for budget change
     if (SLACK_CHANNEL && daily_budget !== undefined) {
       const newBudgetDisplay = `$${parseFloat(daily_budget).toFixed(2)}`;
       let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newBudgetDisplay}/day`;
@@ -56,15 +45,22 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await postSlackMessage(SLACK_CHANNEL, text);
+        const slack = new SlackService(
+          process.env.SLACK_BOT_TOKEN || '',
+          process.env.SLACK_SIGNING_SECRET || ''
+        );
+
+        await slack.postMessage(SLACK_CHANNEL, text);
       } catch (e) {
         console.error('[Budget] Slack notification failed:', e);
       }
     }
 
-    return NextResponse.json({ success: true, ...result });
-  } catch (error: any) {
-    const message = error?.metaError?.message || error?.message || 'Update failed';
+    return NextResponse.json({ success: true, ...(result as Record<string, unknown>) });
+  } catch (error: unknown) {
+    const metaError = (error as { metaError?: { message?: string } })?.metaError;
+    const message =
+      metaError?.message || (error instanceof Error ? error.message : 'Update failed');
 
     return NextResponse.json({ error: { message } }, { status: 500 });
   }

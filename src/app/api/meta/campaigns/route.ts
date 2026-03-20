@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getCampaigns, getCampaignLevelInsights, getCampaignOptimizationMap } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -10,27 +10,26 @@ export async function GET(request: NextRequest) {
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
+  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+
   try {
-    const data = await getCampaigns(session.ad_account_id, session.meta_access_token);
+    const data = await meta.getCampaigns();
     const campaigns = data.data || [];
 
     if (withInsights) {
       try {
-        // Fetch insights AND optimization mapping in parallel
         const [bulkInsights, optimizationMap] = await Promise.all([
-          getCampaignLevelInsights(session.ad_account_id, session.meta_access_token, datePreset),
-          getCampaignOptimizationMap(session.ad_account_id, session.meta_access_token),
+          meta.getCampaignLevelInsights(datePreset),
+          meta.getCampaignOptimizationMap(),
         ]);
 
-        // Build a map of campaign_id -> insights row
         const insightsMap: Record<string, unknown> = {};
 
-        for (const row of bulkInsights.data || []) {
+        for (const row of (bulkInsights as { data?: Array<{ campaign_id: string }> }).data || []) {
           insightsMap[row.campaign_id] = row;
         }
 
-        // Merge insights + optimization info into campaigns
-        const campaignsWithInsights = campaigns.map((campaign: { id: string }) => ({
+        const campaignsWithInsights = (campaigns as Array<{ id: string }>).map((campaign) => ({
           ...campaign,
           insights: insightsMap[campaign.id] || null,
           result_action_type: optimizationMap[campaign.id] || null,
@@ -41,7 +40,7 @@ export async function GET(request: NextRequest) {
         const msg = insightsError instanceof Error ? insightsError.message : 'Unknown';
 
         console.error('Bulk campaign insights error:', msg);
-        const campaignsNoInsights = campaigns.map((c: { id: string }) => ({
+        const campaignsNoInsights = (campaigns as Array<{ id: string }>).map((c) => ({
           ...c,
           insights: null,
         }));

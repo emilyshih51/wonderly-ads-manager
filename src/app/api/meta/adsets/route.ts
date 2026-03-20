@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getAdSets, getAdSetLevelInsights } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -12,37 +12,29 @@ export async function GET(request: NextRequest) {
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
+  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+
   try {
-    const data = await getAdSets(session.ad_account_id, session.meta_access_token, campaignId);
+    const data = await meta.getAdSets(campaignId);
     const adsets = data.data || [];
 
     if (withInsights) {
-      // Use a SINGLE API call to get insights for ALL ad sets at once
-      // instead of N separate calls (which hits rate limits)
       try {
-        const bulkInsights = await getAdSetLevelInsights(
-          session.ad_account_id,
-          session.meta_access_token,
-          datePreset
-        );
-
-        // Build a map of adset_id -> insights row
+        const bulkInsights = await meta.getAdSetLevelInsights(datePreset);
         const insightsMap: Record<string, unknown> = {};
 
-        for (const row of bulkInsights.data || []) {
+        for (const row of (bulkInsights as { data?: Array<{ adset_id: string }> }).data || []) {
           insightsMap[row.adset_id] = row;
         }
 
-        // Merge insights into ad sets
-        const adsetsWithInsights = adsets.map((adset: { id: string }) => ({
+        const adsetsWithInsights = (adsets as Array<{ id: string }>).map((adset) => ({
           ...adset,
           insights: insightsMap[adset.id] || null,
         }));
 
         return NextResponse.json({ data: adsetsWithInsights });
       } catch {
-        // If bulk insights fail, return ad sets without insights
-        const adsetsNoInsights = adsets.map((a: { id: string }) => ({
+        const adsetsNoInsights = (adsets as Array<{ id: string }>).map((a) => ({
           ...a,
           insights: null,
         }));

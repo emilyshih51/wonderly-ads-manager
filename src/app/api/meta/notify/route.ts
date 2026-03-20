@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { postSlackMessage } from '@/lib/slack';
+import { SlackService } from '@/services/slack';
 
 const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
 
@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
       let text: string;
 
       if (custom_message) {
-        // Replace template variables in custom message
         text = custom_message
           .replace(/\{adset_name\}/g, adset_name || '')
           .replace(/\{budget\}/g, budgetDisplay)
@@ -43,15 +42,22 @@ export async function POST(request: NextRequest) {
           `${ad_count} ad${ad_count !== 1 ? 's' : ''} created as ${statusLabel}`;
       }
 
-      await postSlackMessage(channel, text);
+      const slack = new SlackService(
+        process.env.SLACK_BOT_TOKEN || '',
+        process.env.SLACK_SIGNING_SECRET || ''
+      );
+
+      await slack.postMessage(channel, text);
 
       return NextResponse.json({ success: true, slack_sent: true });
     }
 
     return NextResponse.json({ error: 'Invalid notification type' }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Notification failed';
+
     console.error('[Notify] Error:', error);
 
-    return NextResponse.json({ error: error?.message || 'Notification failed' }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

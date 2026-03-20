@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { duplicateCampaign, duplicateAdSet } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -11,23 +11,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { type, id, newName, targetCampaignId } = body;
 
+    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
     let result;
 
     if (type === 'campaign') {
-      result = await duplicateCampaign(
-        id,
-        session.ad_account_id,
-        session.meta_access_token,
-        newName
-      );
+      result = await meta.duplicateCampaign(id, newName);
     } else if (type === 'adset') {
-      result = await duplicateAdSet(
-        id,
-        session.ad_account_id,
-        session.meta_access_token,
-        newName,
-        targetCampaignId
-      );
+      result = await meta.duplicateAdSet(id, newName, targetCampaignId);
     } else {
       return NextResponse.json(
         { error: 'Invalid type. Must be "campaign" or "adset".' },

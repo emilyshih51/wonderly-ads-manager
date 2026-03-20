@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { updateStatus, metaApi } from '@/lib/meta-api';
-
-/**
- * POST /api/chat/actions
- *
- * Executes an AI-suggested action after user approval.
- * Actions: pause_campaign, resume_campaign, adjust_budget,
- *          pause_ad_set, resume_ad_set, pause_ad, resume_ad
- */
+import { MetaService } from '@/services/meta';
 
 interface ActionPayload {
   type: string;
-  id: string; // Meta object ID (campaign, ad set, or ad)
-  name?: string; // Human-readable name for logging
-  budget?: number; // For budget adjustments
+  id: string;
+  name?: string;
+  budget?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
     }
 
-    const { meta_access_token } = session;
+    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
     let result: string;
 
     switch (action.type) {
@@ -39,7 +31,7 @@ export async function POST(request: NextRequest) {
       case 'pause_ad_set':
 
       case 'pause_ad': {
-        await updateStatus(action.id, meta_access_token, 'PAUSED');
+        await meta.updateStatus(action.id, 'PAUSED');
         result = `✅ Paused "${action.name || action.id}"`;
         break;
       }
@@ -48,7 +40,7 @@ export async function POST(request: NextRequest) {
       case 'resume_ad_set':
 
       case 'resume_ad': {
-        await updateStatus(action.id, meta_access_token, 'ACTIVE');
+        await meta.updateStatus(action.id, 'ACTIVE');
         result = `✅ Resumed "${action.name || action.id}"`;
         break;
       }
@@ -58,12 +50,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
         }
 
-        // Round to whole dollar amount — never set fractional budgets
         const wholeBudget = Math.round(action.budget);
-        // Meta API expects budget in cents
         const budgetCents = (wholeBudget * 100).toString();
 
-        await metaApi(`/${action.id}`, meta_access_token, {
+        await meta.request(`/${action.id}`, {
           method: 'POST',
           body: { daily_budget: budgetCents },
         });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getAds, getAdLevelInsights, metaApi } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -12,46 +12,38 @@ export async function GET(request: NextRequest) {
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
   const customFields = request.nextUrl.searchParams.get('fields');
 
+  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+
   try {
-    // If custom fields requested (e.g., fetching creative identity), use metaApi directly
     let data;
 
     if (customFields && adSetId) {
-      data = await metaApi(`/${adSetId}/ads`, session.meta_access_token, {
+      data = await meta.request(`/${adSetId}/ads`, {
         params: { fields: customFields, limit: '5' },
       });
     } else {
-      data = await getAds(session.ad_account_id, session.meta_access_token, adSetId);
+      data = await meta.getAds(adSetId);
     }
 
-    const ads = data.data || [];
+    const ads = (data as { data?: unknown[] }).data || [];
 
     if (withInsights) {
-      // Use a SINGLE API call to get insights for ALL ads at once
       try {
-        const bulkInsights = await getAdLevelInsights(
-          session.ad_account_id,
-          session.meta_access_token,
-          datePreset
-        );
-
-        // Build a map of ad_id -> insights row
+        const bulkInsights = await meta.getAdLevelInsights(datePreset);
         const insightsMap: Record<string, unknown> = {};
 
-        for (const row of bulkInsights.data || []) {
+        for (const row of (bulkInsights as { data?: Array<{ ad_id: string }> }).data || []) {
           insightsMap[row.ad_id] = row;
         }
 
-        // Merge insights into ads
-        const adsWithInsights = ads.map((ad: { id: string }) => ({
+        const adsWithInsights = (ads as Array<{ id: string }>).map((ad) => ({
           ...ad,
           insights: insightsMap[ad.id] || null,
         }));
 
         return NextResponse.json({ data: adsWithInsights });
       } catch {
-        // If bulk insights fail, return ads without insights
-        const adsNoInsights = ads.map((a: { id: string }) => ({ ...a, insights: null }));
+        const adsNoInsights = (ads as Array<{ id: string }>).map((a) => ({ ...a, insights: null }));
 
         return NextResponse.json({ data: adsNoInsights });
       }

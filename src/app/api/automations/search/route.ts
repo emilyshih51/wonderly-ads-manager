@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { metaApi, getCampaignOptimizationMap } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 
 /**
  * GET /api/automations/search
@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No Meta credentials' }, { status: 401 });
   }
 
+  const meta = new MetaService(accessToken, rawAdAccountId);
+
   const { searchParams } = request.nextUrl;
   const type = searchParams.get('type') || 'campaigns';
   const query = (searchParams.get('q') || '').toLowerCase();
@@ -30,7 +32,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'campaigns') {
-      const data = await metaApi(`/act_${rawAdAccountId}/campaigns`, accessToken, {
+      const data = await meta.request(`/act_${rawAdAccountId}/campaigns`, {
         params: {
           fields: 'id,name,status,objective',
           limit: '100',
@@ -40,14 +42,16 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      let campaigns = data.data || [];
+      let campaigns =
+        (data as { data?: Array<{ id: string; name: string; status: string; objective: string }> })
+          .data || [];
 
       if (query) {
-        campaigns = campaigns.filter((c: any) => c.name.toLowerCase().includes(query));
+        campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(query));
       }
 
       return NextResponse.json({
-        data: campaigns.map((c: any) => ({
+        data: campaigns.map((c) => ({
           id: c.id,
           name: c.name,
           status: c.status,
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
     if (type === 'adsets') {
       const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${rawAdAccountId}/adsets`;
 
-      const data = await metaApi(endpoint, accessToken, {
+      const data = await meta.request(endpoint, {
         params: {
           fields: 'id,name,status,campaign_id,campaign{name}',
           limit: '100',
@@ -69,14 +73,25 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      let adsets = data.data || [];
+      let adsets =
+        (
+          data as {
+            data?: Array<{
+              id: string;
+              name: string;
+              status: string;
+              campaign_id: string;
+              campaign?: { name: string };
+            }>;
+          }
+        ).data || [];
 
       if (query) {
-        adsets = adsets.filter((a: any) => a.name.toLowerCase().includes(query));
+        adsets = adsets.filter((a) => a.name.toLowerCase().includes(query));
       }
 
       return NextResponse.json({
-        data: adsets.map((a: any) => ({
+        data: adsets.map((a) => ({
           id: a.id,
           name: a.name,
           status: a.status,
@@ -100,7 +115,7 @@ export async function GET(request: NextRequest) {
       ]);
 
       if (campaignId) {
-        const response = await metaApi(`/${campaignId}/insights`, accessToken, {
+        const response = await meta.request(`/${campaignId}/insights`, {
           params: {
             fields:
               'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
@@ -111,9 +126,9 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        insightsData = response.data || [];
+        insightsData = (response as { data?: unknown[] }).data || [];
       } else {
-        const response = await metaApi(`/act_${rawAdAccountId}/insights`, accessToken, {
+        const response = await meta.request(`/act_${rawAdAccountId}/insights`, {
           params: {
             fields:
               'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
@@ -124,14 +139,14 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        insightsData = response.data || [];
+        insightsData = (response as { data?: unknown[] }).data || [];
       }
 
       // Get optimization map for result counting
       let optimizationMap: Record<string, string> = {};
 
       try {
-        optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
+        optimizationMap = await meta.getCampaignOptimizationMap();
       } catch {
         /* continue without */
       }

@@ -1,31 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
-import {
-  verifySlackSignature,
-  postSlackMessage,
-  buildSlackBlocks,
-  parseActions,
-  stripActions,
-  getThreadMessages,
-} from '@/lib/slack';
+import { AnthropicService } from '@/services/anthropic';
+import { SlackService } from '@/services/slack';
 import { SYSTEM_PROMPT } from '@/app/api/chat/route';
 
 // Allow up to 60 seconds for this function (Claude + Meta API calls take time)
 export const maxDuration = 60;
-import {
-  getCampaignLevelInsights,
-  getAdSetLevelInsights,
-  getAdLevelInsights,
-  getInsightsForDateRange,
-  getHourlyInsights,
-  getHourlyInsightsForDate,
-  getInsightsWithBreakdowns,
-  getAccountInsights,
-  getCampaignOptimizationMap,
-  getDailyInsights,
-  getCampaigns,
-  getAdAccount,
-} from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
 import { generateMockChatData } from '@/app/api/chat/data/mock';
 
 /**
@@ -81,9 +61,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify Slack signature for all other requests
+  const slack = new SlackService(
+    process.env.SLACK_BOT_TOKEN || '',
+    process.env.SLACK_SIGNING_SECRET || ''
+  );
   const slackSignature = request.headers.get('x-slack-signature') || '';
   const slackTimestamp = request.headers.get('x-slack-request-timestamp') || '';
-  const isValid = verifySlackSignature(slackSignature, slackTimestamp, rawBody);
+  const isValid = slack.verifySignature(slackSignature, slackTimestamp, rawBody);
 
   if (!isValid) {
     console.warn('[Slack Events] Invalid signature');
@@ -149,7 +133,12 @@ async function processAppMention(event: any) {
 
     if (!metaSystemToken || accountIds.length === 0) {
       console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID(S)');
-      await postSlackMessage(
+      const slack = new SlackService(
+        process.env.SLACK_BOT_TOKEN || '',
+        process.env.SLACK_SIGNING_SECRET || ''
+      );
+
+      await slack.postMessage(
         channelId,
         'Sorry, the Slack integration is not fully configured. Please set META_SYSTEM_ACCESS_TOKEN and META_AD_ACCOUNT_ID in your environment.',
         undefined,
@@ -161,7 +150,10 @@ async function processAppMention(event: any) {
 
     // Fetch ad data for ALL accounts and thread history in parallel
     const [threadHistory, ...contextResults] = await Promise.all([
-      getThreadMessages(channelId, threadTs),
+      new SlackService(
+        process.env.SLACK_BOT_TOKEN || '',
+        process.env.SLACK_SIGNING_SECRET || ''
+      ).getThreadMessages(channelId, threadTs),
       ...accountIds.map((id) => fetchAdContextData(id, metaSystemToken)),
     ]);
 
@@ -187,32 +179,18 @@ async function processAppMention(event: any) {
 
     if (anthropicKey) {
       try {
-        const client = new Anthropic({ apiKey: anthropicKey });
+        const ai = new AnthropicService(anthropicKey, process.env.ANTHROPIC_MODEL);
+        const history = threadHistory.map((msg) => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.text,
+        }));
 
-        // Build message history from thread for conversation memory
-        const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-
-        for (const msg of threadHistory) {
-          messages.push({ role: msg.role, content: msg.text });
-        }
-
-        // Add the current question
-        messages.push({ role: 'user', content: question });
-
-        const message = await client.messages.create({
-          model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          system: SYSTEM_PROMPT + contextText,
-          messages,
+        analysisText = await ai.complete({
+          message: question,
+          systemPrompt: SYSTEM_PROMPT,
+          context: contextText,
+          history,
         });
-
-        // Extract text from response
-        for (const block of message.content) {
-          if (block.type === 'text') {
-            analysisText = block.text;
-            break;
-          }
-        }
       } catch (claudeError) {
         console.error('[Slack Events] Claude API error:', claudeError);
         analysisText = 'I encountered an error analyzing your ad data. Please try again.';
@@ -223,19 +201,26 @@ async function processAppMention(event: any) {
     }
 
     // Parse actions from response
-    const actions = parseActions(analysisText);
-    const cleanText = stripActions(analysisText);
+    const actions = SlackService.parseActions(analysisText);
+    const cleanText = SlackService.stripActions(analysisText);
 
-    // Build Slack blocks
-    const blocks = buildSlackBlocks(cleanText, actions, channelId, threadTs);
+    const blocks = SlackService.buildBlocks(cleanText, actions, channelId, threadTs);
+    const slack = new SlackService(
+      process.env.SLACK_BOT_TOKEN || '',
+      process.env.SLACK_SIGNING_SECRET || ''
+    );
 
-    // Post as a threaded reply to the original message
-    await postSlackMessage(channelId, cleanText, blocks, threadTs);
+    await slack.postMessage(channelId, cleanText, blocks, threadTs);
   } catch (error) {
     console.error('[Slack Events] Error processing mention:', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
 
-    await postSlackMessage(
+    const slack = new SlackService(
+      process.env.SLACK_BOT_TOKEN || '',
+      process.env.SLACK_SIGNING_SECRET || ''
+    );
+
+    await slack.postMessage(
       channelId,
       `Sorry, I encountered an error: ${errorMsg}`,
       undefined,
@@ -248,6 +233,7 @@ async function processAppMention(event: any) {
  * Fetch comprehensive ad data using system access token
  */
 async function fetchAdContextData(adAccountId: string, accessToken: string) {
+  const meta = new MetaService(accessToken, adAccountId);
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const yesterday = new Date(now);
@@ -263,33 +249,33 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
   try {
     // Fetch all data in parallel
     const results = await Promise.allSettled([
-      getCampaignLevelInsights(adAccountId, accessToken, 'today'),
-      getInsightsForDateRange(adAccountId, accessToken, yesterdayStr, yesterdayStr, 'campaign'),
-      getAdSetLevelInsights(adAccountId, accessToken, 'today'),
-      getInsightsForDateRange(adAccountId, accessToken, yesterdayStr, yesterdayStr, 'adset'),
-      getAdLevelInsights(adAccountId, accessToken, 'today'),
-      getInsightsForDateRange(adAccountId, accessToken, yesterdayStr, yesterdayStr, 'ad'),
-      getHourlyInsights(adAccountId, accessToken, 'today', 'campaign'),
-      getHourlyInsightsForDate(adAccountId, accessToken, yesterdayStr, yesterdayStr, 'campaign'),
-      getAccountInsights(adAccountId, accessToken, 'today'),
-      getInsightsForDateRange(adAccountId, accessToken, yesterdayStr, yesterdayStr, 'account'),
-      getInsightsWithBreakdowns(adAccountId, accessToken, 'today', 'age,gender'),
-      getInsightsWithBreakdowns(adAccountId, accessToken, 'today', 'device_platform'),
-      getInsightsWithBreakdowns(adAccountId, accessToken, 'today', 'publisher_platform'),
-      getCampaignOptimizationMap(adAccountId, accessToken),
-      getDailyInsights(adAccountId, accessToken, 'last_30d', 'account'),
-      getDailyInsights(adAccountId, accessToken, 'last_30d', 'campaign'),
-      getDailyInsights(adAccountId, accessToken, 'last_7d', 'adset'),
+      meta.getCampaignLevelInsights('today'),
+      meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'campaign'),
+      meta.getAdSetLevelInsights('today'),
+      meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'adset'),
+      meta.getAdLevelInsights('today'),
+      meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'ad'),
+      meta.getHourlyInsights('today', 'campaign'),
+      meta.getHourlyInsightsForDate(yesterdayStr, yesterdayStr, 'campaign'),
+      meta.getAccountInsights('today'),
+      meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'account'),
+      meta.getInsightsWithBreakdowns('today', 'age,gender'),
+      meta.getInsightsWithBreakdowns('today', 'device_platform'),
+      meta.getInsightsWithBreakdowns('today', 'publisher_platform'),
+      meta.getCampaignOptimizationMap(),
+      meta.getDailyInsights('last_30d', 'account'),
+      meta.getDailyInsights('last_30d', 'campaign'),
+      meta.getDailyInsights('last_7d', 'adset'),
       // [17] Fetch campaign objects with daily_budget for budget adjustment context
-      getCampaigns(adAccountId, accessToken),
+      meta.getCampaigns(),
       // [18] Fetch ad account name
-      getAdAccount(adAccountId, accessToken),
+      meta.getAdAccount(),
     ]);
 
     const extract = (index: number) => {
       const r = results[index];
 
-      if (r.status === 'fulfilled') return r.value?.data || [];
+      if (r.status === 'fulfilled') return (r.value as { data?: unknown[] })?.data || [];
 
       return [];
     };
@@ -297,7 +283,8 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
     const optimizationMap =
       results[13].status === 'fulfilled' ? (results[13].value as Record<string, string>) : {};
 
-    const accountInfo = results[18].status === 'fulfilled' ? results[18].value : null;
+    const accountInfo =
+      results[18].status === 'fulfilled' ? (results[18].value as { name?: string }) : null;
 
     return {
       accountName: accountInfo?.name || `Account ${adAccountId}`,

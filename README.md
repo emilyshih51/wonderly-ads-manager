@@ -43,6 +43,22 @@ Push to `main` → Vercel auto-deploys. No manual steps.
 
 All secrets live in Vercel → Settings → Environment Variables. See [`.env.example`](.env.example) for the full variable list with descriptions.
 
+## Commit conventions
+
+Commits are enforced by commitlint. Format: `<type>(<scope>): <Subject sentence-case>`
+
+| Part        | Rule                                                                                                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------------------- |
+| **type**    | lowercase; one of: `build` `chore` `ci` `docs` `feat` `fix` `perf` `refactor` `revert` `style` `test`                |
+| **scope**   | optional, lowercase — area changed: `ui`, `api`, `auth`, `meta`, `slack`, `automations`, `chat`, `dashboard`, `deps` |
+| **subject** | sentence-case (first word capitalised). Max header length: 120 chars                                                 |
+
+```
+feat(ui): Add dark/light theme toggle
+fix(auth): Return 401 when session cookie is missing
+chore(deps): Upgrade next to 16.2.0
+```
+
 ## Docs
 
 - [`CLAUDE.md`](./CLAUDE.md) — architecture, conventions, security rules, known issues (read this first)

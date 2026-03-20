@@ -66,6 +66,20 @@ await store.getActive();
 - [ ] No secrets in `NEXT_PUBLIC_` variables or passed to the browser
 - [ ] Cron endpoint (`GET /api/automations/evaluate`) checks `CRON_SECRET` bearer token
 
+## Commit Conventions
+
+Enforced by commitlint. Format: `<type>(<scope>): <Subject sentence-case>`
+
+**Types:** `build` `chore` `ci` `docs` `feat` `fix` `perf` `refactor` `revert` `style` `test`
+
+**Subject rules:** first word capitalised, rest lower. Max header 120 chars.
+
+```
+feat(ui): Add gallery view to ads page
+fix(auth): Redirect to login when session expires
+chore(deps): Upgrade tanstack-query to 5.x
+```
+
 ## Tests
 
 ```bash

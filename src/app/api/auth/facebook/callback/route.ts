@@ -66,10 +66,17 @@ export async function GET(request: NextRequest) {
 
     const userEmail = (userData.email ?? '').toLowerCase();
 
-    logger.info('Login attempt', { email: userEmail, allowedCount: allowedEmails.length });
+    logger.info('Login attempt', {
+      email: userEmail,
+      allowedEmails,
+      rawEnv: process.env.ALLOWED_EMAILS,
+    });
 
     if (allowedEmails.length > 0 && !allowedEmails.includes(userEmail)) {
-      logger.warn('Login rejected — email not in allowlist', { email: userEmail });
+      logger.warn('Login rejected — email not in allowlist', {
+        email: userEmail,
+        allowedEmails,
+      });
 
       return NextResponse.redirect(`${appUrl}/login?error=unauthorized`);
     }

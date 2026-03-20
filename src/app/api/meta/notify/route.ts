@@ -16,7 +16,11 @@ export async function POST(request: NextRequest) {
       const { adset_name, budget, ad_count, status, custom_message } = body;
       const channel = body.slack_channel || SLACK_CHANNEL;
       if (!channel) {
-        return NextResponse.json({ success: true, slack_sent: false, reason: 'No Slack channel configured' });
+        return NextResponse.json({
+          success: true,
+          slack_sent: false,
+          reason: 'No Slack channel configured',
+        });
       }
 
       const budgetDisplay = budget ? `$${parseFloat(budget).toFixed(2)}/day` : 'no budget set';
@@ -31,7 +35,8 @@ export async function POST(request: NextRequest) {
           .replace(/\{ad_count\}/g, String(ad_count || 0))
           .replace(/\{status\}/g, statusLabel);
       } else {
-        text = `🚀 *[Wonderly]* ${adset_name} launched with ${budgetDisplay}\n` +
+        text =
+          `🚀 *[Wonderly]* ${adset_name} launched with ${budgetDisplay}\n` +
           `${ad_count} ad${ad_count !== 1 ? 's' : ''} created as ${statusLabel}`;
       }
 

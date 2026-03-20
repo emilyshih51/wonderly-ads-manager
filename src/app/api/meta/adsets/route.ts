@@ -4,7 +4,8 @@ import { getAdSets, getAdSetLevelInsights } from '@/lib/meta-api';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized — please log in again' }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: 'Unauthorized — please log in again' }, { status: 401 });
 
   const campaignId = request.nextUrl.searchParams.get('campaign_id') || undefined;
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
@@ -39,7 +40,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data: adsetsWithInsights });
       } catch {
         // If bulk insights fail, return ad sets without insights
-        const adsetsNoInsights = adsets.map((a: { id: string }) => ({ ...a, insights: null }));
+        const adsetsNoInsights = adsets.map((a: { id: string }) => ({
+          ...a,
+          insights: null,
+        }));
         return NextResponse.json({ data: adsetsNoInsights });
       }
     }

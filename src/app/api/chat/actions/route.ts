@@ -12,9 +12,9 @@ import { updateStatus, metaApi } from '@/lib/meta-api';
 
 interface ActionPayload {
   type: string;
-  id: string;        // Meta object ID (campaign, ad set, or ad)
-  name?: string;     // Human-readable name for logging
-  budget?: number;   // For budget adjustments
+  id: string; // Meta object ID (campaign, ad set, or ad)
+  name?: string; // Human-readable name for logging
+  budget?: number; // For budget adjustments
 }
 
 export async function POST(request: NextRequest) {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { action } = await request.json() as { action: ActionPayload };
+    const { action } = (await request.json()) as { action: ActionPayload };
     if (!action?.type || !action?.id) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
     }

@@ -16,7 +16,9 @@ export async function GET() {
     if (cookie.name.startsWith('wonderly_history_')) {
       try {
         history.push(JSON.parse(cookie.value));
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 

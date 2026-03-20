@@ -19,7 +19,10 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!name || !campaign_id) {
-      return NextResponse.json({ error: 'Missing required fields: name, campaign_id' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Missing required fields: name, campaign_id' },
+        { status: 400 }
+      );
     }
 
     // Build targeting — if none provided, use a broad default

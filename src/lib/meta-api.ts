@@ -7,11 +7,7 @@ interface MetaApiOptions {
   params?: Record<string, string>;
 }
 
-export async function metaApi(
-  endpoint: string,
-  accessToken: string,
-  options: MetaApiOptions = {}
-) {
+export async function metaApi(endpoint: string, accessToken: string, options: MetaApiOptions = {}) {
   const { method = 'GET', body, params = {} } = options;
 
   const url = new URL(`${META_BASE_URL}${endpoint}`);
@@ -60,7 +56,8 @@ export async function getCampaignInsights(
 ) {
   return metaApi(`/${campaignId}/insights`, accessToken, {
     params: {
-      fields: 'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
     },
   });
@@ -75,7 +72,8 @@ export async function duplicateCampaign(
   // Get original campaign
   const original = await metaApi(`/${campaignId}`, accessToken, {
     params: {
-      fields: 'name,objective,status,daily_budget,lifetime_budget,special_ad_categories,buying_type',
+      fields:
+        'name,objective,status,daily_budget,lifetime_budget,special_ad_categories,buying_type',
     },
   });
 
@@ -166,13 +164,12 @@ export async function getCampaignOptimizationMap(
 
 // Ad Set operations
 export async function getAdSets(adAccountId: string, accessToken: string, campaignId?: string) {
-  const endpoint = campaignId
-    ? `/${campaignId}/adsets`
-    : `/act_${adAccountId}/adsets`;
+  const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${adAccountId}/adsets`;
 
   return metaApi(endpoint, accessToken, {
     params: {
-      fields: 'id,name,campaign_id,campaign{name},status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,created_time,updated_time',
+      fields:
+        'id,name,campaign_id,campaign{name},status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,created_time,updated_time',
       limit: '100',
     },
   });
@@ -188,7 +185,8 @@ export async function duplicateAdSet(
   // Get original ad set with all settings
   const original = await metaApi(`/${adSetId}`, accessToken, {
     params: {
-      fields: 'name,campaign_id,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,promoted_object',
+      fields:
+        'name,campaign_id,status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,promoted_object',
     },
   });
 
@@ -216,13 +214,12 @@ export async function duplicateAdSet(
 
 // Ad operations
 export async function getAds(adAccountId: string, accessToken: string, adSetId?: string) {
-  const endpoint = adSetId
-    ? `/${adSetId}/ads`
-    : `/act_${adAccountId}/ads`;
+  const endpoint = adSetId ? `/${adSetId}/ads` : `/act_${adAccountId}/ads`;
 
   return metaApi(endpoint, accessToken, {
     params: {
-      fields: 'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type},created_time,updated_time',
+      fields:
+        'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type},created_time,updated_time',
       limit: '100',
     },
   });
@@ -235,26 +232,23 @@ export async function getAdInsights(
 ) {
   return metaApi(`/${adId}/insights`, accessToken, {
     params: {
-      fields: 'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
     },
   });
 }
 
 // Upload ad image
-export async function uploadAdImage(
-  adAccountId: string,
-  accessToken: string,
-  imageFile: File
-) {
+export async function uploadAdImage(adAccountId: string, accessToken: string, imageFile: File) {
   const formData = new FormData();
   formData.append('filename', imageFile);
   formData.append('access_token', accessToken);
 
-  const response = await fetch(
-    `${META_BASE_URL}/act_${adAccountId}/adimages`,
-    { method: 'POST', body: formData }
-  );
+  const response = await fetch(`${META_BASE_URL}/act_${adAccountId}/adimages`, {
+    method: 'POST',
+    body: formData,
+  });
 
   return response.json();
 }
@@ -373,7 +367,8 @@ export async function getAccountInsights(
   timeIncrement?: string
 ) {
   const params: Record<string, string> = {
-    fields: 'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+    fields:
+      'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
     date_preset: datePreset,
   };
   if (timeIncrement) params.time_increment = timeIncrement;
@@ -393,7 +388,8 @@ export async function getCampaignLevelInsights(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
       level: 'campaign',
       limit: '100',
@@ -412,7 +408,8 @@ export async function getAdSetLevelInsights(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'adset_id,adset_name,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'adset_id,adset_name,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
       level: 'adset',
       limit: '200',
@@ -430,7 +427,8 @@ export async function getAdLevelInsights(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
       level: 'ad',
       limit: '200',
@@ -454,7 +452,9 @@ export async function getDailyInsights(
       level === 'adset' ? 'adset_id,adset_name,campaign_id' : '',
       level === 'ad' ? 'ad_id,ad_name,adset_id,campaign_id' : '',
       'spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
-    ].filter(Boolean).join(','),
+    ]
+      .filter(Boolean)
+      .join(','),
     date_preset: datePreset,
     time_increment: '1', // daily breakdown
     limit: '500',
@@ -475,7 +475,8 @@ export async function getInsightsWithBreakdowns(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
       breakdowns,
       limit: '200',
@@ -500,7 +501,9 @@ export async function getInsightsForDateRange(
       level === 'adset' ? 'adset_id,adset_name,campaign_id' : '',
       level === 'ad' ? 'ad_id,ad_name,adset_id,campaign_id' : '',
       'spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
-    ].filter(Boolean).join(','),
+    ]
+      .filter(Boolean)
+      .join(','),
     time_range: JSON.stringify({ since, until }),
     limit: '500',
   };
@@ -522,7 +525,8 @@ export async function getHourlyInsights(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       date_preset: datePreset,
       breakdowns: 'hourly_stats_aggregated_by_advertiser_time_zone',
       level,
@@ -543,7 +547,8 @@ export async function getHourlyInsightsForDate(
 ) {
   return metaApi(`/act_${adAccountId}/insights`, accessToken, {
     params: {
-      fields: 'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
+      fields:
+        'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop',
       time_range: JSON.stringify({ since: dateStart, until: dateEnd }),
       breakdowns: 'hourly_stats_aggregated_by_advertiser_time_zone',
       level,

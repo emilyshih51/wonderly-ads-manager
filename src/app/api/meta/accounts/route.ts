@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, setSession } from '@/lib/session';
-import { metaApi } from '@/lib/meta-api';
 
 /**
  * GET /api/meta/accounts — List all ad accounts the user has access to
@@ -48,7 +47,10 @@ export async function POST(request: NextRequest) {
       ad_account_id: ad_account_id.replace('act_', ''),
     });
 
-    return NextResponse.json({ success: true, ad_account_id: ad_account_id.replace('act_', '') });
+    return NextResponse.json({
+      success: true,
+      ad_account_id: ad_account_id.replace('act_', ''),
+    });
   } catch (error) {
     console.error('Switch account error:', error);
     return NextResponse.json({ error: 'Failed to switch account' }, { status: 500 });

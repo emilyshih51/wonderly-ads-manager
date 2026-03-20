@@ -17,13 +17,15 @@ import {
  * Setup: Create a KV database in Vercel Dashboard → Storage → Create → KV
  */
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const allRules = await getAllRules();
   // Filter rules for the current ad account (rules without ad_account_id are shown to all — legacy rules)
-  const rules = allRules.filter((r) => !r.ad_account_id || r.ad_account_id === session.ad_account_id);
+  const rules = allRules.filter(
+    (r) => !r.ad_account_id || r.ad_account_id === session.ad_account_id
+  );
   return NextResponse.json({ data: rules, kv_configured: isKvConfigured() });
 }
 

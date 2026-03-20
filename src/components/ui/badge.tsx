@@ -19,15 +19,21 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
 export function StatusBadge({ status }: { status: string }) {
-  const variant = status === 'ACTIVE' ? 'active' : status === 'PAUSED' ? 'paused' : status === 'DELETED' ? 'deleted' : 'secondary';
+  const variant =
+    status === 'ACTIVE'
+      ? 'active'
+      : status === 'PAUSED'
+        ? 'paused'
+        : status === 'DELETED'
+          ? 'deleted'
+          : 'secondary';
   return <Badge variant={variant}>{status}</Badge>;
 }
 

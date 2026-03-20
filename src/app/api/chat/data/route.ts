@@ -27,8 +27,8 @@ import { generateMockChatData } from './mock';
  */
 export async function GET(request: NextRequest) {
   // Check for mock mode
-  const useMock = process.env.USE_MOCK_DATA === 'true'
-    || request.nextUrl.searchParams.get('mock') === 'true';
+  const useMock =
+    process.env.USE_MOCK_DATA === 'true' || request.nextUrl.searchParams.get('mock') === 'true';
 
   if (useMock) {
     console.log('[Chat Data] Using mock data for AI testing');
@@ -61,11 +61,23 @@ export async function GET(request: NextRequest) {
       // 0: Today's campaign-level insights (totals)
       getCampaignLevelInsights(ad_account_id, meta_access_token, 'today'),
       // 1: Yesterday's campaign-level insights (totals)
-      getInsightsForDateRange(ad_account_id, meta_access_token, yesterdayStr, yesterdayStr, 'campaign'),
+      getInsightsForDateRange(
+        ad_account_id,
+        meta_access_token,
+        yesterdayStr,
+        yesterdayStr,
+        'campaign'
+      ),
       // 2: Today's ad set-level insights
       getAdSetLevelInsights(ad_account_id, meta_access_token, 'today'),
       // 3: Yesterday's ad set-level insights
-      getInsightsForDateRange(ad_account_id, meta_access_token, yesterdayStr, yesterdayStr, 'adset'),
+      getInsightsForDateRange(
+        ad_account_id,
+        meta_access_token,
+        yesterdayStr,
+        yesterdayStr,
+        'adset'
+      ),
       // 4: Today's ad-level insights
       getAdLevelInsights(ad_account_id, meta_access_token, 'today'),
       // 5: Yesterday's ad-level insights
@@ -73,11 +85,23 @@ export async function GET(request: NextRequest) {
       // 6: TODAY hourly breakdown (campaign level) — hour-by-hour for today
       getHourlyInsights(ad_account_id, meta_access_token, 'today', 'campaign'),
       // 7: YESTERDAY hourly breakdown (campaign level) — for comparison
-      getHourlyInsightsForDate(ad_account_id, meta_access_token, yesterdayStr, yesterdayStr, 'campaign'),
+      getHourlyInsightsForDate(
+        ad_account_id,
+        meta_access_token,
+        yesterdayStr,
+        yesterdayStr,
+        'campaign'
+      ),
       // 8: Today's account-level totals
       getAccountInsights(ad_account_id, meta_access_token, 'today'),
       // 9: Yesterday's account-level totals
-      getInsightsForDateRange(ad_account_id, meta_access_token, yesterdayStr, yesterdayStr, 'account'),
+      getInsightsForDateRange(
+        ad_account_id,
+        meta_access_token,
+        yesterdayStr,
+        yesterdayStr,
+        'account'
+      ),
       // 10: Age/gender breakdown (today)
       getInsightsWithBreakdowns(ad_account_id, meta_access_token, 'today', 'age,gender'),
       // 11: Device platform breakdown (today)
@@ -103,9 +127,8 @@ export async function GET(request: NextRequest) {
     };
 
     // Optimization map is a plain object, not an array with .data
-    const optimizationMap = results[13].status === 'fulfilled'
-      ? results[13].value as Record<string, string>
-      : {};
+    const optimizationMap =
+      results[13].status === 'fulfilled' ? (results[13].value as Record<string, string>) : {};
 
     const response = {
       date: { today: todayStr, yesterday: yesterdayStr, thirtyDaysAgo: thirtyDaysAgoStr },
@@ -143,10 +166,11 @@ export async function GET(request: NextRequest) {
     };
 
     // If all data is empty (Meta API issues), fall back to mock
-    const hasAnyData = response.today.campaigns.length > 0
-      || response.yesterday.campaigns.length > 0
-      || response.today.account.length > 0
-      || response.history.accountDaily.length > 0;
+    const hasAnyData =
+      response.today.campaigns.length > 0 ||
+      response.yesterday.campaigns.length > 0 ||
+      response.today.account.length > 0 ||
+      response.history.accountDaily.length > 0;
 
     if (!hasAnyData) {
       console.log('[Chat Data] No real data returned — falling back to mock data');

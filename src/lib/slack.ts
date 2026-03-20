@@ -7,11 +7,7 @@ const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || '';
  * Verify Slack request signature
  * https://api.slack.com/authentication/verifying-requests-from-slack
  */
-export function verifySlackSignature(
-  signature: string,
-  timestamp: string,
-  body: string
-): boolean {
+export function verifySlackSignature(signature: string, timestamp: string, body: string): boolean {
   const signingSecret = SLACK_SIGNING_SECRET;
   if (!signingSecret) {
     console.warn('[Slack] No SLACK_SIGNING_SECRET configured');
@@ -29,18 +25,12 @@ export function verifySlackSignature(
   const baseString = `v0:${timestamp}:${body}`;
 
   // Calculate HMAC
-  const hmac = crypto
-    .createHmac('sha256', signingSecret)
-    .update(baseString)
-    .digest('hex');
+  const hmac = crypto.createHmac('sha256', signingSecret).update(baseString).digest('hex');
 
   const computedSignature = `v0=${hmac}`;
 
   // Compare signatures (timing-safe comparison)
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(computedSignature)
-  );
+  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(computedSignature));
 }
 
 /**
@@ -62,7 +52,7 @@ export async function postSlackMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
       },
       body: JSON.stringify({
         channel,
@@ -105,7 +95,7 @@ export async function updateSlackMessage(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
       },
       body: JSON.stringify({
         channel,
@@ -146,7 +136,7 @@ export async function getThreadMessages(
       `https://slack.com/api/conversations.replies?channel=${channel}&ts=${threadTs}&limit=${limit}`,
       {
         headers: {
-          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
+          Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
         },
       }
     );
@@ -156,7 +146,7 @@ export async function getThreadMessages(
 
     // Get bot user ID so we can identify our own messages
     const authRes = await fetch('https://slack.com/api/auth.test', {
-      headers: { 'Authorization': `Bearer ${SLACK_BOT_TOKEN}` },
+      headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` },
     });
     const authData = await authRes.json();
     const botUserId = authData.ok ? authData.user_id : null;
@@ -197,7 +187,7 @@ export async function getThreadMessages(
  */
 export function formatForSlack(text: string): string {
   // Convert markdown to Slack mrkdwn
-  let mrkdwn = text
+  const mrkdwn = text
     // Bold: **text** -> *text*
     .replace(/\*\*(.+?)\*\*/g, '*$1*')
     // Italic: _text_ stays _text_
@@ -213,7 +203,14 @@ export function formatForSlack(text: string): string {
 }
 
 interface ActionBlock {
-  type: 'pause_campaign' | 'resume_campaign' | 'pause_ad_set' | 'resume_ad_set' | 'pause_ad' | 'resume_ad' | 'adjust_budget';
+  type:
+    | 'pause_campaign'
+    | 'resume_campaign'
+    | 'pause_ad_set'
+    | 'resume_ad_set'
+    | 'pause_ad'
+    | 'resume_ad'
+    | 'adjust_budget';
   id: string;
   name: string;
   budget?: number;
@@ -326,7 +323,7 @@ export function buildSlackBlocks(
       elements: [
         {
           type: 'mrkdwn',
-          text: '_Click a button to execute the action. You\'ll be asked to confirm._',
+          text: "_Click a button to execute the action. You'll be asked to confirm._",
         },
       ],
     });

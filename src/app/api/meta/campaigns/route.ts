@@ -17,15 +17,8 @@ export async function GET(request: NextRequest) {
       try {
         // Fetch insights AND optimization mapping in parallel
         const [bulkInsights, optimizationMap] = await Promise.all([
-          getCampaignLevelInsights(
-            session.ad_account_id,
-            session.meta_access_token,
-            datePreset
-          ),
-          getCampaignOptimizationMap(
-            session.ad_account_id,
-            session.meta_access_token
-          ),
+          getCampaignLevelInsights(session.ad_account_id, session.meta_access_token, datePreset),
+          getCampaignOptimizationMap(session.ad_account_id, session.meta_access_token),
         ]);
 
         // Build a map of campaign_id -> insights row
@@ -45,7 +38,10 @@ export async function GET(request: NextRequest) {
       } catch (insightsError: unknown) {
         const msg = insightsError instanceof Error ? insightsError.message : 'Unknown';
         console.error('Bulk campaign insights error:', msg);
-        const campaignsNoInsights = campaigns.map((c: { id: string }) => ({ ...c, insights: null }));
+        const campaignsNoInsights = campaigns.map((c: { id: string }) => ({
+          ...c,
+          insights: null,
+        }));
         return NextResponse.json({ data: campaignsNoInsights });
       }
     }

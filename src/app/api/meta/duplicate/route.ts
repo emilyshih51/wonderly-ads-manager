@@ -13,11 +13,25 @@ export async function POST(request: NextRequest) {
     let result;
 
     if (type === 'campaign') {
-      result = await duplicateCampaign(id, session.ad_account_id, session.meta_access_token, newName);
+      result = await duplicateCampaign(
+        id,
+        session.ad_account_id,
+        session.meta_access_token,
+        newName
+      );
     } else if (type === 'adset') {
-      result = await duplicateAdSet(id, session.ad_account_id, session.meta_access_token, newName, targetCampaignId);
+      result = await duplicateAdSet(
+        id,
+        session.ad_account_id,
+        session.meta_access_token,
+        newName,
+        targetCampaignId
+      );
     } else {
-      return NextResponse.json({ error: 'Invalid type. Must be "campaign" or "adset".' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid type. Must be "campaign" or "adset".' },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json(result);

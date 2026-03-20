@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { verifySlackSignature, postSlackMessage, buildSlackBlocks, parseActions, stripActions, getThreadMessages } from '@/lib/slack';
-import { SYSTEM_PROMPT } from '../../chat/route';
+import {
+  verifySlackSignature,
+  postSlackMessage,
+  buildSlackBlocks,
+  parseActions,
+  stripActions,
+  getThreadMessages,
+} from '@/lib/slack';
+import { SYSTEM_PROMPT } from '@/app/api/chat/route';
 
 // Allow up to 60 seconds for this function (Claude + Meta API calls take time)
 export const maxDuration = 60;
@@ -19,7 +26,7 @@ import {
   getCampaigns,
   getAdAccount,
 } from '@/lib/meta-api';
-import { generateMockChatData } from '../../chat/data/mock';
+import { generateMockChatData } from '@/app/api/chat/data/mock';
 
 /**
  * POST /api/slack/events
@@ -89,7 +96,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    console.log('[Slack Events] Received app_mention:', { channel: event.channel, user: event.user, text: event.text });
+    console.log('[Slack Events] Received app_mention:', {
+      channel: event.channel,
+      user: event.user,
+      text: event.text,
+    });
 
     // Use after() to process in the background — keeps the serverless function alive
     // while returning 200 to Slack immediately (avoids 3-second timeout)
@@ -111,7 +122,6 @@ export async function POST(request: NextRequest) {
 async function processAppMention(event: any) {
   const channelId = event.channel;
   const threadTs = event.thread_ts || event.ts;
-  const userId = event.user;
 
   // Extract the actual question (remove @bot mention)
   let question = event.text.replace(/<@.+?>/g, '').trim();
@@ -125,7 +135,10 @@ async function processAppMention(event: any) {
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
     // Support multiple accounts: META_AD_ACCOUNT_IDS (comma-separated) or single META_AD_ACCOUNT_ID
     const accountIdsRaw = process.env.META_AD_ACCOUNT_IDS || process.env.META_AD_ACCOUNT_ID || '';
-    const accountIds = accountIdsRaw.split(',').map((id) => id.trim().replace(/^act_/, '')).filter(Boolean);
+    const accountIds = accountIdsRaw
+      .split(',')
+      .map((id) => id.trim().replace(/^act_/, ''))
+      .filter(Boolean);
 
     if (!metaSystemToken || accountIds.length === 0) {
       console.warn('[Slack Events] Missing META_SYSTEM_ACCESS_TOKEN or META_AD_ACCOUNT_ID(S)');
@@ -204,11 +217,15 @@ async function processAppMention(event: any) {
 
     // Post as a threaded reply to the original message
     await postSlackMessage(channelId, cleanText, blocks, threadTs);
-
   } catch (error) {
     console.error('[Slack Events] Error processing mention:', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    await postSlackMessage(channelId, `Sorry, I encountered an error: ${errorMsg}`, undefined, threadTs);
+    await postSlackMessage(
+      channelId,
+      `Sorry, I encountered an error: ${errorMsg}`,
+      undefined,
+      threadTs
+    );
   }
 }
 
@@ -258,9 +275,8 @@ async function fetchAdContextData(adAccountId: string, accessToken: string) {
       return [];
     };
 
-    const optimizationMap = results[13].status === 'fulfilled'
-      ? results[13].value as Record<string, string>
-      : {};
+    const optimizationMap =
+      results[13].status === 'fulfilled' ? (results[13].value as Record<string, string>) : {};
 
     const accountInfo = results[18].status === 'fulfilled' ? results[18].value : null;
 
@@ -319,15 +335,16 @@ function getResultsFromRow(row: any, optimizationMap?: Record<string, string>): 
 
   // Only use generic fallback for campaigns NOT in the optimization map
   // Exclude engagement-only actions (link_click, page_engagement, etc.) to match dashboard
-  const conversion = row.actions.find((a: any) =>
-    (a.action_type.startsWith('offsite_conversion.') ||
-    a.action_type.startsWith('onsite_conversion.') ||
-    a.action_type === 'lead' ||
-    a.action_type === 'complete_registration') &&
-    // Exclude engagement actions that aren't true conversions
-    !a.action_type.includes('post_engagement') &&
-    !a.action_type.includes('page_engagement') &&
-    !a.action_type.includes('link_click')
+  const conversion = row.actions.find(
+    (a: any) =>
+      (a.action_type.startsWith('offsite_conversion.') ||
+        a.action_type.startsWith('onsite_conversion.') ||
+        a.action_type === 'lead' ||
+        a.action_type === 'complete_registration') &&
+      // Exclude engagement actions that aren't true conversions
+      !a.action_type.includes('post_engagement') &&
+      !a.action_type.includes('page_engagement') &&
+      !a.action_type.includes('link_click')
   );
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }
@@ -347,9 +364,21 @@ function formatContextForClaude(data: any): string {
 
   // Tell Claude what time it is so it knows today's data is partial
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' });
-  const dayStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles' });
-  sections.push(`CURRENT TIME: ${timeStr} PT on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`);
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/Los_Angeles',
+  });
+  const dayStr = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  });
+  sections.push(
+    `CURRENT TIME: ${timeStr} PT on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
+  );
 
   // Account totals — compute results by summing campaign-level results (using optimization map)
   // This matches the dashboard's methodology instead of picking a random action_type at account level
@@ -357,21 +386,29 @@ function formatContextForClaude(data: any): string {
   const yesterdayAcct = data.yesterday.account?.[0];
 
   const todayCampaignResults = (data.today.campaigns || []).reduce(
-    (sum: number, c: any) => sum + getResultsFromRow(c, optMap), 0
+    (sum: number, c: any) => sum + getResultsFromRow(c, optMap),
+    0
   );
   const yesterdayCampaignResults = (data.yesterday.campaigns || []).reduce(
-    (sum: number, c: any) => sum + getResultsFromRow(c, optMap), 0
+    (sum: number, c: any) => sum + getResultsFromRow(c, optMap),
+    0
   );
 
   if (todayAcct) {
     const spend = parseFloat(todayAcct.spend);
-    const costPerResult = todayCampaignResults > 0 ? (spend / todayCampaignResults).toFixed(2) : 'N/A';
-    sections.push(`ACCOUNT TODAY: Spend $${spend.toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${todayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`);
+    const costPerResult =
+      todayCampaignResults > 0 ? (spend / todayCampaignResults).toFixed(2) : 'N/A';
+    sections.push(
+      `ACCOUNT TODAY: Spend $${spend.toFixed(2)}, Impressions ${todayAcct.impressions || 0}, Clicks ${todayAcct.clicks || 0}, CTR ${(parseFloat(todayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(todayAcct.cpc) || 0).toFixed(2)}, Results ${todayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(todayAcct.cpm) || 0).toFixed(2)}`
+    );
   }
   if (yesterdayAcct) {
     const spend = parseFloat(yesterdayAcct.spend);
-    const costPerResult = yesterdayCampaignResults > 0 ? (spend / yesterdayCampaignResults).toFixed(2) : 'N/A';
-    sections.push(`ACCOUNT YESTERDAY: Spend $${spend.toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${yesterdayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`);
+    const costPerResult =
+      yesterdayCampaignResults > 0 ? (spend / yesterdayCampaignResults).toFixed(2) : 'N/A';
+    sections.push(
+      `ACCOUNT YESTERDAY: Spend $${spend.toFixed(2)}, Impressions ${yesterdayAcct.impressions || 0}, Clicks ${yesterdayAcct.clicks || 0}, CTR ${(parseFloat(yesterdayAcct.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(yesterdayAcct.cpc) || 0).toFixed(2)}, Results ${yesterdayCampaignResults}, Cost/Result $${costPerResult}, CPM $${(parseFloat(yesterdayAcct.cpm) || 0).toFixed(2)}`
+    );
   }
 
   // Campaign breakdown — today vs yesterday
@@ -383,7 +420,7 @@ function formatContextForClaude(data: any): string {
 
   // Build a map of campaign_id -> daily_budget from campaign objects
   const budgetMap: Record<string, string> = {};
-  for (const c of (data.campaignObjects || [])) {
+  for (const c of data.campaignObjects || []) {
     if (c.daily_budget) budgetMap[c.id] = `$${(parseInt(c.daily_budget) / 100).toFixed(0)}`;
   }
 
@@ -461,7 +498,9 @@ function formatContextForClaude(data: any): string {
     sections.push('\n--- DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ---');
     for (const row of data.history.accountDaily) {
       const results = getResultsFromRow(row);
-      sections.push(`${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(row.cpc) || 0).toFixed(2)}`);
+      sections.push(
+        `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%, CPC $${(parseFloat(row.cpc) || 0).toFixed(2)}`
+      );
     }
   }
 
@@ -469,7 +508,9 @@ function formatContextForClaude(data: any): string {
   if (data.breakdowns?.ageGender?.length > 0) {
     sections.push('\n--- AUDIENCE BREAKDOWN (TODAY) ---');
     for (const row of data.breakdowns.ageGender) {
-      sections.push(`${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%`);
+      sections.push(
+        `${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${(parseFloat(row.ctr) || 0).toFixed(2)}%`
+      );
     }
   }
 

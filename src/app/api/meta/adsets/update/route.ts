@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
     const { daily_budget, previous_budget } = body;
 
     if (!entityId) {
-      return NextResponse.json({ error: 'Entity ID is required (adset_id, campaign_id, or entity_id)' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Entity ID is required (adset_id, campaign_id, or entity_id)' },
+        { status: 400 }
+      );
     }
 
     const updateBody: any = {};
@@ -43,7 +46,8 @@ export async function POST(request: NextRequest) {
       let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newBudgetDisplay}/day`;
       if (previous_budget) {
         const prevDisplay = `$${parseFloat(previous_budget).toFixed(2)}`;
-        const direction = parseFloat(daily_budget) > parseFloat(previous_budget) ? 'raised' : 'lowered';
+        const direction =
+          parseFloat(daily_budget) > parseFloat(previous_budget) ? 'raised' : 'lowered';
         text = `💰 *[Wonderly]* ${entityName} ${direction} budget from ${prevDisplay} to ${newBudgetDisplay}/day`;
       }
       try {

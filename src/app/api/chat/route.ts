@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
           headers: {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
+            Connection: 'keep-alive',
           },
         });
       } catch (apiError) {
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
           headers: {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
+            Connection: 'keep-alive',
           },
         });
       }
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
       },
     });
   } catch (error) {
@@ -207,7 +207,7 @@ function generateBuiltInAnalysis(question: string, context: string): string {
   const q = question.toLowerCase();
 
   if (!context || context.includes('No account data')) {
-    return '**No data available.** Please make sure you\'re logged in to your Meta account and data has loaded. Click the refresh button and try again.';
+    return "**No data available.** Please make sure you're logged in to your Meta account and data has loaded. Click the refresh button and try again.";
   }
 
   // Parse account overview
@@ -252,9 +252,20 @@ function generateBuiltInAnalysis(question: string, context: string): string {
     const spendChange = line.match(/Spend ([+-][∞\d.]+%)/)?.[1] || '0%';
 
     return {
-      name, todaySpend, todayResults, todayClicks, todayCTR, todayCPC, todayCostPerResult,
-      yesterdaySpend, yesterdayResults, yesterdayClicks, yesterdayCTR, yesterdayCostPerResult,
-      spendChange, resultsChange,
+      name,
+      todaySpend,
+      todayResults,
+      todayClicks,
+      todayCTR,
+      todayCPC,
+      todayCostPerResult,
+      yesterdaySpend,
+      yesterdayResults,
+      yesterdayClicks,
+      yesterdayCTR,
+      yesterdayCostPerResult,
+      spendChange,
+      resultsChange,
     };
   });
 
@@ -263,7 +274,15 @@ function generateBuiltInAnalysis(question: string, context: string): string {
   const totalTodaySpend = campaigns.reduce((s, c) => s + c.todaySpend, 0);
 
   // Why are conversions/leads low
-  if (q.includes('conversion') || q.includes('lead') || q.includes('result') || q.includes('low') || q.includes('drop') || q.includes('worse') || q.includes('bad')) {
+  if (
+    q.includes('conversion') ||
+    q.includes('lead') ||
+    q.includes('result') ||
+    q.includes('low') ||
+    q.includes('drop') ||
+    q.includes('worse') ||
+    q.includes('bad')
+  ) {
     let reply = `**Conversion Diagnosis: Today vs Yesterday**\n\n`;
 
     if (totalTodayResults === 0 && totalTodaySpend === 0) {
@@ -284,7 +303,7 @@ function generateBuiltInAnalysis(question: string, context: string): string {
     // Find biggest drops
     const droppedCampaigns = campaigns
       .filter((c) => c.yesterdayResults > 0 && c.todayResults < c.yesterdayResults)
-      .sort((a, b) => (b.yesterdayResults - b.todayResults) - (a.yesterdayResults - a.todayResults));
+      .sort((a, b) => b.yesterdayResults - b.todayResults - (a.yesterdayResults - a.todayResults));
 
     if (droppedCampaigns.length > 0) {
       reply += `**Campaigns with declining results:**\n`;
@@ -314,7 +333,14 @@ function generateBuiltInAnalysis(question: string, context: string): string {
   }
 
   // Overview / performance
-  if (q.includes('overview') || q.includes('performance') || q.includes('how') || q.includes('summary') || q.includes('health') || q.includes('check')) {
+  if (
+    q.includes('overview') ||
+    q.includes('performance') ||
+    q.includes('how') ||
+    q.includes('summary') ||
+    q.includes('health') ||
+    q.includes('check')
+  ) {
     let reply = `**Performance Overview: Today vs Yesterday**\n\n`;
 
     if (todayLine) reply += `${todayLine}\n`;
@@ -324,7 +350,12 @@ function generateBuiltInAnalysis(question: string, context: string): string {
     if (campaigns.length > 0) {
       reply += `**Campaign Breakdown:**\n`;
       campaigns.forEach((c) => {
-        const resultEmoji = c.todayResults > c.yesterdayResults ? '📈' : c.todayResults < c.yesterdayResults ? '📉' : '➡️';
+        const resultEmoji =
+          c.todayResults > c.yesterdayResults
+            ? '📈'
+            : c.todayResults < c.yesterdayResults
+              ? '📉'
+              : '➡️';
         reply += `- ${resultEmoji} **${c.name}**: $${c.todaySpend.toFixed(2)} spent, ${c.todayResults} results (yesterday: ${c.yesterdayResults})\n`;
       });
     }
@@ -333,7 +364,13 @@ function generateBuiltInAnalysis(question: string, context: string): string {
   }
 
   // Cost / budget
-  if (q.includes('cost') || q.includes('budget') || q.includes('spend') || q.includes('waste') || q.includes('efficient')) {
+  if (
+    q.includes('cost') ||
+    q.includes('budget') ||
+    q.includes('spend') ||
+    q.includes('waste') ||
+    q.includes('efficient')
+  ) {
     let reply = `**Cost Analysis**\n\n`;
     reply += `Total spend today: **$${totalTodaySpend.toFixed(2)}**\n\n`;
 
@@ -347,11 +384,13 @@ function generateBuiltInAnalysis(question: string, context: string): string {
 
   // Scale / best
   if (q.includes('scale') || q.includes('best') || q.includes('top') || q.includes('winner')) {
-    const withResults = campaigns.filter((c) => c.todayResults > 0).sort((a, b) => {
-      const aCPR = parseFloat(a.todayCostPerResult) || Infinity;
-      const bCPR = parseFloat(b.todayCostPerResult) || Infinity;
-      return aCPR - bCPR;
-    });
+    const withResults = campaigns
+      .filter((c) => c.todayResults > 0)
+      .sort((a, b) => {
+        const aCPR = parseFloat(a.todayCostPerResult) || Infinity;
+        const bCPR = parseFloat(b.todayCostPerResult) || Infinity;
+        return aCPR - bCPR;
+      });
 
     let reply = `**Top Performers (by Cost per Result)**\n\n`;
     if (withResults.length === 0) {

@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
 
     if (!data.ok) {
       console.error('Slack OAuth error:', data.error);
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_auth_failed`);
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_auth_failed`
+      );
     }
 
     // Store Slack connection in a cookie (in production, use a database)
@@ -43,7 +45,9 @@ export async function GET(request: NextRequest) {
     };
 
     // Store as cookie for now
-    const cookieResponse = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?slack=connected`);
+    const cookieResponse = NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings?slack=connected`
+    );
     cookieResponse.cookies.set('wonderly_slack', JSON.stringify(slackConnection), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -55,6 +59,8 @@ export async function GET(request: NextRequest) {
     return cookieResponse;
   } catch (error) {
     console.error('Slack callback error:', error);
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_callback_failed`);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_callback_failed`
+    );
   }
 }

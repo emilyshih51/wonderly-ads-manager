@@ -2,18 +2,18 @@ import { create } from 'zustand';
 
 interface AppState {
   datePreset: string;
-  setDatePreset: (preset: string) => void;
   isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
   adAccountId: string;
+  setDatePreset: (preset: string) => void;
+  setIsLoading: (loading: boolean) => void;
   setAdAccountId: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   datePreset: 'today',
-  setDatePreset: (preset) => set({ datePreset: preset }),
   isLoading: false,
-  setIsLoading: (loading) => set({ isLoading: loading }),
   adAccountId: '',
+  setDatePreset: (preset) => set({ datePreset: preset }),
+  setIsLoading: (loading) => set({ isLoading: loading }),
   setAdAccountId: (id) => set({ adAccountId: id }),
 }));

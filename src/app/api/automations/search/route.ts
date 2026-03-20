@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { metaApi, getAdLevelInsights, getCampaignOptimizationMap } from '@/lib/meta-api';
+import { metaApi, getCampaignOptimizationMap } from '@/lib/meta-api';
 
 /**
  * GET /api/automations/search
@@ -16,7 +16,8 @@ import { metaApi, getAdLevelInsights, getCampaignOptimizationMap } from '@/lib/m
 export async function GET(request: NextRequest) {
   const session = await getSession();
   const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;
-  const rawAdAccountId = session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
+  const rawAdAccountId =
+    session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
 
   if (!accessToken || !rawAdAccountId) {
     return NextResponse.json({ error: 'No Meta credentials' }, { status: 401 });
@@ -33,7 +34,9 @@ export async function GET(request: NextRequest) {
         params: {
           fields: 'id,name,status,objective',
           limit: '100',
-          filtering: JSON.stringify([{ field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] }]),
+          filtering: JSON.stringify([
+            { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+          ]),
         },
       });
 
@@ -53,15 +56,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === 'adsets') {
-      const endpoint = campaignId
-        ? `/${campaignId}/adsets`
-        : `/act_${rawAdAccountId}/adsets`;
+      const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${rawAdAccountId}/adsets`;
 
       const data = await metaApi(endpoint, accessToken, {
         params: {
           fields: 'id,name,status,campaign_id,campaign{name}',
           limit: '100',
-          filtering: JSON.stringify([{ field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] }]),
+          filtering: JSON.stringify([
+            { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+          ]),
         },
       });
 
@@ -85,18 +88,20 @@ export async function GET(request: NextRequest) {
       // Preview matching ads based on conditions
       const conditionsJson = searchParams.get('conditions');
       const datePreset = searchParams.get('date_preset') || 'today';
-      const conditions: Array<{ metric: string; operator: string; threshold: string }> = conditionsJson
-        ? JSON.parse(conditionsJson)
-        : [];
+      const conditions: Array<{ metric: string; operator: string; threshold: string }> =
+        conditionsJson ? JSON.parse(conditionsJson) : [];
 
       // Fetch ad-level insights — only for ACTIVE ads (skip paused/off ads)
       let insightsData: any[] = [];
-      const activeFilter = JSON.stringify([{ field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] }]);
+      const activeFilter = JSON.stringify([
+        { field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] },
+      ]);
 
       if (campaignId) {
         const response = await metaApi(`/${campaignId}/insights`, accessToken, {
           params: {
-            fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
+            fields:
+              'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
             date_preset: datePreset,
             level: 'ad',
             limit: '500',
@@ -107,7 +112,8 @@ export async function GET(request: NextRequest) {
       } else {
         const response = await metaApi(`/act_${rawAdAccountId}/insights`, accessToken, {
           params: {
-            fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
+            fields:
+              'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
             date_preset: datePreset,
             level: 'ad',
             limit: '500',
@@ -121,7 +127,9 @@ export async function GET(request: NextRequest) {
       let optimizationMap: Record<string, string> = {};
       try {
         optimizationMap = await getCampaignOptimizationMap(rawAdAccountId, accessToken);
-      } catch { /* continue without */ }
+      } catch {
+        /* continue without */
+      }
 
       // Evaluate conditions
       const matchingAds = insightsData
@@ -185,32 +193,43 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function getResultCount(row: any, campaignId: string, optimizationMap: Record<string, string>): number {
+function getResultCount(
+  row: any,
+  campaignId: string,
+  optimizationMap: Record<string, string>
+): number {
   if (!row.actions || !Array.isArray(row.actions)) return 0;
   const resultType = campaignId && optimizationMap[campaignId];
   if (resultType) {
     const found = row.actions.find((a: any) => a.action_type === resultType);
     return found ? parseInt(found.value) || 0 : 0;
   }
-  const conversion = row.actions.find((a: any) =>
-    (a.action_type.startsWith('offsite_conversion.') ||
-     a.action_type.startsWith('onsite_conversion.') ||
-     a.action_type === 'lead' ||
-     a.action_type === 'complete_registration') &&
-    !a.action_type.includes('post_engagement') &&
-    !a.action_type.includes('page_engagement') &&
-    !a.action_type.includes('link_click')
+  const conversion = row.actions.find(
+    (a: any) =>
+      (a.action_type.startsWith('offsite_conversion.') ||
+        a.action_type.startsWith('onsite_conversion.') ||
+        a.action_type === 'lead' ||
+        a.action_type === 'complete_registration') &&
+      !a.action_type.includes('post_engagement') &&
+      !a.action_type.includes('page_engagement') &&
+      !a.action_type.includes('link_click')
   );
   return conversion ? parseInt(conversion.value) || 0 : 0;
 }
 
 function evaluateCondition(actual: number, operator: string, threshold: number): boolean {
   switch (operator) {
-    case '>': return actual > threshold;
-    case '<': return actual < threshold;
-    case '>=': return actual >= threshold;
-    case '<=': return actual <= threshold;
-    case '==': return actual === threshold;
-    default: return false;
+    case '>':
+      return actual > threshold;
+    case '<':
+      return actual < threshold;
+    case '>=':
+      return actual >= threshold;
+    case '<=':
+      return actual <= threshold;
+    case '==':
+      return actual === threshold;
+    default:
+      return false;
   }
 }

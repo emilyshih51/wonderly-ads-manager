@@ -76,7 +76,9 @@ export async function getAllRules(): Promise<StoredRule[]> {
       if (cookie.name.startsWith(RULE_PREFIX)) {
         try {
           rules.push(JSON.parse(cookie.value));
-        } catch { /* skip malformed */ }
+        } catch {
+          /* skip malformed */
+        }
       }
     }
     if (rules.length > 0) {
@@ -121,7 +123,9 @@ export async function getRule(ruleId: string): Promise<StoredRule | null> {
     const cookieStore = await cookies();
     const cookie = cookieStore.get(`${RULE_PREFIX}${ruleId}`);
     if (cookie) return JSON.parse(cookie.value);
-  } catch { /* no cookies in cron */ }
+  } catch {
+    /* no cookies in cron */
+  }
 
   // Fall back to Redis
   const redis = await getRedis();

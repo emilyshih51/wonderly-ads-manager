@@ -57,9 +57,14 @@ export async function POST(request: NextRequest) {
         data = JSON.parse(responseText);
       } catch {
         console.error('[upload_video] Non-JSON response:', responseText.substring(0, 500));
-        return NextResponse.json({
-          error: { message: `Video upload failed: ${response.status} ${response.statusText}` }
-        }, { status: 500 });
+        return NextResponse.json(
+          {
+            error: {
+              message: `Video upload failed: ${response.status} ${response.statusText}`,
+            },
+          },
+          { status: 500 }
+        );
       }
 
       if (data.error) {
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
       const callToAction = formData.get('call_to_action') as string;
       const imageHash = formData.get('image_hash') as string;
       const videoId = formData.get('video_id') as string;
-      const status = formData.get('status') as string || 'PAUSED';
+      const status = (formData.get('status') as string) || 'PAUSED';
 
       // Build the creative based on whether it's an image or video ad
       const objectStorySpec: any = {
@@ -130,10 +135,14 @@ export async function POST(request: NextRequest) {
 
       console.log('[create_ad] Creative body:', JSON.stringify(creativeBody, null, 2));
 
-      const creative = await metaApi(`/act_${session.ad_account_id}/adcreatives`, session.meta_access_token, {
-        method: 'POST',
-        body: creativeBody,
-      });
+      const creative = await metaApi(
+        `/act_${session.ad_account_id}/adcreatives`,
+        session.meta_access_token,
+        {
+          method: 'POST',
+          body: creativeBody,
+        }
+      );
 
       // Create ad
       const ad = await metaApi(`/act_${session.ad_account_id}/ads`, session.meta_access_token, {
@@ -155,14 +164,17 @@ export async function POST(request: NextRequest) {
     const metaError = error?.metaError;
     const message = metaError?.message || error?.message || 'Upload failed';
     const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
-    return NextResponse.json({
-      error: {
-        message,
-        detail: errorDetail,
-        meta_error_code: metaError?.code,
-        meta_error_subcode: metaError?.error_subcode,
-        fbtrace_id: metaError?.fbtrace_id,
-      }
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: {
+          message,
+          detail: errorDetail,
+          meta_error_code: metaError?.code,
+          meta_error_subcode: metaError?.error_subcode,
+          fbtrace_id: metaError?.fbtrace_id,
+        },
+      },
+      { status: 500 }
+    );
   }
 }

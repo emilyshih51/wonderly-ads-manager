@@ -3,6 +3,11 @@ import { UserSession } from '@/types';
 
 const SESSION_COOKIE = 'wonderly_session';
 
+/**
+ * Read and deserialize the session cookie.
+ *
+ * @returns The authenticated {@link UserSession}, or `null` if no valid session exists.
+ */
 export async function getSession(): Promise<UserSession | null> {
   const cookieStore = await cookies();
   const session = cookieStore.get(SESSION_COOKIE);
@@ -16,6 +21,13 @@ export async function getSession(): Promise<UserSession | null> {
   }
 }
 
+/**
+ * Serialize and write a session cookie.
+ *
+ * Cookie is set `httpOnly`, `secure` in production, `sameSite: lax`, and expires in 30 days.
+ *
+ * @param session - The authenticated user data to persist.
+ */
 export async function setSession(session: UserSession) {
   const cookieStore = await cookies();
 
@@ -28,6 +40,9 @@ export async function setSession(session: UserSession) {
   });
 }
 
+/**
+ * Delete the session cookie, effectively logging the user out.
+ */
 export async function clearSession() {
   const cookieStore = await cookies();
 

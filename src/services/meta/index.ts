@@ -13,10 +13,26 @@
 
 import {
   META_BASE_URL,
+  META_API_VERSION,
+  META_OAUTH_URL,
   INSIGHT_FIELDS,
   INSIGHT_DETAIL_FIELDS,
   CUSTOM_EVENT_TO_ACTION_TYPE,
+  INSIGHT_FIELDS_AD,
+  INSIGHT_FIELDS_ADSET,
+  INSIGHT_FIELDS_CAMPAIGN,
+  ACTIVE_FILTER,
 } from './constants';
+
+export {
+  META_API_VERSION,
+  META_BASE_URL,
+  META_OAUTH_URL,
+  INSIGHT_FIELDS_AD,
+  INSIGHT_FIELDS_ADSET,
+  INSIGHT_FIELDS_CAMPAIGN,
+  ACTIVE_FILTER,
+};
 import type {
   MetaRequestOptions,
   MetaApiError,
@@ -25,6 +41,7 @@ import type {
   CreateAdParams,
   IMetaService,
 } from './types';
+import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightsRow } from '@/types';
 
 export type {
   MetaRequestOptions,
@@ -89,13 +106,13 @@ export class MetaService implements IMetaService {
    *
    * @returns Paginated list of campaigns with status, budget, and dates
    */
-  async getCampaigns(): Promise<{ data: unknown[] }> {
+  async getCampaigns(): Promise<{ data: MetaCampaign[] }> {
     return this.request(`/act_${this.adAccountId}/campaigns`, {
       params: {
         fields: 'id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: unknown[] }>;
+    }) as Promise<{ data: MetaCampaign[] }>;
   }
 
   /**
@@ -186,7 +203,7 @@ export class MetaService implements IMetaService {
    *
    * @param campaignId - When provided, only returns ad sets for this campaign
    */
-  async getAdSets(campaignId?: string): Promise<{ data: unknown[] }> {
+  async getAdSets(campaignId?: string): Promise<{ data: MetaAdSet[] }> {
     const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${this.adAccountId}/adsets`;
 
     return this.request(endpoint, {
@@ -195,7 +212,7 @@ export class MetaService implements IMetaService {
           'id,name,campaign_id,campaign{name},status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: unknown[] }>;
+    }) as Promise<{ data: MetaAdSet[] }>;
   }
 
   /**
@@ -239,7 +256,7 @@ export class MetaService implements IMetaService {
    *
    * @param adSetId - When provided, only returns ads for this ad set
    */
-  async getAds(adSetId?: string): Promise<{ data: unknown[] }> {
+  async getAds(adSetId?: string): Promise<{ data: MetaAd[] }> {
     const endpoint = adSetId ? `/${adSetId}/ads` : `/act_${this.adAccountId}/ads`;
 
     return this.request(endpoint, {
@@ -248,7 +265,7 @@ export class MetaService implements IMetaService {
           'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type},created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: unknown[] }>;
+    }) as Promise<{ data: MetaAd[] }>;
   }
 
   /**
@@ -365,8 +382,113 @@ export class MetaService implements IMetaService {
    * @param objectId - Meta object ID (campaign, ad set, or ad)
    * @param status - `'ACTIVE'` or `'PAUSED'`
    */
-  async updateStatus(objectId: string, status: 'ACTIVE' | 'PAUSED'): Promise<unknown> {
-    return this.request(`/${objectId}`, { method: 'POST', body: { status } });
+  async updateStatus(objectId: string, status: 'ACTIVE' | 'PAUSED'): Promise<void> {
+    await this.request(`/${objectId}`, { method: 'POST', body: { status } });
+  }
+
+  /**
+   * Update the daily budget for a campaign or ad set.
+   *
+   * Meta represents budgets in cents (integer, account currency subunit).
+   * Passing `100_00` sets a $100.00 daily budget for USD accounts.
+   *
+   * @param objectId - Campaign or ad set ID
+   * @param dailyBudgetCents - Daily budget in the account currency's smallest unit (e.g. cents for USD)
+   */
+  async updateBudget(objectId: string, dailyBudgetCents: number): Promise<void> {
+    await this.request(`/${objectId}`, {
+      method: 'POST',
+      body: { daily_budget: dailyBudgetCents.toString() },
+    });
+  }
+
+  /**
+   * Execute a single automation action on a Meta object.
+   *
+   * Unified entry point for pause/resume/budget actions — used by both the
+   * chat actions endpoint and the Slack interactions handler.
+   *
+   * @param type - Action type: `'pause'`, `'resume'`, or `'update_budget'`
+   * @param objectId - Campaign, ad set, or ad ID
+   * @param dailyBudgetCents - Required when `type` is `'update_budget'`; daily budget in cents
+   * @throws When `type` is `'update_budget'` and `dailyBudgetCents` is not provided
+   */
+  async executeAction(
+    type: 'pause' | 'resume' | 'update_budget',
+    objectId: string,
+    dailyBudgetCents?: number
+  ): Promise<void> {
+    switch (type) {
+      case 'pause':
+        await this.updateStatus(objectId, 'PAUSED');
+        break;
+      case 'resume':
+        await this.updateStatus(objectId, 'ACTIVE');
+        break;
+
+      case 'update_budget': {
+        if (dailyBudgetCents === undefined || dailyBudgetCents <= 0) {
+          throw new Error('dailyBudgetCents must be a positive number for update_budget action');
+        }
+
+        await this.updateBudget(objectId, dailyBudgetCents);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Fetch filtered insights for active entities at a given level.
+   *
+   * Returns only entities with an `ACTIVE` effective status — safe to use in the
+   * automation engine to avoid false pauses from stale paused-entity data.
+   *
+   * @param level - Entity level: `'ad'`, `'adset'`, or `'campaign'`
+   * @param options.datePreset - Date range preset (default: `'last_7d'`)
+   * @param options.campaignId - When provided, scopes the query to a single campaign
+   * @returns Array of insight rows for all active entities at the requested level
+   */
+  async getFilteredInsights(
+    level: 'ad' | 'adset' | 'campaign',
+    options: { datePreset?: string; campaignId?: string } = {}
+  ): Promise<MetaInsightsRow[]> {
+    const { datePreset = 'last_7d', campaignId } = options;
+
+    const fieldsByLevel: Record<string, string> = {
+      ad: INSIGHT_FIELDS_AD,
+      adset: INSIGHT_FIELDS_ADSET,
+      campaign: INSIGHT_FIELDS_CAMPAIGN,
+    };
+
+    const limitByLevel: Record<string, string> = {
+      ad: '500',
+      adset: '200',
+      campaign: '100',
+    };
+
+    const endpoint =
+      level === 'ad' && campaignId
+        ? `/${campaignId}/insights`
+        : `/act_${this.adAccountId}/insights`;
+
+    const response = await this.request(endpoint, {
+      params: {
+        fields: fieldsByLevel[level],
+        date_preset: datePreset,
+        level,
+        limit: limitByLevel[level],
+        filtering: ACTIVE_FILTER[level],
+      },
+    });
+
+    let rows = ((response as { data?: MetaInsightsRow[] }).data || []) as MetaInsightsRow[];
+
+    // For adset/campaign level, campaignId filter must be applied client-side
+    if ((level === 'adset' || level === 'campaign') && campaignId) {
+      rows = rows.filter((row) => row.campaign_id === campaignId);
+    }
+
+    return rows;
   }
 
   /**
@@ -544,5 +666,99 @@ export class MetaService implements IMetaService {
     return this.request(`/act_${this.adAccountId}`, {
       params: { fields: 'id,name,account_status,currency,timezone_name,amount_spent' },
     });
+  }
+
+  // ─── Static OAuth helpers ────────────────────────────────────────────────────
+  // These methods do not require an access token and are used during the OAuth
+  // flow before credentials are available.
+
+  /**
+   * Exchange a Facebook OAuth authorization code for a short-lived access token.
+   *
+   * @param appId - Meta app ID (`META_APP_ID`)
+   * @param appSecret - Meta app secret (`META_APP_SECRET`)
+   * @param code - Authorization code from the OAuth redirect
+   * @param redirectUri - Must match the URI registered in the Facebook app
+   * @returns `{ access_token }` on success, `{ error }` on failure
+   */
+  static async exchangeCodeForToken(
+    appId: string,
+    appSecret: string,
+    code: string,
+    redirectUri: string
+  ): Promise<{ access_token?: string; error?: unknown }> {
+    const params = new URLSearchParams({
+      client_id: appId,
+      client_secret: appSecret,
+      redirect_uri: redirectUri,
+      code,
+    });
+    const response = await fetch(`${META_BASE_URL}/oauth/access_token?${params.toString()}`);
+
+    return response.json() as Promise<{ access_token?: string; error?: unknown }>;
+  }
+
+  /**
+   * Exchange a short-lived Facebook access token for a long-lived one (60 days).
+   *
+   * @param appId - Meta app ID
+   * @param appSecret - Meta app secret
+   * @param shortLivedToken - Short-lived access token to exchange
+   * @returns `{ access_token }` on success
+   */
+  static async exchangeForLongLivedToken(
+    appId: string,
+    appSecret: string,
+    shortLivedToken: string
+  ): Promise<{ access_token?: string }> {
+    const params = new URLSearchParams({
+      grant_type: 'fb_exchange_token',
+      client_id: appId,
+      client_secret: appSecret,
+      fb_exchange_token: shortLivedToken,
+    });
+    const response = await fetch(`${META_BASE_URL}/oauth/access_token?${params.toString()}`);
+
+    return response.json() as Promise<{ access_token?: string }>;
+  }
+
+  /**
+   * Fetch the authenticated user's basic profile (id, name, email).
+   *
+   * @param accessToken - A valid Meta user access token
+   * @returns User profile fields
+   */
+  static async getMe(
+    accessToken: string
+  ): Promise<{ id: string; name?: string; email?: string; error?: unknown }> {
+    const params = new URLSearchParams({ fields: 'id,name,email', access_token: accessToken });
+    const response = await fetch(`${META_BASE_URL}/me?${params.toString()}`);
+
+    return response.json() as Promise<{
+      id: string;
+      name?: string;
+      email?: string;
+      error?: unknown;
+    }>;
+  }
+
+  /**
+   * Fetch ad accounts the authenticated user has access to.
+   *
+   * @param accessToken - A valid Meta user access token
+   * @returns `{ data: [{ id, name, account_status }] }`
+   */
+  static async getMyAdAccounts(
+    accessToken: string
+  ): Promise<{ data?: Array<{ id: string; name: string; account_status: number }> }> {
+    const params = new URLSearchParams({
+      fields: 'id,name,account_status',
+      access_token: accessToken,
+    });
+    const response = await fetch(`${META_BASE_URL}/me/adaccounts?${params.toString()}`);
+
+    return response.json() as Promise<{
+      data?: Array<{ id: string; name: string; account_status: number }>;
+    }>;
   }
 }

@@ -61,12 +61,8 @@ export async function POST(request: NextRequest) {
         }
 
         const wholeBudget = Math.round(action.budget);
-        const budgetCents = (wholeBudget * 100).toString();
 
-        await meta.request(`/${action.id}`, {
-          method: 'POST',
-          body: { daily_budget: budgetCents },
-        });
+        await meta.updateBudget(action.id, wholeBudget * 100);
         result = `✅ Set daily budget of "${action.name || action.id}" to $${wholeBudget.toFixed(2)}`;
         break;
       }

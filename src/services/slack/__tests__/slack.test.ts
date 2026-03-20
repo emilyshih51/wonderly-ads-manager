@@ -187,4 +187,102 @@ describe('SlackService', () => {
       expect(value.thread_ts).toBe('TS');
     });
   });
+
+  describe('sendAutomationNotification()', () => {
+    const baseNotification = {
+      ruleName: 'High CPA Rule',
+      actionType: 'pause' as const,
+      entityType: 'ad',
+      entityId: 'ad-123',
+      entityName: 'Test Ad',
+      adAccountId: '9876',
+      metrics: { spend: 50, results: 5, cost_per_result: 10, clicks: 100, ctr: 0.02 },
+    };
+
+    it('posts a default message with emoji and metrics', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendAutomationNotification('C1', baseNotification);
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { text: string };
+
+      expect(body.text).toContain('High CPA Rule');
+      expect(body.text).toContain('⏸️');
+      expect(body.text).toContain('Paused');
+      expect(body.text).toContain('$50.00');
+      expect(body.text).toContain('Results: 5');
+    });
+
+    it('renders a custom message template with placeholders', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendAutomationNotification('C1', {
+        ...baseNotification,
+        customMessage: '{rule_name} {action} {entity_name} spend={spend}',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { text: string };
+
+      expect(body.text).toContain('High CPA Rule');
+      expect(body.text).toContain('Paused');
+      expect(body.text).toContain('Test Ad');
+      expect(body.text).toContain('spend=$50.00');
+    });
+
+    it('appends duplicate ad link when duplicatedAdId is provided', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendAutomationNotification('C1', {
+        ...baseNotification,
+        duplicatedAdId: 'dup-456',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { text: string };
+
+      expect(body.text).toContain('Duplicated to winners ad set');
+      expect(body.text).toContain('dup-456');
+    });
+  });
+
+  describe('sendBudgetNotification()', () => {
+    it('posts a budget changed message', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendBudgetNotification('C1', {
+        entityName: 'My Ad Set',
+        newBudget: 100,
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { text: string };
+
+      expect(body.text).toContain('My Ad Set');
+      expect(body.text).toContain('$100.00');
+    });
+
+    it('shows raised/lowered direction when previousBudget is provided', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendBudgetNotification('C1', {
+        entityName: 'My Ad Set',
+        newBudget: 150,
+        previousBudget: 100,
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { text: string };
+
+      expect(body.text).toContain('raised');
+      expect(body.text).toContain('$100.00');
+      expect(body.text).toContain('$150.00');
+    });
+  });
 });

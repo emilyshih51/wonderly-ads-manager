@@ -30,6 +30,8 @@ import type {
   SlackBlock,
   ActionBlock,
   ActionBlockType,
+  AutomationNotification,
+  BudgetNotification,
   ISlackService,
 } from './types';
 
@@ -39,6 +41,8 @@ export type {
   SlackBlock,
   ActionBlock,
   ActionBlockType,
+  AutomationNotification,
+  BudgetNotification,
   ISlackService,
 };
 
@@ -256,6 +260,106 @@ export class SlackService implements ISlackService {
   }
 
   /**
+   * Post an automation rule action notification to a Slack channel.
+   *
+   * Builds a rich notification with entity name, metrics snapshot, and a link
+   * to the Meta Ads Manager. Supports custom message templates with `{placeholder}` tokens.
+   *
+   * @param channelId - Slack channel ID to post to
+   * @param notification - Notification payload describing the action and its context
+   * @returns The posted message metadata, or `null` on failure
+   */
+  async sendAutomationNotification(
+    channelId: string,
+    notification: AutomationNotification
+  ): Promise<SlackMessage | null> {
+    const {
+      ruleName,
+      actionType,
+      entityType,
+      entityId,
+      entityName,
+      adAccountId,
+      metrics,
+      customMessage,
+      duplicatedAdId,
+      prefix = '',
+    } = notification;
+
+    const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
+    const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
+    const adManagerLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${filterSet}&selected_ad_ids=${entityId}&nav_source=ads_manager`;
+
+    const actionEmoji = actionType === 'promote' ? '🚀' : actionType === 'activate' ? '▶️' : '⏸️';
+    const actionVerb =
+      actionType === 'promote' ? 'Promoted' : actionType === 'activate' ? 'Activated' : 'Paused';
+
+    const resultDisplay = metrics.results ?? 0;
+    const cpaDisplay =
+      metrics.cost_per_result === 99999 || !isFinite(metrics.cost_per_result)
+        ? 'N/A'
+        : `$${metrics.cost_per_result.toFixed(2)}`;
+
+    let text: string;
+
+    if (customMessage) {
+      text =
+        prefix +
+        customMessage
+          .replace(/\{rule_name\}/g, ruleName)
+          .replace(/\{action\}/g, actionVerb)
+          .replace(/\{entity_type\}/g, entityType)
+          .replace(/\{entity_name\}/g, entityName)
+          .replace(/\{ad_link\}/g, `<${adManagerLink}|${entityName}>`)
+          .replace(/\{spend\}/g, `$${metrics.spend.toFixed(2)}`)
+          .replace(/\{results\}/g, String(resultDisplay))
+          .replace(/\{cpa\}/g, cpaDisplay)
+          .replace(/\{clicks\}/g, String(metrics.clicks ?? 0))
+          .replace(/\{ctr\}/g, `${((metrics.ctr ?? 0) * 100).toFixed(2)}%`);
+    } else {
+      text = `${prefix}${actionEmoji} *${ruleName}*\n`;
+      text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
+      text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
+    }
+
+    if (duplicatedAdId) {
+      const dupEncodedName = encodeURIComponent(`"[\\\"${entityName} [Winner Copy]\\\"]"`);
+      const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
+      const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
+
+      text += `\n📋 Duplicated to winners ad set: <${dupLink}|View new ad>`;
+    }
+
+    return this.postMessage(channelId, text);
+  }
+
+  /**
+   * Post a budget change notification to a Slack channel.
+   *
+   * @param channelId - Slack channel ID to post to
+   * @param notification - Budget notification payload
+   * @returns The posted message metadata, or `null` on failure
+   */
+  async sendBudgetNotification(
+    channelId: string,
+    notification: BudgetNotification
+  ): Promise<SlackMessage | null> {
+    const { entityName, newBudget, previousBudget } = notification;
+    const newDisplay = `$${newBudget.toFixed(2)}`;
+
+    let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newDisplay}/day`;
+
+    if (previousBudget !== undefined) {
+      const prevDisplay = `$${previousBudget.toFixed(2)}`;
+      const direction = newBudget > previousBudget ? 'raised' : 'lowered';
+
+      text = `💰 *[Wonderly]* ${entityName} ${direction} budget from ${prevDisplay} to ${newDisplay}/day`;
+    }
+
+    return this.postMessage(channelId, text);
+  }
+
+  /**
    * Convert markdown text to Slack mrkdwn format.
    *
    * @param text - Markdown-formatted string
@@ -420,5 +524,43 @@ export class SlackService implements ISlackService {
 
   private static getActionStyle(type: ActionBlockType): string {
     return type.startsWith('pause') ? 'danger' : 'primary';
+  }
+
+  // ─── Static OAuth helpers ────────────────────────────────────────────────────
+
+  /**
+   * Exchange a Slack OAuth authorization code for a bot access token.
+   *
+   * @param clientId - Slack app client ID (`SLACK_CLIENT_ID`)
+   * @param clientSecret - Slack app client secret (`SLACK_CLIENT_SECRET`)
+   * @param code - Authorization code from the OAuth redirect
+   * @param redirectUri - Must match the URI registered in the Slack app
+   * @returns The full `oauth.v2.access` response
+   */
+  static async exchangeCodeForToken(
+    clientId: string,
+    clientSecret: string,
+    code: string,
+    redirectUri: string
+  ): Promise<{
+    ok: boolean;
+    error?: string;
+    access_token?: string;
+    bot_user_id?: string;
+    team?: { id: string; name: string };
+    incoming_webhook?: { channel_id: string; channel: string; url: string };
+  }> {
+    const response = await fetch(SLACK_ENDPOINTS.oauthAccess, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+
+    return response.json() as ReturnType<typeof SlackService.exchangeCodeForToken>;
   }
 }

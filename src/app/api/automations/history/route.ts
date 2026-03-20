@@ -1,5 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getSession } from '@/lib/session';
+
+interface HistoryEvent {
+  id: string;
+  rule_name: string;
+  type: string;
+  matched: number;
+  results: Array<{
+    entity_name?: string;
+    action?: string;
+    metrics?: unknown;
+    slack_sent?: boolean;
+    slack_channel?: string;
+    error?: string;
+  }>;
+  timestamp: number;
+}
 
 /**
  * GET /api/automations/history
@@ -9,8 +26,12 @@ import { cookies } from 'next/headers';
  * We keep the last 30 entries.
  */
 export async function GET() {
+  const session = await getSession();
+
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const cookieStore = await cookies();
-  const history: any[] = [];
+  const history: HistoryEvent[] = [];
 
   for (const cookie of cookieStore.getAll()) {
     if (cookie.name.startsWith('wonderly_history_')) {
@@ -35,14 +56,24 @@ export async function GET() {
  * Body: { rule_name, type, matched, results, timestamp? }
  */
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const session = await getSession();
 
-  const event = {
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = (await request.json()) as Partial<{
+    rule_name: string;
+    type: string;
+    matched: number;
+    results: HistoryEvent['results'];
+    timestamp: number;
+  }>;
+
+  const event: HistoryEvent = {
     id: `run_${Date.now()}`,
     rule_name: body.rule_name || 'Unknown',
-    type: body.type || 'test', // 'test' | 'live'
+    type: body.type || 'test',
     matched: body.matched || 0,
-    results: (body.results || []).slice(0, 10).map((r: any) => ({
+    results: (body.results || []).slice(0, 10).map((r) => ({
       entity_name: r.entity_name,
       action: r.action,
       metrics: r.metrics,
@@ -60,7 +91,7 @@ export async function POST(request: NextRequest) {
   response.cookies.set(`wonderly_history_${event.id}`, JSON.stringify(event), {
     path: '/',
     maxAge: 60 * 60 * 24 * 30, // 30 days
-    httpOnly: false,
+    httpOnly: true,
     sameSite: 'lax',
   });
 
@@ -92,6 +123,10 @@ export async function POST(request: NextRequest) {
  * Clear all history.
  */
 export async function DELETE() {
+  const session = await getSession();
+
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const cookieStore = await cookies();
   const response = NextResponse.json({ success: true });
 

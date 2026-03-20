@@ -29,6 +29,7 @@ Open [http://localhost:3000](http://localhost:3000). Set `USE_MOCK_DATA=true` in
 npm run dev          # development server
 npm run build        # production build
 npm run typecheck    # TypeScript check (no emit)
+npm test             # Vitest unit tests
 npm run lint         # ESLint
 npm run lint:fix     # ESLint with auto-fix
 npm run format       # Prettier write
@@ -40,7 +41,7 @@ npm run validate     # typecheck + lint + format:check
 
 Push to `main` → Vercel auto-deploys. No manual steps.
 
-All secrets live in Vercel → Settings → Environment Variables. See `CLAUDE.md` for the full variable list.
+All secrets live in Vercel → Settings → Environment Variables. See [`.env.example`](.env.example) for the full variable list with descriptions.
 
 ## Docs
 

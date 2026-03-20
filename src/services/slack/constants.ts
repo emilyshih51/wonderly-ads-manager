@@ -5,6 +5,7 @@ export const SLACK_ENDPOINTS = {
   updateMessage: `${SLACK_API_BASE}/chat.update`,
   conversationsReplies: `${SLACK_API_BASE}/conversations.replies`,
   authTest: `${SLACK_API_BASE}/auth.test`,
+  oauthAccess: `${SLACK_API_BASE}/oauth.v2.access`,
 } as const;
 
 /** Maximum characters per Slack Block Kit section block */

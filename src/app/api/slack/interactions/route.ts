@@ -5,23 +5,19 @@ import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Slack:Interactions');
 
-async function getRawBody(request: NextRequest): Promise<string> {
-  const arrayBuffer = await request.arrayBuffer();
-
-  return Buffer.from(arrayBuffer).toString('utf-8');
-}
-
 /**
  * POST /api/slack/interactions
  *
- * Handles Slack Block Kit button interactions (block_actions).
+ * Handles Slack Block Kit button interactions (`block_actions`).
  * Verifies the Slack request signature, acknowledges immediately with 200,
  * then processes the action in the background. Supported actions:
  * pause/resume campaign/ad set/ad, and adjust_budget.
- * Access is gated by ALLOWED_SLACK_USER_IDS if configured.
+ *
+ * Access is gated by `ALLOWED_SLACK_USER_IDS` (comma-separated) if configured.
  */
 export async function POST(request: NextRequest) {
-  const rawBody = await getRawBody(request);
+  const arrayBuffer = await request.arrayBuffer();
+  const rawBody = Buffer.from(arrayBuffer).toString('utf-8');
 
   const params = new URLSearchParams(rawBody);
   const payloadString = params.get('payload');
@@ -30,45 +26,54 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No payload' }, { status: 400 });
   }
 
-  let payload: Record<string, unknown>;
+  let payload: InteractionPayload;
 
   try {
-    payload = JSON.parse(payloadString);
+    payload = JSON.parse(payloadString) as InteractionPayload;
   } catch {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
   const slack = new SlackService(
-    process.env.SLACK_BOT_TOKEN || '',
-    process.env.SLACK_SIGNING_SECRET || ''
+    process.env.SLACK_BOT_TOKEN ?? '',
+    process.env.SLACK_SIGNING_SECRET ?? ''
   );
-  const slackSignature = request.headers.get('x-slack-signature') || '';
-  const slackTimestamp = request.headers.get('x-slack-request-timestamp') || '';
-  const isValid = slack.verifySignature(slackSignature, slackTimestamp, rawBody);
+  const slackSignature = request.headers.get('x-slack-signature') ?? '';
+  const slackTimestamp = request.headers.get('x-slack-request-timestamp') ?? '';
 
-  if (!isValid) {
+  if (!slack.verifySignature(slackSignature, slackTimestamp, rawBody)) {
     logger.warn('Invalid signature');
 
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const ackResponse = NextResponse.json({ ok: true });
-
+  // Acknowledge immediately — Slack requires a response within 3 seconds
   processInteraction(payload, slack).catch((error) => {
     logger.error('Background processing error', error);
   });
 
-  return ackResponse;
+  return NextResponse.json({ ok: true });
 }
 
-async function processInteraction(payload: Record<string, unknown>, slack: SlackService) {
-  const { type, actions, channel } = payload as {
-    type: string;
-    actions?: Array<{ value: string }>;
-    channel?: { id: string };
-    user?: { id: string };
-    message?: { ts: string };
-  };
+interface ActionValue {
+  action_type: string;
+  action_id: string;
+  action_name: string;
+  action_budget?: number;
+  channel_id?: string;
+  thread_ts?: string;
+}
+
+interface InteractionPayload {
+  type: string;
+  actions?: Array<{ value: string }>;
+  channel?: { id: string };
+  user?: { id: string };
+  message?: { ts: string };
+}
+
+async function processInteraction(payload: InteractionPayload, slack: SlackService): Promise<void> {
+  const { type, actions, channel } = payload;
 
   if (type !== 'block_actions' || !actions || actions.length === 0) {
     logger.warn('Unexpected interaction type');
@@ -76,15 +81,7 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
     return;
   }
 
-  const action = actions[0];
-  const actionValue = JSON.parse(action.value || '{}') as {
-    action_type: string;
-    action_id: string;
-    action_name: string;
-    action_budget?: number;
-    channel_id?: string;
-    thread_ts?: string;
-  };
+  const actionValue = JSON.parse(actions[0].value || '{}') as ActionValue;
 
   logger.info('Processing action', {
     type: actionValue.action_type,
@@ -92,22 +89,21 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
     name: actionValue.action_name,
   });
 
-  const allowedSlackUsers = (process.env.ALLOWED_SLACK_USER_IDS || '')
+  const allowedSlackUsers = (process.env.ALLOWED_SLACK_USER_IDS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const requestingUserId = (payload.user as { id?: string })?.id;
+  const requestingUserId = payload.user?.id;
 
-  if (allowedSlackUsers.length > 0 && !allowedSlackUsers.includes(requestingUserId || '')) {
-    const channelId = actionValue.channel_id || channel?.id;
-    const threadTs = actionValue.thread_ts;
+  if (allowedSlackUsers.length > 0 && !allowedSlackUsers.includes(requestingUserId ?? '')) {
+    const channelId = actionValue.channel_id ?? channel?.id;
 
     if (channelId) {
       await slack.postMessage(
         channelId,
         "You don't have permission to execute actions.",
         undefined,
-        threadTs
+        actionValue.thread_ts
       );
     }
 
@@ -150,9 +146,8 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
         if (!budget || budget <= 0) throw new Error('Invalid budget amount');
 
         const wholeBudget = Math.round(budget);
-        const budgetCents = (wholeBudget * 100).toString();
 
-        await meta.request(`/${objectId}`, { method: 'POST', body: { daily_budget: budgetCents } });
+        await meta.updateBudget(objectId, wholeBudget * 100);
         result = `✅ Set daily budget of "${objectName || objectId}" to $${wholeBudget.toFixed(2)}`;
         break;
       }
@@ -161,24 +156,18 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
         throw new Error(`Unknown action type: ${actionType}`);
     }
 
-    const channelId = actionValue.channel_id || channel?.id;
+    const channelId = actionValue.channel_id ?? channel?.id;
 
-    if (channelId) {
-      const messageTs = (payload.message as { ts?: string })?.ts;
+    if (channelId && payload.message?.ts) {
+      const blocks = [
+        { type: 'section', text: { type: 'mrkdwn', text: result } },
+        {
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: `_Executed at ${new Date().toLocaleTimeString()}_` }],
+        },
+      ];
 
-      if (messageTs) {
-        const blocks = [
-          { type: 'section', text: { type: 'mrkdwn', text: result } },
-          {
-            type: 'context',
-            elements: [
-              { type: 'mrkdwn', text: `_Executed at ${new Date().toLocaleTimeString()}_` },
-            ],
-          },
-        ];
-
-        await slack.updateMessage(channelId, messageTs, result, blocks);
-      }
+      await slack.updateMessage(channelId, payload.message.ts, result, blocks);
     }
 
     logger.info('Action completed', result);
@@ -186,11 +175,10 @@ async function processInteraction(payload: Record<string, unknown>, slack: Slack
     logger.error('Error executing action', error);
 
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    const channelId = actionValue.channel_id || (payload.channel as { id?: string })?.id;
-    const messageTs = (payload.message as { ts?: string })?.ts;
+    const channelId = actionValue.channel_id ?? channel?.id;
 
-    if (channelId && messageTs) {
-      await slack.updateMessage(channelId, messageTs, `❌ Action failed: ${errorMsg}`);
+    if (channelId && payload.message?.ts) {
+      await slack.updateMessage(channelId, payload.message.ts, `❌ Action failed: ${errorMsg}`);
     }
   }
 }

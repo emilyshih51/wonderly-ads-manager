@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
+import { evaluateCondition, getResultCount } from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
 import { SlackService } from '@/services/slack';
 import { RulesStoreService } from '@/services/rules-store';
-import { createClient, type RedisClientType } from 'redis';
 import { createLogger } from '@/services/logger';
+import type { StoredRule } from '@/services/rules-store';
 
 const logger = createLogger('Automations:Evaluate');
 
@@ -15,18 +17,33 @@ export const maxDuration = 60;
  *
  * Cron endpoint — evaluates all active automation rules against live Meta
  * data and executes the configured actions (pause, activate, promote).
- * Runs every 5 minutes via Vercel cron. Optionally gated by CRON_SECRET.
- * Capped at AUTOMATION_MAX_ACTIONS_PER_RUN (default 20) actions per run.
+ * Runs every 5 minutes via Vercel cron.
+ *
+ * When `CRON_SECRET` is set the request must include
+ * `Authorization: Bearer <secret>`. In production without `CRON_SECRET` the
+ * endpoint is disabled to prevent unauthorized access.
+ *
+ * Capped at `AUTOMATION_MAX_ACTIONS_PER_RUN` (default 20) actions per run.
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get('authorization');
 
   if (cronSecret) {
-    const auth = request.headers.get('authorization');
-
     if (auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+  } else if (process.env.NODE_ENV === 'production') {
+    logger.warn(
+      'CRON_SECRET is not set in production. Refusing request to prevent unauthorized access.'
+    );
+
+    return NextResponse.json(
+      { error: 'CRON_SECRET not configured — endpoint disabled' },
+      { status: 503 }
+    );
+  } else {
+    logger.warn('CRON_SECRET not set — cron endpoint is unprotected (dev only)');
   }
 
   const session = await getSession();
@@ -38,18 +55,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
   }
 
-  let redisClient: RedisClientType | null = null;
-
-  if (process.env.REDIS_URL) {
-    try {
-      redisClient = createClient({ url: process.env.REDIS_URL }) as RedisClientType;
-      await redisClient.connect();
-    } catch (e) {
-      logger.error('Redis connection error', e);
-      redisClient = null;
-    }
-  }
-
+  const redisClient = await getRedisClient();
   const store = new RulesStoreService(redisClient);
   const activeRules = await store.getActive();
 
@@ -57,7 +63,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ evaluated: 0, results: [] });
   }
 
-  const rulesByAccount: Record<string, typeof activeRules> = {};
+  const rulesByAccount: Record<string, StoredRule[]> = {};
 
   for (const rule of activeRules) {
     const accountId = rule.ad_account_id || defaultAdAccountId;
@@ -86,7 +92,7 @@ export async function GET(request: NextRequest) {
     for (const rule of accountRules) {
       try {
         const result = await evaluateRule(
-          rule as unknown as Record<string, unknown>,
+          rule,
           meta,
           adAccountId,
           optimizationMap,
@@ -115,6 +121,8 @@ export async function GET(request: NextRequest) {
  *
  * Manual test endpoint for a single rule. Body: `{ rule, send_slack?, live? }`.
  * When `live` is false (default), runs in dry-run mode and reports what would happen.
+ *
+ * @param request - Request body: `{ rule: StoredRule, send_slack?: boolean, live?: boolean }`
  */
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -126,7 +134,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
   }
 
-  const body = await request.json();
+  const body = (await request.json()) as {
+    rule?: StoredRule;
+    send_slack?: boolean;
+    live?: boolean;
+  };
   const rule = body.rule;
   const sendSlack = body.send_slack === true;
   const live = body.live === true;
@@ -169,8 +181,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
+interface NodeConfig {
+  entity_type?: string;
+  date_preset?: string;
+  campaign_id?: string;
+  action_type?: string;
+  target_adset_id?: string;
+  slack_channel?: string;
+  also_notify_slack?: string | boolean;
+  slack_message?: string;
+}
+
+interface FlowNode {
+  type: string;
+  data?: { config?: NodeConfig };
+}
+
 async function evaluateRule(
-  rule: Record<string, unknown>,
+  rule: StoredRule,
   meta: MetaService,
   adAccountId: string,
   optimizationMap: Record<string, string>,
@@ -178,79 +206,23 @@ async function evaluateRule(
   sendSlack = false,
   actionCap?: { executed: number; max: number }
 ): Promise<unknown[]> {
-  const nodes = rule.nodes as Array<Record<string, unknown>>;
+  const nodes = rule.nodes as FlowNode[];
   const triggerNode = nodes.find((n) => n.type === 'trigger');
   const conditionNodes = nodes.filter((n) => n.type === 'condition');
   const actionNode = nodes.find((n) => n.type === 'action');
 
   if (!triggerNode || !actionNode) return [];
 
-  const triggerConfig = (triggerNode.data as Record<string, Record<string, unknown>>)?.config || {};
-  const actionConfig = (actionNode.data as Record<string, Record<string, unknown>>)?.config || {};
-  const entityType = (triggerConfig.entity_type as string) || 'ad';
-  const datePreset = (triggerConfig.date_preset as string) || 'last_7d';
+  const triggerConfig = triggerNode.data?.config ?? {};
+  const actionConfig = actionNode.data?.config ?? {};
+  const entityType = triggerConfig.entity_type ?? 'ad';
+  const datePreset = triggerConfig.date_preset ?? 'last_7d';
+  const campaignId = triggerConfig.campaign_id;
 
-  let insightsData: Array<Record<string, unknown>> = [];
-  const activeAdFilter = JSON.stringify([
-    { field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] },
-  ]);
-  const activeAdSetFilter = JSON.stringify([
-    { field: 'adset.effective_status', operator: 'IN', value: ['ACTIVE'] },
-  ]);
-  const activeCampaignFilter = JSON.stringify([
-    { field: 'campaign.effective_status', operator: 'IN', value: ['ACTIVE'] },
-  ]);
-
-  if (entityType === 'ad') {
-    const campaignId = triggerConfig.campaign_id as string | undefined;
-    const endpoint = campaignId ? `/${campaignId}/insights` : `/act_${adAccountId}/insights`;
-    const response = await meta.request(endpoint, {
-      params: {
-        fields:
-          'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type',
-        date_preset: datePreset,
-        level: 'ad',
-        limit: '500',
-        filtering: activeAdFilter,
-      },
-    });
-
-    insightsData = (response as { data?: Array<Record<string, unknown>> }).data || [];
-  } else if (entityType === 'adset') {
-    const response = await meta.request(`/act_${adAccountId}/insights`, {
-      params: {
-        fields:
-          'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type',
-        date_preset: datePreset,
-        level: 'adset',
-        limit: '200',
-        filtering: activeAdSetFilter,
-      },
-    });
-
-    insightsData = (response as { data?: Array<Record<string, unknown>> }).data || [];
-
-    if (triggerConfig.campaign_id) {
-      insightsData = insightsData.filter((row) => row.campaign_id === triggerConfig.campaign_id);
-    }
-  } else if (entityType === 'campaign') {
-    const response = await meta.request(`/act_${adAccountId}/insights`, {
-      params: {
-        fields:
-          'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type',
-        date_preset: datePreset,
-        level: 'campaign',
-        limit: '100',
-        filtering: activeCampaignFilter,
-      },
-    });
-
-    insightsData = (response as { data?: Array<Record<string, unknown>> }).data || [];
-
-    if (triggerConfig.campaign_id) {
-      insightsData = insightsData.filter((row) => row.campaign_id === triggerConfig.campaign_id);
-    }
-  }
+  const insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+    datePreset,
+    campaignId,
+  });
 
   if (insightsData.length === 0 && !dryRun) {
     logger.warn(
@@ -263,21 +235,21 @@ async function evaluateRule(
   const results: unknown[] = [];
 
   for (const row of insightsData) {
-    const entityId = (row.ad_id || row.adset_id || row.campaign_id) as string;
-    const entityName = (row.ad_name || row.adset_name || row.campaign_name || entityId) as string;
-    const spend = parseFloat((row.spend as string) || '0');
-    const campaignId = row.campaign_id as string;
-    const resultCount = getResultCount(row, campaignId, optimizationMap);
+    const entityId = (row.ad_id ?? row.adset_id ?? row.campaign_id) as string;
+    const entityName = (row.ad_name ?? row.adset_name ?? row.campaign_name ?? entityId) as string;
+    const spend = parseFloat(row.spend ?? '0');
+    const rowCampaignId = row.campaign_id;
+    const resultCount = getResultCount(row, rowCampaignId, optimizationMap);
     const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
 
-    const metrics: Record<string, number> = {
+    const metrics = {
       spend,
-      impressions: parseInt((row.impressions as string) || '0'),
-      clicks: parseInt((row.clicks as string) || '0'),
-      ctr: parseFloat((row.ctr as string) || '0'),
-      cpc: parseFloat((row.cpc as string) || '0'),
-      cpm: parseFloat((row.cpm as string) || '0'),
-      frequency: parseFloat((row.frequency as string) || '0'),
+      impressions: parseInt(row.impressions ?? '0'),
+      clicks: parseInt(row.clicks ?? '0'),
+      ctr: parseFloat(row.ctr ?? '0'),
+      cpc: parseFloat(row.cpc ?? '0'),
+      cpm: parseFloat(row.cpm ?? '0'),
+      frequency: parseFloat(row.frequency ?? '0'),
       results: resultCount,
       cost_per_result: costPerResult === Infinity ? 99999 : costPerResult,
     };
@@ -285,11 +257,11 @@ async function evaluateRule(
     let allConditionsMet = true;
 
     for (const condNode of conditionNodes) {
-      const config = (condNode.data as Record<string, Record<string, unknown>>)?.config || {};
-      const metric = (config.metric as string) || 'spend';
-      const operator = (config.operator as string) || '>';
-      const threshold = parseFloat((config.threshold as string) || '0');
-      const actual = metrics[metric] ?? 0;
+      const config = (condNode as FlowNode).data?.config ?? {};
+      const metric = (config as Record<string, string>).metric ?? 'spend';
+      const operator = (config as Record<string, string>).operator ?? '>';
+      const threshold = parseFloat((config as Record<string, string>).threshold ?? '0');
+      const actual = (metrics as Record<string, number>)[metric] ?? 0;
 
       if (metric === 'cost_per_result' && resultCount === 0) {
         allConditionsMet = false;
@@ -304,7 +276,7 @@ async function evaluateRule(
 
     if (!allConditionsMet) continue;
 
-    const actionType = actionConfig.action_type as string;
+    const actionType = actionConfig.action_type ?? '';
     const actionResult: Record<string, unknown> = {
       rule: rule.name,
       entity_type: entityType,
@@ -342,7 +314,7 @@ async function evaluateRule(
         if (actionCap) actionCap.executed++;
       } else if (actionType === 'promote') {
         await meta.updateStatus(entityId, 'PAUSED');
-        const targetAdSetId = actionConfig.target_adset_id as string;
+        const targetAdSetId = actionConfig.target_adset_id;
 
         if (targetAdSetId) {
           const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
@@ -361,21 +333,32 @@ async function evaluateRule(
         (actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true)
       ) {
         if (!dryRun || sendSlack) {
-          const testPrefix = dryRun ? '🧪 *[TEST]* ' : '';
-
-          await sendSlackNotification(
-            actionConfig.slack_channel as string,
-            rule.name as string,
-            actionType,
-            entityType,
-            entityId,
-            entityName,
-            metrics,
-            adAccountId,
-            actionResult.duplicated_ad_id as string | undefined,
-            actionConfig.slack_message as string | undefined,
-            testPrefix
+          const slack = new SlackService(
+            process.env.SLACK_BOT_TOKEN ?? '',
+            process.env.SLACK_SIGNING_SECRET ?? ''
           );
+
+          await slack
+            .sendAutomationNotification(actionConfig.slack_channel, {
+              ruleName: rule.name,
+              actionType: actionType as 'pause' | 'activate' | 'promote',
+              entityType,
+              entityId,
+              entityName,
+              adAccountId,
+              metrics: {
+                spend: metrics.spend,
+                results: metrics.results,
+                cost_per_result: metrics.cost_per_result,
+                clicks: metrics.clicks,
+                ctr: metrics.ctr,
+              },
+              duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
+              customMessage: actionConfig.slack_message,
+              prefix: dryRun ? '🧪 *[TEST]* ' : '',
+            })
+            .catch((e: unknown) => logger.error('Slack notification failed', e));
+
           actionResult.slack_sent = true;
         }
 
@@ -389,125 +372,4 @@ async function evaluateRule(
   }
 
   return results;
-}
-
-function getResultCount(
-  row: Record<string, unknown>,
-  campaignId: string,
-  optimizationMap: Record<string, string>
-): number {
-  if (!row.actions || !Array.isArray(row.actions)) return 0;
-
-  const resultType = campaignId && optimizationMap[campaignId];
-
-  if (resultType) {
-    const found = (row.actions as Array<{ action_type: string; value: string }>).find(
-      (a) => a.action_type === resultType
-    );
-
-    return found ? parseInt(found.value) || 0 : 0;
-  }
-
-  const conversion = (row.actions as Array<{ action_type: string; value: string }>).find(
-    (a) =>
-      (a.action_type.startsWith('offsite_conversion.') ||
-        a.action_type.startsWith('onsite_conversion.')) &&
-      !a.action_type.includes('post_engagement') &&
-      !a.action_type.includes('page_engagement') &&
-      !a.action_type.includes('link_click')
-  );
-
-  return conversion ? parseInt(conversion.value) || 0 : 0;
-}
-
-function evaluateCondition(actual: number, operator: string, threshold: number): boolean {
-  switch (operator) {
-    case '>':
-      return actual > threshold;
-    case '<':
-      return actual < threshold;
-    case '>=':
-      return actual >= threshold;
-    case '<=':
-      return actual <= threshold;
-    case '==':
-      return actual === threshold;
-    default:
-      return false;
-  }
-}
-
-async function sendSlackNotification(
-  channel: string,
-  ruleName: string,
-  actionType: string,
-  entityType: string,
-  entityId: string,
-  entityName: string,
-  metrics: Record<string, number>,
-  adAccountId: string,
-  duplicatedAdId?: string,
-  customMessage?: string,
-  prefix?: string
-) {
-  const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
-  const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
-  const adManagerLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${filterSet}&selected_ad_ids=${entityId}&nav_source=ads_manager`;
-
-  let actionEmoji = '⏸️';
-  let actionVerb = 'Paused';
-
-  if (actionType === 'promote') {
-    actionEmoji = '🚀';
-    actionVerb = 'Promoted';
-  } else if (actionType === 'activate') {
-    actionEmoji = '▶️';
-    actionVerb = 'Activated';
-  }
-
-  const resultDisplay = metrics.results || 0;
-  const cpaDisplay =
-    metrics.cost_per_result === 99999 ? 'N/A' : `$${metrics.cost_per_result.toFixed(2)}`;
-  const testPrefix = prefix || '';
-
-  let text: string;
-
-  if (customMessage) {
-    text =
-      testPrefix +
-      customMessage
-        .replace(/\{rule_name\}/g, ruleName)
-        .replace(/\{action\}/g, actionVerb)
-        .replace(/\{entity_type\}/g, entityType)
-        .replace(/\{entity_name\}/g, entityName)
-        .replace(/\{ad_link\}/g, `<${adManagerLink}|${entityName}>`)
-        .replace(/\{spend\}/g, `$${metrics.spend.toFixed(2)}`)
-        .replace(/\{results\}/g, String(resultDisplay))
-        .replace(/\{cpa\}/g, cpaDisplay)
-        .replace(/\{clicks\}/g, String(metrics.clicks || 0))
-        .replace(/\{ctr\}/g, `${(metrics.ctr || 0).toFixed(2)}%`);
-  } else {
-    text = `${testPrefix}${actionEmoji} *${ruleName}*\n`;
-    text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
-    text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
-  }
-
-  if (duplicatedAdId) {
-    const dupEncodedName = encodeURIComponent(`"[\\\"${entityName} [Winner Copy]\\\"]"`);
-    const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
-    const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
-
-    text += `\n📋 Duplicated to winners ad set: <${dupLink}|View new ad>`;
-  }
-
-  try {
-    const slack = new SlackService(
-      process.env.SLACK_BOT_TOKEN || '',
-      process.env.SLACK_SIGNING_SECRET || ''
-    );
-
-    await slack.postMessage(channel, text);
-  } catch (e) {
-    logger.error('Slack notification failed', e);
-  }
 }

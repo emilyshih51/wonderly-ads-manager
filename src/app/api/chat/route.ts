@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { getSession } from '@/lib/session';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Chat');
@@ -98,6 +99,10 @@ Here is the user's current Meta Ads account data:
 `;
 
 export async function POST(request: NextRequest) {
+  const session = await getSession();
+
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
     const { message, context, history } = await request.json();
 

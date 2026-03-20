@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { evaluateCondition, getResultCount } from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
+import type { MetaInsightsRow } from '@/types';
 
 const logger = createLogger('Automations:Search');
+
+interface CampaignResult {
+  id: string;
+  name: string;
+  status: string;
+  objective: string;
+}
+
+interface AdSetResult {
+  id: string;
+  name: string;
+  status: string;
+  campaign_id: string;
+  campaign?: { name: string };
+}
 
 /**
  * GET /api/automations/search
@@ -31,7 +48,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const type = searchParams.get('type') || 'campaigns';
   const query = (searchParams.get('q') || '').toLowerCase();
-  const campaignId = searchParams.get('campaign_id');
+  const campaignId = searchParams.get('campaign_id') ?? undefined;
 
   try {
     if (type === 'campaigns') {
@@ -45,9 +62,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      let campaigns =
-        (data as { data?: Array<{ id: string; name: string; status: string; objective: string }> })
-          .data || [];
+      let campaigns = (data as { data?: CampaignResult[] }).data || [];
 
       if (query) {
         campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(query));
@@ -76,18 +91,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      let adsets =
-        (
-          data as {
-            data?: Array<{
-              id: string;
-              name: string;
-              status: string;
-              campaign_id: string;
-              campaign?: { name: string };
-            }>;
-          }
-        ).data || [];
+      let adsets = (data as { data?: AdSetResult[] }).data || [];
 
       if (query) {
         adsets = adsets.filter((a) => a.name.toLowerCase().includes(query));
@@ -105,47 +109,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === 'preview') {
-      // Preview matching ads based on conditions
       const conditionsJson = searchParams.get('conditions');
       const datePreset = searchParams.get('date_preset') || 'today';
       const conditions: Array<{ metric: string; operator: string; threshold: string }> =
-        conditionsJson ? JSON.parse(conditionsJson) : [];
+        conditionsJson ? (JSON.parse(conditionsJson) as typeof conditions) : [];
 
-      // Fetch ad-level insights — only for ACTIVE ads (skip paused/off ads)
-      let insightsData: any[] = [];
-      const activeFilter = JSON.stringify([
-        { field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE'] },
-      ]);
+      const insightsData = await meta.getFilteredInsights('ad', { datePreset, campaignId });
 
-      if (campaignId) {
-        const response = await meta.request(`/${campaignId}/insights`, {
-          params: {
-            fields:
-              'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
-            date_preset: datePreset,
-            level: 'ad',
-            limit: '500',
-            filtering: activeFilter,
-          },
-        });
-
-        insightsData = (response as { data?: unknown[] }).data || [];
-      } else {
-        const response = await meta.request(`/act_${rawAdAccountId}/insights`, {
-          params: {
-            fields:
-              'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,date_start,date_stop',
-            date_preset: datePreset,
-            level: 'ad',
-            limit: '500',
-            filtering: activeFilter,
-          },
-        });
-
-        insightsData = (response as { data?: unknown[] }).data || [];
-      }
-
-      // Get optimization map for result counting
       let optimizationMap: Record<string, string> = {};
 
       try {
@@ -154,32 +124,27 @@ export async function GET(request: NextRequest) {
         /* continue without */
       }
 
-      // Evaluate conditions
       const matchingAds = insightsData
-        .map((row: any) => {
-          const spend = parseFloat(row.spend || '0');
-          const cId = row.campaign_id;
+        .map((row: MetaInsightsRow) => {
+          const spend = parseFloat(row.spend ?? '0');
+          const cId = row.campaign_id ?? '';
           const resultCount = getResultCount(row, cId, optimizationMap);
           const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
 
           const metrics: Record<string, number> = {
             spend,
-            impressions: parseInt(row.impressions || '0'),
-            clicks: parseInt(row.clicks || '0'),
-            ctr: parseFloat(row.ctr || '0'),
-            cpc: parseFloat(row.cpc || '0'),
-            cpm: parseFloat(row.cpm || '0'),
-            frequency: parseFloat(row.frequency || '0'),
+            impressions: parseInt(row.impressions ?? '0'),
+            clicks: parseInt(row.clicks ?? '0'),
+            ctr: parseFloat(row.ctr ?? '0'),
+            cpc: parseFloat(row.cpc ?? '0'),
+            cpm: parseFloat(row.cpm ?? '0'),
+            frequency: parseFloat(row.frequency ?? '0'),
             results: resultCount,
             cost_per_result: costPerResult === Infinity ? 99999 : costPerResult,
           };
 
-          // Check ALL conditions (AND logic)
           const allMet = conditions.every((cond) => {
-            // Skip CPA conditions when results=0 — CPA is undefined, not infinitely high
-            if (cond.metric === 'cost_per_result' && resultCount === 0) {
-              return false;
-            }
+            if (cond.metric === 'cost_per_result' && resultCount === 0) return false;
 
             const actual = metrics[cond.metric] ?? 0;
             const threshold = parseFloat(cond.threshold || '0');
@@ -216,50 +181,5 @@ export async function GET(request: NextRequest) {
     logger.error('Search error', error);
 
     return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
-}
-
-function getResultCount(
-  row: any,
-  campaignId: string,
-  optimizationMap: Record<string, string>
-): number {
-  if (!row.actions || !Array.isArray(row.actions)) return 0;
-  const resultType = campaignId && optimizationMap[campaignId];
-
-  if (resultType) {
-    const found = row.actions.find((a: any) => a.action_type === resultType);
-
-    return found ? parseInt(found.value) || 0 : 0;
-  }
-
-  const conversion = row.actions.find(
-    (a: any) =>
-      (a.action_type.startsWith('offsite_conversion.') ||
-        a.action_type.startsWith('onsite_conversion.') ||
-        a.action_type === 'lead' ||
-        a.action_type === 'complete_registration') &&
-      !a.action_type.includes('post_engagement') &&
-      !a.action_type.includes('page_engagement') &&
-      !a.action_type.includes('link_click')
-  );
-
-  return conversion ? parseInt(conversion.value) || 0 : 0;
-}
-
-function evaluateCondition(actual: number, operator: string, threshold: number): boolean {
-  switch (operator) {
-    case '>':
-      return actual > threshold;
-    case '<':
-      return actual < threshold;
-    case '>=':
-      return actual >= threshold;
-    case '<=':
-      return actual <= threshold;
-    case '==':
-      return actual === threshold;
-    default:
-      return false;
   }
 }

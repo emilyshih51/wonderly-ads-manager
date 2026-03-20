@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, setSession } from '@/lib/session';
+import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Accounts');
@@ -15,15 +16,22 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,account_status,business{name}&access_token=${session.meta_access_token}`
-    );
-    const data = await response.json();
+    const meta = new MetaService(session.meta_access_token, '');
+    const data = await meta.request('/me/adaccounts', {
+      params: { fields: 'id,name,account_status,business{name}' },
+    });
 
-    const accounts = (data.data || []).map((acc: any) => ({
+    interface AdAccountRow {
+      id: string;
+      name: string;
+      account_status: number;
+      business?: { name: string };
+    }
+
+    const accounts = ((data as { data?: AdAccountRow[] }).data ?? []).map((acc) => ({
       id: acc.id.replace('act_', ''),
       name: acc.name,
-      business_name: acc.business?.name || null,
+      business_name: acc.business?.name ?? null,
       account_status: acc.account_status,
       is_current: acc.id.replace('act_', '') === session.ad_account_id,
     }));

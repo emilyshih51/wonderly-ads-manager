@@ -114,6 +114,118 @@ describe('MetaService', () => {
     });
   });
 
+  describe('updateBudget()', () => {
+    it('POSTs daily_budget as a string in cents', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.updateBudget('adset-42', 10000);
+
+      const [url, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain('/adset-42');
+      expect((options as RequestInit).method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({ daily_budget: '10000' });
+    });
+  });
+
+  describe('executeAction()', () => {
+    it('pauses an object via updateStatus', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.executeAction('pause', 'camp-1');
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+      expect(JSON.parse(options.body as string)).toEqual({ status: 'PAUSED' });
+    });
+
+    it('resumes an object via updateStatus', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.executeAction('resume', 'camp-1');
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+      expect(JSON.parse(options.body as string)).toEqual({ status: 'ACTIVE' });
+    });
+
+    it('updates budget with correct cents value', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.executeAction('update_budget', 'adset-5', 5000);
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+      expect(JSON.parse(options.body as string)).toEqual({ daily_budget: '5000' });
+    });
+
+    it('throws when update_budget is called without dailyBudgetCents', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await expect(svc.executeAction('update_budget', 'adset-5')).rejects.toThrow(
+        'dailyBudgetCents must be a positive number'
+      );
+    });
+  });
+
+  describe('getFilteredInsights()', () => {
+    it('queries ad-level insights for a campaign endpoint when campaignId is given', async () => {
+      const rows = [{ ad_id: 'a1', spend: '10', impressions: '1000', clicks: '50' }];
+      const fetchFn = makeFetch({ data: rows });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      const result = await svc.getFilteredInsights('ad', { campaignId: 'c1' });
+
+      const calledUrl = new URL(fetchFn.mock.calls[0][0] as string);
+
+      expect(calledUrl.pathname).toContain('/c1/insights');
+      expect(calledUrl.searchParams.get('level')).toBe('ad');
+      expect(result).toEqual(rows);
+    });
+
+    it('queries account-level endpoint when no campaignId is given', async () => {
+      const fetchFn = makeFetch({ data: [] });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.getFilteredInsights('campaign');
+
+      const calledUrl = new URL(fetchFn.mock.calls[0][0] as string);
+
+      expect(calledUrl.pathname).toContain(`/act_${ACCOUNT_ID}/insights`);
+      expect(calledUrl.searchParams.get('level')).toBe('campaign');
+    });
+
+    it('filters adset rows client-side when campaignId is given', async () => {
+      const rows = [
+        { adset_id: 'as1', campaign_id: 'c1', spend: '5' },
+        { adset_id: 'as2', campaign_id: 'c2', spend: '8' },
+      ];
+      const fetchFn = makeFetch({ data: rows });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      const result = await svc.getFilteredInsights('adset', { campaignId: 'c1' });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].adset_id).toBe('as1');
+    });
+
+    it('uses last_7d as default date preset', async () => {
+      const fetchFn = makeFetch({ data: [] });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.getFilteredInsights('ad');
+
+      const calledUrl = new URL(fetchFn.mock.calls[0][0] as string);
+
+      expect(calledUrl.searchParams.get('date_preset')).toBe('last_7d');
+    });
+  });
+
   describe('getCampaignOptimizationMap()', () => {
     it('maps LEAD_GENERATION to correct action type', async () => {
       const fetchFn = makeFetch({

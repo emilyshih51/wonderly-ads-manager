@@ -13,6 +13,7 @@ const logger = createLogger('Meta:Campaigns');
  *
  * Query params:
  * - `date_preset` — Meta date preset (default: `today`)
+ * - `since` + `until` — ISO date range for prior-period comparisons (overrides date_preset)
  * - `with_insights=true` — Attach per-campaign insights and optimization map
  */
 export async function GET(request: NextRequest) {
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
   const session = result;
 
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
+  const since = request.nextUrl.searchParams.get('since');
+  const until = request.nextUrl.searchParams.get('until');
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
   const meta = MetaService.fromSession(session);
@@ -32,8 +35,13 @@ export async function GET(request: NextRequest) {
 
     if (withInsights) {
       try {
+        const insightsPromise =
+          since && until
+            ? meta.getInsightsForDateRange(since, until, 'campaign')
+            : meta.getCampaignLevelInsights(datePreset);
+
         const [bulkInsights, optimizationMap] = await Promise.all([
-          meta.getCampaignLevelInsights(datePreset),
+          insightsPromise,
           meta.getCampaignOptimizationMap(),
         ]);
 

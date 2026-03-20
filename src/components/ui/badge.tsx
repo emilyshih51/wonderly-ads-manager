@@ -11,7 +11,7 @@ const badgeVariants = cva(
         active: 'bg-emerald-100 text-emerald-700',
         paused: 'bg-amber-100 text-amber-700',
         deleted: 'bg-red-100 text-red-700',
-        secondary: 'bg-gray-100 text-gray-700',
+        secondary: 'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]',
       },
     },
     defaultVariants: { variant: 'default' },

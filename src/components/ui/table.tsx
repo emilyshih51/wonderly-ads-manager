@@ -15,7 +15,7 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('border-b border-gray-200', className)} {...props} />
+  <thead ref={ref} className={cn('border-b border-[var(--color-border)]', className)} {...props} />
 ));
 
 TableHeader.displayName = 'TableHeader';
@@ -33,7 +33,10 @@ const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTML
   ({ className, ...props }, ref) => (
     <tr
       ref={ref}
-      className={cn('border-b border-gray-100 transition-colors hover:bg-gray-50/50', className)}
+      className={cn(
+        'border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-accent)]/50',
+        className
+      )}
       {...props}
     />
   )
@@ -48,7 +51,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'h-11 px-4 text-left align-middle text-xs font-medium tracking-wider text-gray-500 uppercase',
+      'h-11 px-4 text-left align-middle text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase',
       className
     )}
     {...props}
@@ -61,7 +64,11 @@ const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
-  <td ref={ref} className={cn('p-4 align-middle text-gray-700', className)} {...props} />
+  <td
+    ref={ref}
+    className={cn('p-4 align-middle text-[var(--color-foreground)]', className)}
+    {...props}
+  />
 ));
 
 TableCell.displayName = 'TableCell';

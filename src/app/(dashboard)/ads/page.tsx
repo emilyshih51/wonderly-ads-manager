@@ -7,20 +7,31 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
-import { TableSkeleton } from '@/components/skeletons/table-skeleton';
+import { AdsSkeleton } from '@/components/skeletons/ads-skeleton';
+import { AdsGallery } from '@/components/dashboard/ads-gallery';
 import { useAppStore } from '@/stores/app-store';
 import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
 import { useAds } from '@/lib/queries/meta/use-ads';
 import { formatCurrency, formatPercent, formatNumber, cn, DATE_PRESETS } from '@/lib/utils';
 import { getResultCount } from '@/lib/automation-utils';
-import { RefreshCw, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
+import {
+  RefreshCw,
+  Trophy,
+  TrendingUp,
+  Image as ImageIcon,
+  LayoutGrid,
+  LayoutList,
+  X,
+} from 'lucide-react';
 
 const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
 
 export default function TopPerformingAdsPage() {
-  const { setDatePreset } = useAppStore();
+  const { setDatePreset, filterCampaignId, filterAdSetId, setFilterCampaignId, setFilterAdSetId } =
+    useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
+  const [viewMode, setViewMode] = useState<'gallery' | 'table'>('gallery');
 
   const { data: campaigns = [] } = useCampaignList();
   const {
@@ -34,146 +45,197 @@ export default function TopPerformingAdsPage() {
   const ads = useMemo(() => {
     let processedAds = allAds;
 
-    // Filter by campaign if selected
-    if (selectedCampaign !== 'all') {
+    // Apply cross-table filter from Zustand (set from campaigns/adsets pages)
+    if (filterCampaignId) {
+      processedAds = processedAds.filter((ad) => ad.campaign_id === filterCampaignId);
+    } else if (filterAdSetId) {
+      processedAds = processedAds.filter((ad) => ad.adset_id === filterAdSetId);
+    } else if (selectedCampaign !== 'all') {
+      // Local dropdown filter (only active when no cross-table filter)
       processedAds = processedAds.filter((ad) => ad.campaign_id === selectedCampaign);
     }
 
-    // Map to ranked ads with results and CPA
-    return (
-      processedAds
-        .map((ad, idx) => {
-          // Empty optimizationMap uses the generic conversion fallback — acceptable for
-          // client-side display. The automation engine uses the full map from getCampaignOptimizationMap().
-          const results = getResultCount(
-            { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
-            ad.campaign_id,
-            {}
-          );
-          const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
-          const cpa = results > 0 ? spend / results : null;
+    return processedAds
+      .map((ad, idx) => {
+        const results = getResultCount(
+          { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
+          ad.campaign_id,
+          {}
+        );
+        const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
+        const cpa = results > 0 ? spend / results : null;
 
-          return {
-            ...ad,
-            results,
-            cpa,
-            rank: idx + 1,
-          };
-        })
-        // Filter to only ads with results
-        .filter((ad) => ad.results > 0)
-        // Sort by results DESC, then by CPA ASC (lower cost per result is better)
-        .sort((a, b) => {
-          if (b.results !== a.results) {
-            return b.results - a.results;
-          }
+        return { ...ad, results, cpa, rank: idx + 1 };
+      })
+      .filter((ad) => ad.results > 0)
+      .sort((a, b) => {
+        if (b.results !== a.results) return b.results - a.results;
+        if (a.cpa === null && b.cpa === null) return 0;
+        if (a.cpa === null) return 1;
+        if (b.cpa === null) return -1;
 
-          if (a.cpa === null && b.cpa === null) return 0;
-          if (a.cpa === null) return 1;
-          if (b.cpa === null) return -1;
-
-          return a.cpa - b.cpa;
-        })
-        // Re-rank after sorting
-        .map((ad, idx) => ({
-          ...ad,
-          rank: idx + 1,
-        }))
-        // Take top 50
-        .slice(0, 50)
-    );
-  }, [allAds, selectedCampaign]);
+        return a.cpa - b.cpa;
+      })
+      .map((ad, idx) => ({ ...ad, rank: idx + 1 }))
+      .slice(0, 50);
+  }, [allAds, selectedCampaign, filterCampaignId, filterAdSetId]);
 
   const handleDatePresetChange = (value: string) => {
     setLocalDatePreset(value);
     setDatePreset(value);
   };
 
+  // Resolve filter chip label
+  const filterLabel = filterCampaignId
+    ? (campaigns.find((c) => c.id === filterCampaignId)?.name ?? 'Campaign filter')
+    : null;
+
+  const clearFilter = () => {
+    setFilterCampaignId(null);
+    setFilterAdSetId(null);
+  };
+
   return (
     <div>
       <Header title="Top Performing Ads" description="Your best performing ads ranked by results">
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex items-center rounded-lg border border-[var(--color-border)] p-0.5">
+            <button
+              className={cn(
+                'rounded-md p-1.5 transition-colors',
+                viewMode === 'gallery'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-foreground)]'
+                  : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+              )}
+              onClick={() => setViewMode('gallery')}
+              aria-label="Gallery view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              className={cn(
+                'rounded-md p-1.5 transition-colors',
+                viewMode === 'table'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-foreground)]'
+                  : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+              )}
+              onClick={() => setViewMode('table')}
+              aria-label="Table view"
+            >
+              <LayoutList className="h-4 w-4" />
+            </button>
+          </div>
+
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
+            Refresh
+          </Button>
+        </div>
       </Header>
 
       <div className="p-8">
-        {/* Filters Row */}
-        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4">
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700">Campaign</label>
-            <SelectNative
-              value={selectedCampaign}
-              onChange={(e) => setSelectedCampaign(e.target.value)}
-              options={[
-                { label: 'All Campaigns', value: 'all' },
-                ...campaigns.map((c) => ({ label: c.name, value: c.id })),
-              ]}
-            />
+        {/* Cross-table filter chip */}
+        {filterLabel && (
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-sm text-[var(--color-muted-foreground)]">Filtered by:</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)] px-3 py-1 text-sm font-medium text-[var(--color-primary-foreground)]">
+              {filterLabel}
+              <button
+                onClick={clearFilter}
+                className="ml-1 rounded-full p-0.5 hover:bg-white/20"
+                aria-label="Clear filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
           </div>
+        )}
 
-          <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-sm font-medium text-gray-700">Date Range</label>
-            <SelectNative
-              value={localDatePreset}
-              onChange={(e) => handleDatePresetChange(e.target.value)}
-              options={DATE_PRESET_OPTIONS}
-            />
+        {/* Filters Row — only shown when no cross-table filter active */}
+        {!filterCampaignId && !filterAdSetId && (
+          <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+            <div className="min-w-[200px] flex-1">
+              <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
+                Campaign
+              </label>
+              <SelectNative
+                value={selectedCampaign}
+                onChange={(e) => setSelectedCampaign(e.target.value)}
+                options={[
+                  { label: 'All Campaigns', value: 'all' },
+                  ...campaigns.map((c) => ({ label: c.name, value: c.id })),
+                ]}
+              />
+            </div>
+
+            <div className="min-w-[200px] flex-1">
+              <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
+                Date Range
+              </label>
+              <SelectNative
+                value={localDatePreset}
+                onChange={(e) => handleDatePresetChange(e.target.value)}
+                options={DATE_PRESET_OPTIONS}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Loading State */}
         {isLoading ? (
-          <TableSkeleton columns={7} rows={8} />
+          <AdsSkeleton />
         ) : ads.length === 0 ? (
-          /* Empty State */
           <Card className="border-dashed">
             <CardContent className="py-16 text-center">
-              <Trophy className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-              <p className="text-lg font-medium text-gray-700">
+              <Trophy className="mx-auto mb-3 h-12 w-12 text-[var(--color-muted-foreground)]" />
+              <p className="text-lg font-medium text-[var(--color-foreground)]">
                 No ads with results found for this period
               </p>
-              <p className="mt-1 text-sm text-gray-500">Try adjusting your filters or date range</p>
+              <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+                Try adjusting your filters or date range
+              </p>
             </CardContent>
           </Card>
+        ) : viewMode === 'gallery' ? (
+          <AdsGallery ads={ads} />
         ) : (
-          /* Table */
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
+          /* Table view */
+          <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-muted)]">
+                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
                     #
                   </th>
-                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Image
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Ad Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Campaign
                   </th>
-                  <th className="w-20 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                  <th className="w-20 px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Status
                   </th>
-                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Results
                   </th>
-                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     CPA
                   </th>
-                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Spend
                   </th>
-                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     CTR %
                   </th>
-                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Clicks
                   </th>
-                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
                     Impressions
                   </th>
                 </tr>
@@ -182,14 +244,15 @@ export default function TopPerformingAdsPage() {
                 {ads.map((ad, idx) => (
                   <tr
                     key={ad.id}
-                    className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${
-                      idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    }`}
+                    className={cn(
+                      'border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-accent)]',
+                      idx % 2 === 0 ? 'bg-[var(--color-card)]' : 'bg-[var(--color-muted)]'
+                    )}
                   >
-                    {/* Rank */}
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{ad.rank}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-[var(--color-foreground)]">
+                      {ad.rank}
+                    </td>
 
-                    {/* Thumbnail */}
                     <td className="px-6 py-4">
                       {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
                         <NextImage
@@ -200,60 +263,55 @@ export default function TopPerformingAdsPage() {
                           className="rounded object-cover"
                         />
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded bg-gray-100">
-                          <ImageIcon className="h-5 w-5 text-gray-300" />
+                        <div className="flex h-10 w-10 items-center justify-center rounded bg-[var(--color-muted)]">
+                          <ImageIcon className="h-5 w-5 text-[var(--color-muted-foreground)]" />
                         </div>
                       )}
                     </td>
 
-                    {/* Ad Name */}
                     <td className="px-6 py-4">
-                      <p className="max-w-xs truncate text-sm font-medium text-gray-900">
+                      <p className="max-w-xs truncate text-sm font-medium text-[var(--color-foreground)]">
                         {ad.name}
                       </p>
                       {ad.creative?.body && (
-                        <p className="line-clamp-1 text-xs text-gray-500">{ad.creative.body}</p>
+                        <p className="line-clamp-1 text-xs text-[var(--color-muted-foreground)]">
+                          {ad.creative.body}
+                        </p>
                       )}
                     </td>
 
-                    {/* Campaign Name */}
-                    <td className="px-6 py-4 text-sm text-gray-700">{ad.campaign_name || '—'}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-muted-foreground)]">
+                      {ad.campaign_name || '—'}
+                    </td>
 
-                    {/* Status */}
                     <td className="px-6 py-4">
                       <StatusBadge status={ad.status} />
                     </td>
 
-                    {/* Results - Highlighted with badge */}
                     <td className="px-6 py-4 text-right">
-                      <div className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-green-700">
+                      <div className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                         <TrendingUp className="h-4 w-4" />
                         <span className="text-sm font-bold">{formatNumber(ad.results)}</span>
                       </div>
                     </td>
 
-                    {/* CPA */}
-                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[var(--color-foreground)]">
                       {ad.cpa !== null ? formatCurrency(ad.cpa) : '—'}
                     </td>
 
-                    {/* Spend */}
-                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[var(--color-foreground)]">
                       {ad.insights?.spend ? formatCurrency(ad.insights.spend) : '—'}
                     </td>
 
-                    {/* CTR % */}
-                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[var(--color-foreground)]">
                       {ad.insights?.ctr ? formatPercent(ad.insights.ctr) : '—'}
                     </td>
 
-                    {/* Clicks */}
-                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[var(--color-foreground)]">
                       {ad.insights?.clicks ? formatNumber(ad.insights.clicks) : '—'}
                     </td>
 
-                    {/* Impressions */}
-                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-[var(--color-foreground)]">
                       {ad.insights?.impressions ? formatNumber(ad.insights.impressions) : '—'}
                     </td>
                   </tr>
@@ -265,9 +323,10 @@ export default function TopPerformingAdsPage() {
 
         {/* Summary */}
         {!isLoading && ads.length > 0 && (
-          <div className="mt-6 text-sm text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{ads.length}</span> top performing
-            ads
+          <div className="mt-6 text-sm text-[var(--color-muted-foreground)]">
+            Showing{' '}
+            <span className="font-semibold text-[var(--color-foreground)]">{ads.length}</span> top
+            performing ads
           </div>
         )}
       </div>

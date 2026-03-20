@@ -24,7 +24,7 @@ export function TableSkeleton({ columns = 6, rows = 8 }: TableSkeletonProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/50">
+              <tr className="border-b border-[var(--color-border)] bg-[var(--color-muted)]/50">
                 {Array.from({ length: columns }).map((_, i) => (
                   <th key={i} className="px-4 py-3">
                     <Skeleton className={`h-3 ${widths[i % widths.length]}`} />
@@ -34,7 +34,7 @@ export function TableSkeleton({ columns = 6, rows = 8 }: TableSkeletonProps) {
             </thead>
             <tbody>
               {Array.from({ length: rows }).map((_, row) => (
-                <tr key={row} className="border-b border-gray-100">
+                <tr key={row} className="border-b border-[var(--color-border)]">
                   {Array.from({ length: columns }).map((_, col) => (
                     <td key={col} className="px-4 py-3">
                       <Skeleton className={`h-4 ${widths[(col + row) % widths.length]}`} />

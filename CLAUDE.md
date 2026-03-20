@@ -114,7 +114,6 @@ src/
 | No audit trail in UI                    | Medium   | History stored in Redis but not displayed          |
 | No rate limiting                        | Medium   | No throttling on any endpoint                      |
 | No rollback mechanism                   | Medium   | No batch-undo for automation actions               |
-| Supabase wired but unused               | Low      | Dead dependency — remove or adopt                  |
 
 ---
 
@@ -147,9 +146,6 @@ REDIS_URL                   # Redis connection string
 # App
 NEXT_PUBLIC_APP_URL         # e.g. https://wonderly-ads-manager.vercel.app
 NEXT_PUBLIC_FACEBOOK_PAGE_ID
-NEXT_PUBLIC_SUPABASE_URL    # Supabase (configured but not actively used)
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-
 # Dev
 NODE_ENV
 USE_MOCK_DATA               # Set to "true" to use mock data in development
@@ -208,7 +204,6 @@ import { saveRule, getActiveRules, deleteRule } from '@/lib/rules-store';
 
 ## What NOT to Do
 
-- Do not add Supabase usage without first deciding to fully adopt or remove it.
 - Do not store secrets in code, env files committed to git, or `NEXT_PUBLIC_` variables.
 - Do not bypass `verifySlackSignature()`.
 - Do not remove `httpOnly` from session cookies.

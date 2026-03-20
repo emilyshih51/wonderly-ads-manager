@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import NextImage from 'next/image';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,7 @@ import {
   Type,
   FileText,
   Tag,
-  Image,
+  Image as ImageIcon,
   Search,
   Rocket,
 } from 'lucide-react';
@@ -986,7 +987,7 @@ export default function LaunchPage() {
           <Card>
             <CardContent className="p-6">
               <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
-                <Image className="h-4 w-4 text-blue-600" />
+                <ImageIcon className="h-4 w-4 text-blue-600" />
                 Upload Media
               </h2>
 
@@ -1050,10 +1051,12 @@ export default function LaunchPage() {
                           {img.mediaType === 'video' ? (
                             <video src={img.preview} className="h-full w-full object-cover" muted />
                           ) : (
-                            <img
+                            <NextImage
                               src={img.preview}
-                              alt="ad"
-                              className="h-full w-full object-cover"
+                              alt="Ad preview"
+                              fill
+                              className="object-cover"
+                              unoptimized
                             />
                           )}
                           {img.status === 'uploading' && (

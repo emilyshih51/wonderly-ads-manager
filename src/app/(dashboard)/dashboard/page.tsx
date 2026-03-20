@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import NextImage from 'next/image';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { SelectNative } from '@/components/ui/select-native';
@@ -859,10 +860,11 @@ export default function DashboardPage() {
                     >
                       <div className="relative flex h-32 items-center justify-center bg-gray-100">
                         {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
-                          <img
-                            src={ad.creative.thumbnail_url || ad.creative.image_url}
+                          <NextImage
+                            src={ad.creative.thumbnail_url || ad.creative.image_url!}
                             alt={ad.name}
-                            className="h-full w-full object-cover"
+                            fill
+                            className="object-cover"
                           />
                         ) : (
                           <span className="text-xs text-gray-400">No image</span>

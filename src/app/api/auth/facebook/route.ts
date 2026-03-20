@@ -11,7 +11,7 @@ import { META_OAUTH_URL } from '@/services/meta';
 export async function GET() {
   const appId = process.env.META_APP_ID!;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/facebook/callback`;
-  const scope = 'email,ads_management,ads_read,business_management,pages_read_engagement';
+  const scope = 'ads_management,ads_read,business_management,pages_read_engagement';
   const state = crypto.randomUUID();
 
   const cookieStore = await cookies();

@@ -1,27 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifySlackSignature, updateSlackMessage } from '@/lib/slack';
-import { updateStatus, metaApi } from '@/lib/meta-api';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { type SlackService, createSlackService } from '@/services/slack';
+import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Slack:Interactions');
 
 /**
  * POST /api/slack/interactions
  *
- * Handles interactive actions (button clicks) from Slack
- * - Verify Slack request signature
- * - Parse the action from the button click
- * - Execute the action (pause, resume, adjust budget)
- * - Update the Slack message with the result
+ * Handles Slack Block Kit button interactions (`block_actions`).
+ * Verifies the Slack request signature, acknowledges immediately with 200,
+ * then processes the action in the background. Supported actions:
+ * pause/resume campaign/ad set/ad, and adjust_budget.
+ *
+ * Access is gated by `ALLOWED_SLACK_USER_IDS` (comma-separated) if configured.
  */
-
-// Helper to get raw request body
-async function getRawBody(request: NextRequest): Promise<string> {
-  const arrayBuffer = await request.arrayBuffer();
-  return Buffer.from(arrayBuffer).toString('utf-8');
-}
-
 export async function POST(request: NextRequest) {
-  const rawBody = await getRawBody(request);
+  const arrayBuffer = await request.arrayBuffer();
+  const rawBody = Buffer.from(arrayBuffer).toString('utf-8');
 
-  // Parse form-encoded body (Slack sends interactions as form data)
   const params = new URLSearchParams(rawBody);
   const payloadString = params.get('payload');
 
@@ -29,146 +26,162 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No payload' }, { status: 400 });
   }
 
-  let payload: any;
+  let payload: InteractionPayload;
+
   try {
-    payload = JSON.parse(payloadString);
+    payload = JSON.parse(payloadString) as InteractionPayload;
   } catch {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  // Verify signature
-  const slackSignature = request.headers.get('x-slack-signature') || '';
-  const slackTimestamp = request.headers.get('x-slack-request-timestamp') || '';
-  const isValid = verifySlackSignature(slackSignature, slackTimestamp, rawBody);
+  const slack = createSlackService();
+  const slackSignature = request.headers.get('x-slack-signature') ?? '';
+  const slackTimestamp = request.headers.get('x-slack-request-timestamp') ?? '';
 
-  if (!isValid) {
-    console.warn('[Slack Interactions] Invalid signature');
+  if (!slack.verifySignature(slackSignature, slackTimestamp, rawBody)) {
+    logger.warn('Invalid signature');
+
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Acknowledge immediately
-  const ackResponse = NextResponse.json({ ok: true });
-
-  // Process the action asynchronously
-  processInteraction(payload).catch((error) => {
-    console.error('[Slack Interactions] Background processing error:', error);
+  // Acknowledge immediately — Slack requires a response within 3 seconds.
+  // Use after() to ensure the serverless function stays alive until processing completes.
+  after(async () => {
+    try {
+      await processInteraction(payload, slack);
+    } catch (error) {
+      logger.error('Background processing error', error);
+    }
   });
 
-  return ackResponse;
+  return NextResponse.json({ ok: true });
 }
 
-async function processInteraction(payload: any) {
-  const { type, actions, channel, trigger_id } = payload;
+interface ActionValue {
+  action_type: string;
+  action_id: string;
+  action_name: string;
+  action_budget?: number;
+  channel_id?: string;
+  thread_ts?: string;
+}
+
+interface InteractionPayload {
+  type: string;
+  actions?: Array<{ value: string }>;
+  channel?: { id: string };
+  user?: { id: string };
+  message?: { ts: string };
+}
+
+async function processInteraction(payload: InteractionPayload, slack: SlackService): Promise<void> {
+  const { type, actions, channel } = payload;
 
   if (type !== 'block_actions' || !actions || actions.length === 0) {
-    console.warn('[Slack Interactions] Unexpected interaction type');
+    logger.warn('Unexpected interaction type');
+
     return;
   }
 
-  const action = actions[0];
-  const actionValue = JSON.parse(action.value || '{}');
+  let actionValue: ActionValue;
 
-  console.log('[Slack Interactions] Processing action:', {
+  try {
+    actionValue = JSON.parse(actions[0].value || '{}') as ActionValue;
+  } catch {
+    logger.warn('Malformed action value', actions[0].value);
+
+    return;
+  }
+
+  logger.info('Processing action', {
     type: actionValue.action_type,
     id: actionValue.action_id,
     name: actionValue.action_name,
   });
 
+  const allowedSlackUsers = (process.env.ALLOWED_SLACK_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const requestingUserId = payload.user?.id;
+
+  if (allowedSlackUsers.length > 0 && !allowedSlackUsers.includes(requestingUserId ?? '')) {
+    const channelId = actionValue.channel_id ?? channel?.id;
+
+    if (channelId) {
+      await slack.postMessage(
+        channelId,
+        "You don't have permission to execute actions.",
+        undefined,
+        actionValue.thread_ts
+      );
+    }
+
+    return;
+  }
+
   try {
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
+
     if (!metaSystemToken) {
       throw new Error('META_SYSTEM_ACCESS_TOKEN not configured');
     }
 
-    let result = '';
-    const actionType = actionValue.action_type;
-    const objectId = actionValue.action_id;
-    const objectName = actionValue.action_name;
+    const meta = new MetaService(metaSystemToken, '');
+    const { action_type: actionType, action_id: objectId, action_name: objectName } = actionValue;
+    const label = objectName || objectId;
 
-    // Execute the action
-    switch (actionType) {
-      case 'pause_campaign':
-      case 'pause_ad_set':
-      case 'pause_ad': {
-        await updateStatus(objectId, metaSystemToken, 'PAUSED');
-        result = `✅ Paused "${objectName || objectId}"`;
-        break;
-      }
+    const mappedType = actionType.startsWith('pause')
+      ? 'pause'
+      : actionType.startsWith('resume')
+        ? 'resume'
+        : actionType === 'adjust_budget'
+          ? 'update_budget'
+          : null;
 
-      case 'resume_campaign':
-      case 'resume_ad_set':
-      case 'resume_ad': {
-        await updateStatus(objectId, metaSystemToken, 'ACTIVE');
-        result = `✅ Resumed "${objectName || objectId}"`;
-        break;
-      }
+    if (!mappedType) throw new Error(`Unknown action type: ${actionType}`);
 
-      case 'adjust_budget': {
-        const budget = actionValue.action_budget;
-        if (!budget || budget <= 0) {
-          throw new Error('Invalid budget amount');
-        }
-        // Round to whole dollar — never set fractional budgets
-        const wholeBudget = Math.round(budget);
-        const budgetCents = (wholeBudget * 100).toString();
-        await metaApi(`/${objectId}`, metaSystemToken, {
-          method: 'POST',
-          body: { daily_budget: budgetCents },
-        });
-        result = `✅ Set daily budget of "${objectName || objectId}" to $${wholeBudget.toFixed(2)}`;
-        break;
-      }
+    let dailyBudgetCents: number | undefined;
 
-      default:
-        throw new Error(`Unknown action type: ${actionType}`);
+    if (mappedType === 'update_budget') {
+      const budget = actionValue.action_budget;
+
+      if (!budget || budget <= 0) throw new Error('Invalid budget amount');
+      dailyBudgetCents = Math.round(budget) * 100;
     }
 
-    // Update the Slack message with the result
-    const channelId = actionValue.channel_id || channel?.id;
-    const threadTs = actionValue.thread_ts;
+    await meta.executeAction(mappedType, objectId, dailyBudgetCents);
 
-    if (channelId) {
-      // Find the message timestamp from the payload
-      const messageTs = payload.message?.ts;
+    const result =
+      mappedType === 'pause'
+        ? `✅ Paused "${label}"`
+        : mappedType === 'resume'
+          ? `✅ Resumed "${label}"`
+          : `✅ Set daily budget of "${label}" to $${Math.round(actionValue.action_budget!).toFixed(2)}`;
 
-      if (messageTs) {
-        const blocks = [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: result,
-            },
-          },
-          {
-            type: 'context',
-            elements: [
-              {
-                type: 'mrkdwn',
-                text: `_Executed at ${new Date().toLocaleTimeString()}_`,
-              },
-            ],
-          },
-        ];
+    const channelId = actionValue.channel_id ?? channel?.id;
 
-        await updateSlackMessage(channelId, messageTs, result, blocks);
-      }
+    if (channelId && payload.message?.ts) {
+      const blocks = [
+        { type: 'section', text: { type: 'mrkdwn', text: result } },
+        {
+          type: 'context',
+          elements: [{ type: 'mrkdwn', text: `_Executed at ${new Date().toLocaleTimeString()}_` }],
+        },
+      ];
+
+      await slack.updateMessage(channelId, payload.message.ts, result, blocks);
     }
 
-    console.log('[Slack Interactions] Action completed:', result);
+    logger.info('Action completed', result);
   } catch (error) {
-    console.error('[Slack Interactions] Error executing action:', error);
+    logger.error('Error executing action', error);
 
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    const channelId = actionValue.channel_id || payload.channel?.id;
-    const messageTs = payload.message?.ts;
+    const channelId = actionValue.channel_id ?? channel?.id;
 
-    if (channelId && messageTs) {
-      await updateSlackMessage(
-        channelId,
-        messageTs,
-        `❌ Action failed: ${errorMsg}`
-      );
+    if (channelId && payload.message?.ts) {
+      await slack.updateMessage(channelId, payload.message.ts, `❌ Action failed: ${errorMsg}`);
     }
   }
 }

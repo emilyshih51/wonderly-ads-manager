@@ -1,78 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { updateStatus, metaApi } from '@/lib/meta-api';
+import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Chat:Actions');
+
+interface ActionPayload {
+  type: string;
+  id: string;
+  name?: string;
+  budget?: number;
+}
 
 /**
  * POST /api/chat/actions
  *
- * Executes an AI-suggested action after user approval.
- * Actions: pause_campaign, resume_campaign, adjust_budget,
- *          pause_ad_set, resume_ad_set, pause_ad, resume_ad
+ * Executes a Meta action suggested by the Claude chat. Supported action types:
+ * `pause_campaign`, `pause_ad_set`, `pause_ad`, `resume_campaign`,
+ * `resume_ad_set`, `resume_ad`, `adjust_budget`. Body: `{ action: ActionPayload }`.
  */
-
-interface ActionPayload {
-  type: string;
-  id: string;        // Meta object ID (campaign, ad set, or ad)
-  name?: string;     // Human-readable name for logging
-  budget?: number;   // For budget adjustments
-}
-
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
+
     if (!session) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const { action } = await request.json() as { action: ActionPayload };
+    const { action } = (await request.json()) as { action: ActionPayload };
+
     if (!action?.type || !action?.id) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
     }
 
-    const { meta_access_token } = session;
-    let result: string;
+    const meta = MetaService.fromSession(session);
+    const label = action.name || action.id;
 
-    switch (action.type) {
-      case 'pause_campaign':
-      case 'pause_ad_set':
-      case 'pause_ad': {
-        await updateStatus(action.id, meta_access_token, 'PAUSED');
-        result = `✅ Paused "${action.name || action.id}"`;
-        break;
-      }
+    const actionType = action.type.startsWith('pause')
+      ? 'pause'
+      : action.type.startsWith('resume')
+        ? 'resume'
+        : action.type === 'adjust_budget'
+          ? 'update_budget'
+          : null;
 
-      case 'resume_campaign':
-      case 'resume_ad_set':
-      case 'resume_ad': {
-        await updateStatus(action.id, meta_access_token, 'ACTIVE');
-        result = `✅ Resumed "${action.name || action.id}"`;
-        break;
-      }
-
-      case 'adjust_budget': {
-        if (!action.budget || action.budget <= 0) {
-          return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
-        }
-        // Round to whole dollar amount — never set fractional budgets
-        const wholeBudget = Math.round(action.budget);
-        // Meta API expects budget in cents
-        const budgetCents = (wholeBudget * 100).toString();
-        await metaApi(`/${action.id}`, meta_access_token, {
-          method: 'POST',
-          body: { daily_budget: budgetCents },
-        });
-        result = `✅ Set daily budget of "${action.name || action.id}" to $${wholeBudget.toFixed(2)}`;
-        break;
-      }
-
-      default:
-        return NextResponse.json({ error: `Unknown action type: ${action.type}` }, { status: 400 });
+    if (!actionType) {
+      return NextResponse.json({ error: `Unknown action type: ${action.type}` }, { status: 400 });
     }
+
+    let dailyBudgetCents: number | undefined;
+
+    if (actionType === 'update_budget') {
+      if (!action.budget || action.budget <= 0) {
+        return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
+      }
+
+      dailyBudgetCents = Math.round(action.budget) * 100;
+    }
+
+    await meta.executeAction(actionType, action.id, dailyBudgetCents);
+
+    const result =
+      actionType === 'pause'
+        ? `✅ Paused "${label}"`
+        : actionType === 'resume'
+          ? `✅ Resumed "${label}"`
+          : `✅ Set daily budget of "${label}" to $${Math.round(action.budget!).toFixed(2)}`;
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
-    console.error('[Chat Action] Error:', error);
+    logger.error('Error', error);
     const message = error instanceof Error ? error.message : 'Action failed';
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wonderly Ads Manager
 
-## Getting Started
+Meta (Facebook) ad management dashboard with a Slack bot and AI-powered automation rules. Deployed on Vercel.
 
-First, run the development server:
+**Production:** wonderly-ads-manager.vercel.app
+
+## Stack
+
+- **Next.js 16** (App Router, React 19) — hosted on Vercel
+- **Meta Marketing API v21.0** — all ad data and mutations
+- **Claude (Anthropic)** — AI chat and Slack bot analysis
+- **Slack API** — bot for natural-language ad management
+- **Redis** — automation rules persistence for cron jobs
+- **Tailwind CSS 4 + Radix UI** — UI components
+
+## Local development
 
 ```bash
+npm install
+cp .env.example .env.local  # fill in your values
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Set `USE_MOCK_DATA=true` in `.env.local` to skip Meta API calls during development.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev          # development server
+npm run build        # production build
+npm run typecheck    # TypeScript check (no emit)
+npm test             # Vitest unit tests
+npm run lint         # ESLint
+npm run lint:fix     # ESLint with auto-fix
+npm run format       # Prettier write
+npm run format:check # Prettier check (used in CI)
+npm run validate     # typecheck + lint + format:check
+```
 
-## Learn More
+## Deployment
 
-To learn more about Next.js, take a look at the following resources:
+Push to `main` → Vercel auto-deploys. No manual steps.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All secrets live in Vercel → Settings → Environment Variables. See [`.env.example`](.env.example) for the full variable list with descriptions.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Docs
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [`CLAUDE.md`](./CLAUDE.md) — architecture, conventions, security rules, known issues (read this first)
+- [`docs/slack.md`](./docs/slack.md) — Slack bot setup and usage
+- [`docs/issues-plan.md`](./docs/issues-plan.md) — prioritized fix plan for known security and quality gaps

@@ -1,28 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { requireSession } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
+
+interface HistoryEvent {
+  id: string;
+  rule_name: string;
+  type: string;
+  matched: number;
+  results: Array<{
+    entity_id?: string;
+    entity_name?: string;
+    action?: string;
+    metrics?: unknown;
+    slack_sent?: boolean;
+    slack_channel?: string;
+    error?: string;
+  }>;
+  timestamp: number;
+}
+
+const MAX_ENTRIES = 50;
+
+function redisKey(userId: string) {
+  return `automation_history:${userId}`;
+}
 
 /**
  * GET /api/automations/history
  *
- * Returns automation run history stored in cookies.
- * Each run is stored as a separate cookie (wonderly_history_{timestamp}).
- * We keep the last 30 entries.
+ * Returns automation run history from Redis, sorted by timestamp descending.
  */
 export async function GET() {
-  const cookieStore = await cookies();
-  const history: any[] = [];
+  const result = await requireSession();
 
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      try {
-        history.push(JSON.parse(cookie.value));
-      } catch { /* skip */ }
+  if (result instanceof NextResponse) return result;
+  const session = result;
+
+  const redis = await getRedisClient();
+
+  if (!redis) {
+    return NextResponse.json({ data: [] });
+  }
+
+  const raw = await redis.lRange(redisKey(session.id), 0, -1);
+  const history: HistoryEvent[] = [];
+
+  for (const entry of raw) {
+    try {
+      history.push(JSON.parse(entry));
+    } catch {
+      /* skip malformed entries */
     }
   }
 
-  // Sort by timestamp descending (most recent first)
-  history.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
+  // Data is already in descending order from lPush (newest first)
   return NextResponse.json({ data: history });
 }
 
@@ -33,14 +64,32 @@ export async function GET() {
  * Body: { rule_name, type, matched, results, timestamp? }
  */
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const result = await requireSession();
 
-  const event = {
-    id: `run_${Date.now()}`,
+  if (result instanceof NextResponse) return result;
+  const session = result;
+
+  const redis = await getRedisClient();
+
+  if (!redis) {
+    return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
+  }
+
+  const body = (await request.json()) as Partial<{
+    rule_name: string;
+    type: string;
+    matched: number;
+    results: HistoryEvent['results'];
+    timestamp: number;
+  }>;
+
+  const event: HistoryEvent = {
+    id: `run_${crypto.randomUUID()}`,
     rule_name: body.rule_name || 'Unknown',
-    type: body.type || 'test', // 'test' | 'live'
+    type: body.type || 'test',
     matched: body.matched || 0,
-    results: (body.results || []).slice(0, 10).map((r: any) => ({
+    results: (body.results || []).slice(0, 10).map((r) => ({
+      entity_id: r.entity_id,
       entity_name: r.entity_name,
       action: r.action,
       metrics: r.metrics,
@@ -51,51 +100,32 @@ export async function POST(request: NextRequest) {
     timestamp: body.timestamp || Date.now(),
   };
 
-  const cookieStore = await cookies();
-  const response = NextResponse.json({ success: true, event });
+  const key = redisKey(session.id);
 
-  // Store this event
-  response.cookies.set(`wonderly_history_${event.id}`, JSON.stringify(event), {
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    httpOnly: false,
-    sameSite: 'lax',
-  });
+  await redis.lPush(key, JSON.stringify(event));
+  await redis.lTrim(key, 0, MAX_ENTRIES - 1);
 
-  // Clean up old entries (keep last 30)
-  const existing: string[] = [];
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      existing.push(cookie.name);
-    }
-  }
-
-  if (existing.length > 29) {
-    // Sort by name (which contains timestamp) and remove oldest
-    existing.sort();
-    const toRemove = existing.slice(0, existing.length - 29);
-    for (const name of toRemove) {
-      response.cookies.set(name, '', { path: '/', maxAge: 0 });
-    }
-  }
-
-  return response;
+  return NextResponse.json({ success: true, event }, { status: 201 });
 }
 
 /**
  * DELETE /api/automations/history
  *
- * Clear all history.
+ * Clear all history for the current user.
  */
 export async function DELETE() {
-  const cookieStore = await cookies();
-  const response = NextResponse.json({ success: true });
+  const result = await requireSession();
 
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      response.cookies.set(cookie.name, '', { path: '/', maxAge: 0 });
-    }
+  if (result instanceof NextResponse) return result;
+  const session = result;
+
+  const redis = await getRedisClient();
+
+  if (!redis) {
+    return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
   }
 
-  return response;
+  await redis.del(redisKey(session.id));
+
+  return NextResponse.json({ success: true });
 }

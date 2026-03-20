@@ -1,14 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import NextImage from 'next/image';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
 import { useAppStore } from '@/stores/app-store';
-import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS, getResultsFromActions } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS } from '@/lib/utils';
+import { getResultCount } from '@/lib/automation-utils';
 import { RefreshCw, Loader2, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Ads');
 
 interface Campaign {
   id: string;
@@ -40,24 +45,19 @@ interface Ad {
   insights?: AdInsight | null;
 }
 
-interface RankedAd extends Ad {
-  results: number;
-  cpa: number | null;
-  rank: number;
-}
-
-const DATE_PRESET_OPTIONS = DATE_PRESETS.map(p => ({ label: p.label, value: p.value }));
+const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
 
 export default function TopPerformingAdsPage() {
-  const { datePreset: storeDatePreset, setDatePreset } = useAppStore();
+  const { setDatePreset } = useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [ads, setAds] = useState<RankedAd[]>([]);
+  const [allAds, setAllAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+
     try {
       // Fetch campaigns and ads in parallel
       const [campaignsRes, adsRes] = await Promise.all([
@@ -69,19 +69,34 @@ export default function TopPerformingAdsPage() {
       const adsData = await adsRes.json();
 
       setCampaigns(campaignsData.data || []);
+      setAllAds((adsData.data || []) as Ad[]);
+    } catch (error) {
+      logger.error('Failed to fetch data', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [localDatePreset]);
 
-      // Process ads: filter, calculate results, rank, and sort
-      let processedAds = (adsData.data || []) as Ad[];
+  // Campaign filtering and ranking applied client-side via useMemo
+  const ads = useMemo(() => {
+    let processedAds = allAds;
 
-      // Filter by campaign if selected
-      if (selectedCampaign !== 'all') {
-        processedAds = processedAds.filter(ad => ad.campaign_id === selectedCampaign);
-      }
+    // Filter by campaign if selected
+    if (selectedCampaign !== 'all') {
+      processedAds = processedAds.filter((ad) => ad.campaign_id === selectedCampaign);
+    }
 
-      // Map to ranked ads with results and CPA
-      const rankedAds = processedAds
+    // Map to ranked ads with results and CPA
+    return (
+      processedAds
         .map((ad, idx) => {
-          const results = getResultsFromActions(ad.insights?.actions);
+          // Empty optimizationMap uses the generic conversion fallback — acceptable for
+          // client-side display. The automation engine uses the full map from getCampaignOptimizationMap().
+          const results = getResultCount(
+            { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
+            ad.campaign_id,
+            {}
+          );
           const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
           const cpa = results > 0 ? spend / results : null;
 
@@ -93,15 +108,17 @@ export default function TopPerformingAdsPage() {
           };
         })
         // Filter to only ads with results
-        .filter(ad => ad.results > 0)
+        .filter((ad) => ad.results > 0)
         // Sort by results DESC, then by CPA ASC (lower cost per result is better)
         .sort((a, b) => {
           if (b.results !== a.results) {
             return b.results - a.results;
           }
+
           if (a.cpa === null && b.cpa === null) return 0;
           if (a.cpa === null) return 1;
           if (b.cpa === null) return -1;
+
           return a.cpa - b.cpa;
         })
         // Re-rank after sorting
@@ -110,15 +127,9 @@ export default function TopPerformingAdsPage() {
           rank: idx + 1,
         }))
         // Take top 50
-        .slice(0, 50);
-
-      setAds(rankedAds);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [localDatePreset, selectedCampaign]);
+        .slice(0, 50)
+    );
+  }, [allAds, selectedCampaign]);
 
   useEffect(() => {
     fetchData();
@@ -132,34 +143,29 @@ export default function TopPerformingAdsPage() {
   return (
     <div>
       <Header title="Top Performing Ads" description="Your best performing ads ranked by results">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchData}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </Header>
 
       <div className="p-8">
         {/* Filters Row */}
-        <div className="mb-6 flex flex-wrap gap-4 items-center bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Campaign</label>
+        <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white p-4">
+          <div className="min-w-[200px] flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Campaign</label>
             <SelectNative
               value={selectedCampaign}
               onChange={(e) => setSelectedCampaign(e.target.value)}
               options={[
                 { label: 'All Campaigns', value: 'all' },
-                ...campaigns.map(c => ({ label: c.name, value: c.id })),
+                ...campaigns.map((c) => ({ label: c.name, value: c.id })),
               ]}
             />
           </div>
 
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Date Range</label>
+          <div className="min-w-[200px] flex-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Date Range</label>
             <SelectNative
               value={localDatePreset}
               onChange={(e) => handleDatePresetChange(e.target.value)}
@@ -177,53 +183,77 @@ export default function TopPerformingAdsPage() {
           /* Empty State */
           <Card className="border-dashed">
             <CardContent className="py-16 text-center">
-              <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-              <p className="text-lg font-medium text-gray-700">No ads with results found for this period</p>
-              <p className="text-sm text-gray-500 mt-1">Try adjusting your filters or date range</p>
+              <Trophy className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+              <p className="text-lg font-medium text-gray-700">
+                No ads with results found for this period
+              </p>
+              <p className="mt-1 text-sm text-gray-500">Try adjusting your filters or date range</p>
             </CardContent>
           </Card>
         ) : (
           /* Table */
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-12">#</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-12">Image</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Ad Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Campaign</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 w-20">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-24">Results</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-20">CPA</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-20">Spend</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-16">CTR %</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-16">Clicks</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 text-right w-24">Impressions</th>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                    #
+                  </th>
+                  <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                    Image
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                    Ad Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                    Campaign
+                  </th>
+                  <th className="w-20 px-6 py-3 text-left text-xs font-semibold text-gray-700">
+                    Status
+                  </th>
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    Results
+                  </th>
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    CPA
+                  </th>
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    Spend
+                  </th>
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    CTR %
+                  </th>
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    Clicks
+                  </th>
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
+                    Impressions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {ads.map((ad, idx) => (
                   <tr
                     key={ad.id}
-                    className={`border-b border-gray-200 hover:bg-blue-50 transition-colors ${
+                    className={`border-b border-gray-200 transition-colors hover:bg-blue-50 ${
                       idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                     }`}
                   >
                     {/* Rank */}
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      {ad.rank}
-                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{ad.rank}</td>
 
                     {/* Thumbnail */}
                     <td className="px-6 py-4">
                       {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
-                        <img
-                          src={ad.creative.thumbnail_url || ad.creative.image_url}
+                        <NextImage
+                          src={ad.creative.thumbnail_url || ad.creative.image_url || ''}
                           alt={ad.name}
-                          className="h-10 w-10 rounded object-cover"
+                          width={40}
+                          height={40}
+                          className="rounded object-cover"
                         />
                       ) : (
-                        <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center">
+                        <div className="flex h-10 w-10 items-center justify-center rounded bg-gray-100">
                           <ImageIcon className="h-5 w-5 text-gray-300" />
                         </div>
                       )}
@@ -231,16 +261,16 @@ export default function TopPerformingAdsPage() {
 
                     {/* Ad Name */}
                     <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-gray-900 max-w-xs truncate">{ad.name}</p>
+                      <p className="max-w-xs truncate text-sm font-medium text-gray-900">
+                        {ad.name}
+                      </p>
                       {ad.creative?.body && (
-                        <p className="text-xs text-gray-500 line-clamp-1">{ad.creative.body}</p>
+                        <p className="line-clamp-1 text-xs text-gray-500">{ad.creative.body}</p>
                       )}
                     </td>
 
                     {/* Campaign Name */}
-                    <td className="px-6 py-4 text-sm text-gray-700">
-                      {ad.campaign_name || '—'}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-700">{ad.campaign_name || '—'}</td>
 
                     {/* Status */}
                     <td className="px-6 py-4">
@@ -249,34 +279,34 @@ export default function TopPerformingAdsPage() {
 
                     {/* Results - Highlighted with badge */}
                     <td className="px-6 py-4 text-right">
-                      <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full">
+                      <div className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-green-700">
                         <TrendingUp className="h-4 w-4" />
-                        <span className="font-bold text-sm">{formatNumber(ad.results)}</span>
+                        <span className="text-sm font-bold">{formatNumber(ad.results)}</span>
                       </div>
                     </td>
 
                     {/* CPA */}
-                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                       {ad.cpa !== null ? formatCurrency(ad.cpa) : '—'}
                     </td>
 
                     {/* Spend */}
-                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                       {ad.insights?.spend ? formatCurrency(ad.insights.spend) : '—'}
                     </td>
 
                     {/* CTR % */}
-                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                       {ad.insights?.ctr ? formatPercent(ad.insights.ctr) : '—'}
                     </td>
 
                     {/* Clicks */}
-                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                       {ad.insights?.clicks ? formatNumber(ad.insights.clicks) : '—'}
                     </td>
 
                     {/* Impressions */}
-                    <td className="px-6 py-4 text-sm text-gray-700 text-right font-medium">
+                    <td className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                       {ad.insights?.impressions ? formatNumber(ad.insights.impressions) : '—'}
                     </td>
                   </tr>
@@ -289,7 +319,8 @@ export default function TopPerformingAdsPage() {
         {/* Summary */}
         {!loading && ads.length > 0 && (
           <div className="mt-6 text-sm text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{ads.length}</span> top performing ads
+            Showing <span className="font-semibold text-gray-900">{ads.length}</span> top performing
+            ads
           </div>
         )}
       </div>

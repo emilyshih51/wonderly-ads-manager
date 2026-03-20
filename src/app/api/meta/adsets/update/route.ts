@@ -1,61 +1,85 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { metaApi } from '@/lib/meta-api';
-import { postSlackMessage } from '@/lib/slack';
+import { requireSession } from '@/lib/session';
+import { MetaService } from '@/services/meta';
+import { createSlackService } from '@/services/slack';
+import { createLogger } from '@/services/logger';
 
-const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
+const logger = createLogger('Meta:AdSets');
+
+const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL ?? '';
 
 /**
- * Update budget (and other fields) for an ad set or campaign.
- * Sends Slack notification on budget changes.
+ * POST /api/meta/adsets/update
  *
- * Body: { adset_id: string, adset_name?: string, daily_budget?: string, previous_budget?: string }
- * Note: `adset_id` can be any Meta entity ID (ad set ID or campaign ID) — it just calls POST /{id}
+ * Updates a campaign or ad set (currently supports daily_budget).
+ * Posts a Slack notification to `SLACK_NOTIFICATION_CHANNEL` when a budget
+ * change is made. Required body field: `adset_id`, `campaign_id`, or `entity_id`.
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
-    const body = await request.json();
-    const entityId = body.adset_id || body.campaign_id || body.entity_id;
-    const entityName = body.adset_name || body.campaign_name || body.entity_name || entityId;
+    const body = (await request.json()) as {
+      adset_id?: string;
+      campaign_id?: string;
+      entity_id?: string;
+      adset_name?: string;
+      campaign_name?: string;
+      entity_name?: string;
+      daily_budget?: string | number;
+      previous_budget?: string | number;
+    };
+
+    const entityId = body.adset_id ?? body.campaign_id ?? body.entity_id;
+    const entityName = body.adset_name ?? body.campaign_name ?? body.entity_name ?? entityId;
     const { daily_budget, previous_budget } = body;
 
     if (!entityId) {
-      return NextResponse.json({ error: 'Entity ID is required (adset_id, campaign_id, or entity_id)' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Entity ID is required (adset_id, campaign_id, or entity_id)' },
+        { status: 400 }
+      );
     }
 
-    const updateBody: any = {};
-    if (daily_budget !== undefined) {
-      // Meta expects budget in cents
-      updateBody.daily_budget = Math.round(parseFloat(daily_budget) * 100);
+    const meta = MetaService.fromSession(session);
+
+    if (daily_budget === undefined) {
+      return NextResponse.json({ error: 'No update fields provided' }, { status: 400 });
     }
 
-    const result = await metaApi(`/${entityId}`, session.meta_access_token, {
-      method: 'POST',
-      body: updateBody,
-    });
+    const budgetCents = Math.round(parseFloat(String(daily_budget)) * 100);
 
-    // Send Slack notification for budget change
-    if (SLACK_CHANNEL && daily_budget !== undefined) {
-      const newBudgetDisplay = `$${parseFloat(daily_budget).toFixed(2)}`;
-      let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newBudgetDisplay}/day`;
-      if (previous_budget) {
-        const prevDisplay = `$${parseFloat(previous_budget).toFixed(2)}`;
-        const direction = parseFloat(daily_budget) > parseFloat(previous_budget) ? 'raised' : 'lowered';
-        text = `💰 *[Wonderly]* ${entityName} ${direction} budget from ${prevDisplay} to ${newBudgetDisplay}/day`;
-      }
+    if (isNaN(budgetCents) || budgetCents <= 0) {
+      return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
+    }
+
+    await meta.updateBudget(entityId, budgetCents);
+
+    if (SLACK_CHANNEL) {
+      const newBudget = parseFloat(String(daily_budget));
+      const previousBudget =
+        previous_budget !== undefined ? parseFloat(String(previous_budget)) : undefined;
+
       try {
-        await postSlackMessage(SLACK_CHANNEL, text);
+        const slack = createSlackService();
+
+        await slack.sendBudgetNotification(SLACK_CHANNEL, {
+          entityName: entityName ?? entityId,
+          newBudget,
+          previousBudget,
+        });
       } catch (e) {
-        console.error('[Budget] Slack notification failed:', e);
+        logger.error('Slack notification failed', e);
       }
     }
 
-    return NextResponse.json({ success: true, ...result });
-  } catch (error: any) {
-    const message = error?.metaError?.message || error?.message || 'Update failed';
-    return NextResponse.json({ error: { message } }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    logger.error('Update error', error);
+
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
 }

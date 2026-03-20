@@ -1,59 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { getCampaigns, getCampaignLevelInsights, getCampaignOptimizationMap } from '@/lib/meta-api';
+import { requireSession } from '@/lib/session';
+import { MetaService } from '@/services/meta';
+import { attachInsights } from '@/lib/utils';
+import { createLogger } from '@/services/logger';
 
+const logger = createLogger('Meta:Campaigns');
+
+/**
+ * GET /api/meta/campaigns
+ *
+ * Returns all campaigns for the authenticated ad account.
+ *
+ * Query params:
+ * - `date_preset` — Meta date preset (default: `today`)
+ * - `with_insights=true` — Attach per-campaign insights and optimization map
+ */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
+  const meta = MetaService.fromSession(session);
+
   try {
-    const data = await getCampaigns(session.ad_account_id, session.meta_access_token);
+    const data = await meta.getCampaigns();
     const campaigns = data.data || [];
 
     if (withInsights) {
       try {
-        // Fetch insights AND optimization mapping in parallel
         const [bulkInsights, optimizationMap] = await Promise.all([
-          getCampaignLevelInsights(
-            session.ad_account_id,
-            session.meta_access_token,
-            datePreset
-          ),
-          getCampaignOptimizationMap(
-            session.ad_account_id,
-            session.meta_access_token
-          ),
+          meta.getCampaignLevelInsights(datePreset),
+          meta.getCampaignOptimizationMap(),
         ]);
 
-        // Build a map of campaign_id -> insights row
-        const insightsMap: Record<string, unknown> = {};
-        for (const row of bulkInsights.data || []) {
-          insightsMap[row.campaign_id] = row;
-        }
-
-        // Merge insights + optimization info into campaigns
-        const campaignsWithInsights = campaigns.map((campaign: { id: string }) => ({
-          ...campaign,
-          insights: insightsMap[campaign.id] || null,
-          result_action_type: optimizationMap[campaign.id] || null,
+        const campaignsWithInsights = attachInsights(
+          campaigns,
+          bulkInsights.data || [],
+          'campaign_id'
+        ).map((c) => ({
+          ...c,
+          result_action_type: optimizationMap[c.id] || null,
         }));
 
         return NextResponse.json({ data: campaignsWithInsights, optimizationMap });
-      } catch (insightsError: unknown) {
-        const msg = insightsError instanceof Error ? insightsError.message : 'Unknown';
-        console.error('Bulk campaign insights error:', msg);
-        const campaignsNoInsights = campaigns.map((c: { id: string }) => ({ ...c, insights: null }));
-        return NextResponse.json({ data: campaignsNoInsights });
+      } catch (insightsError) {
+        logger.error('Bulk campaign insights error', insightsError);
+
+        return NextResponse.json({
+          data: campaigns.map((c) => ({ ...c, insights: null })),
+        });
       }
     }
 
     return NextResponse.json(data);
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Campaign fetch error:', msg);
-    return NextResponse.json({ error: `Failed to fetch campaigns: ${msg}` }, { status: 500 });
+  } catch (error) {
+    logger.error('Campaign fetch error', error);
+
+    return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
   }
 }

@@ -1,61 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { getAds, getAdLevelInsights, metaApi } from '@/lib/meta-api';
+import { requireSession } from '@/lib/session';
+import { MetaService } from '@/services/meta';
+import { attachInsights } from '@/lib/utils';
+import { createLogger } from '@/services/logger';
 
+const logger = createLogger('Meta:Ads');
+
+/**
+ * GET /api/meta/ads
+ *
+ * Returns ads for the authenticated ad account, optionally filtered
+ * by ad set or fetched with custom fields.
+ *
+ * Query params:
+ * - `adset_id` — Filter to a specific ad set
+ * - `date_preset` — Meta date preset (default: `today`)
+ * - `with_insights=true` — Attach per-ad insights
+ * - `fields` — Custom field list (requires adset_id)
+ */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const adSetId = request.nextUrl.searchParams.get('adset_id') || undefined;
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
   const customFields = request.nextUrl.searchParams.get('fields');
 
+  const meta = MetaService.fromSession(session);
+
   try {
-    // If custom fields requested (e.g., fetching creative identity), use metaApi directly
     let data;
+
     if (customFields && adSetId) {
-      data = await metaApi(`/${adSetId}/ads`, session.meta_access_token, {
+      data = await meta.request(`/${adSetId}/ads`, {
         params: { fields: customFields, limit: '5' },
       });
     } else {
-      data = await getAds(session.ad_account_id, session.meta_access_token, adSetId);
+      data = await meta.getAds(adSetId);
     }
-    const ads = data.data || [];
+
+    const ads = (data as { data?: Array<{ id: string }> }).data || [];
 
     if (withInsights) {
-      // Use a SINGLE API call to get insights for ALL ads at once
       try {
-        const bulkInsights = await getAdLevelInsights(
-          session.ad_account_id,
-          session.meta_access_token,
-          datePreset
-        );
+        const bulkInsights = await meta.getAdLevelInsights(datePreset);
 
-        // Build a map of ad_id -> insights row
-        const insightsMap: Record<string, unknown> = {};
-        for (const row of bulkInsights.data || []) {
-          insightsMap[row.ad_id] = row;
-        }
-
-        // Merge insights into ads
-        const adsWithInsights = ads.map((ad: { id: string }) => ({
-          ...ad,
-          insights: insightsMap[ad.id] || null,
-        }));
-
-        return NextResponse.json({ data: adsWithInsights });
+        return NextResponse.json({ data: attachInsights(ads, bulkInsights.data || [], 'ad_id') });
       } catch {
-        // If bulk insights fail, return ads without insights
-        const adsNoInsights = ads.map((a: { id: string }) => ({ ...a, insights: null }));
-        return NextResponse.json({ data: adsNoInsights });
+        return NextResponse.json({
+          data: ads.map((a) => ({ ...a, insights: null })),
+        });
       }
     }
 
-    return NextResponse.json(data);
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Ad fetch error:', msg);
-    return NextResponse.json({ error: `Failed to fetch ads: ${msg}` }, { status: 500 });
+    return NextResponse.json({ data: ads });
+  } catch (error) {
+    logger.error('Ad fetch error', error);
+
+    return NextResponse.json({ error: 'Failed to fetch ads' }, { status: 500 });
   }
 }

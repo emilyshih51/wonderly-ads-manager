@@ -1,37 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
+import { SlackService } from '@/services/slack';
+import { createLogger } from '@/services/logger';
 
+const logger = createLogger('Auth:Slack');
+
+/**
+ * GET /api/auth/slack/callback
+ *
+ * Slack OAuth callback. Exchanges the authorization code for a bot
+ * access token and stores the Slack connection (team, channel, webhook URL)
+ * in the wonderly_slack cookie before redirecting to /settings?slack=connected.
+ * Requires an active Wonderly session.
+ */
 export async function GET(request: NextRequest) {
   const session = await getSession();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
   if (!session) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login`);
+    return NextResponse.redirect(`${appUrl}/login`);
   }
 
   const code = request.nextUrl.searchParams.get('code');
+
   if (!code) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=no_code`);
+    return NextResponse.redirect(`${appUrl}/settings?error=no_code`);
   }
 
   try {
-    const response = await fetch('https://slack.com/api/oauth.v2.access', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.SLACK_CLIENT_ID!,
-        client_secret: process.env.SLACK_CLIENT_SECRET!,
-        code,
-        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/slack/callback`,
-      }),
-    });
-
-    const data = await response.json();
+    const data = await SlackService.exchangeCodeForToken(
+      process.env.SLACK_CLIENT_ID!,
+      process.env.SLACK_CLIENT_SECRET!,
+      code,
+      `${appUrl}/api/auth/slack/callback`
+    );
 
     if (!data.ok) {
-      console.error('Slack OAuth error:', data.error);
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_auth_failed`);
+      logger.error('Slack OAuth error', data.error);
+
+      return NextResponse.redirect(`${appUrl}/settings?error=slack_auth_failed`);
     }
 
-    // Store Slack connection in a cookie (in production, use a database)
     const slackConnection = {
       team_id: data.team?.id,
       team_name: data.team?.name,
@@ -42,8 +51,8 @@ export async function GET(request: NextRequest) {
       bot_user_id: data.bot_user_id,
     };
 
-    // Store as cookie for now
-    const cookieResponse = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?slack=connected`);
+    const cookieResponse = NextResponse.redirect(`${appUrl}/settings?slack=connected`);
+
     cookieResponse.cookies.set('wonderly_slack', JSON.stringify(slackConnection), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -54,7 +63,8 @@ export async function GET(request: NextRequest) {
 
     return cookieResponse;
   } catch (error) {
-    console.error('Slack callback error:', error);
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings?error=slack_callback_failed`);
+    logger.error('Slack callback error', error);
+
+    return NextResponse.redirect(`${appUrl}/settings?error=slack_callback_failed`);
   }
 }

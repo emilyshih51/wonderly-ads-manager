@@ -57,6 +57,14 @@ export async function GET(request: NextRequest) {
 
     const userData = await MetaService.getMe(accessToken);
 
+    logger.info('Facebook user data', {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      hasError: !!userData.error,
+      error: userData.error,
+    });
+
     // Allowlist check — only let authorized users in
     const allowedEmails = (process.env.ALLOWED_EMAILS ?? '')
       .replace(/^["']|["']$/g, '') // strip wrapping quotes from env value

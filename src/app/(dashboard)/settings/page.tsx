@@ -1,26 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MessageSquare, CheckCircle2, Settings2, Copy, Check } from 'lucide-react';
+import { useSlackStatus } from '@/lib/queries/slack/use-slack';
 
 export default function SettingsPage() {
-  const [slackBotConfigured, setSlackBotConfigured] = useState(false);
+  const { data: slackStatus } = useSlackStatus();
+  const slackBotConfigured = slackStatus?.configured ?? false;
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   const eventUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/slack/events`;
   const interactionUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/slack/interactions`;
-
-  useEffect(() => {
-    fetch('/api/slack/status')
-      .then((res) => res.json())
-      .then((data) => {
-        setSlackBotConfigured(data.configured || false);
-      })
-      .catch(() => {});
-  }, []);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

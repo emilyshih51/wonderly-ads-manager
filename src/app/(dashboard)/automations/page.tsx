@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
@@ -35,6 +35,13 @@ import {
   Wand2,
   RotateCcw,
 } from 'lucide-react';
+import {
+  useRules,
+  useSaveRule,
+  useDeleteRule,
+  useToggleRule,
+} from '@/lib/queries/automations/use-rules';
+import { useAutomationHistory, useLogHistory } from '@/lib/queries/automations/use-history';
 import { createLogger } from '@/services/logger';
 import { CampaignSearch } from '@/components/automations/campaign-search';
 import { AdSetSearch } from '@/components/automations/adset-search';
@@ -68,15 +75,6 @@ interface TestResultEntry {
 
 interface TestResult {
   error?: string;
-  matched?: number;
-  results?: TestResultEntry[];
-}
-
-interface HistoryEvent {
-  id: string;
-  timestamp: string;
-  type: 'test' | 'live';
-  rule_name: string;
   matched?: number;
   results?: TestResultEntry[];
 }
@@ -356,12 +354,17 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
 }
 
 export default function AutomationsPage() {
-  const [rules, setRules] = useState<Rule[]>([]);
+  const { data: rules = [] } = useRules();
+  const { data: activityLog = [] } = useAutomationHistory();
+  const saveRule = useSaveRule();
+  const deleteRule = useDeleteRule();
+  const toggleRule = useToggleRule();
+  const logHistory = useLogHistory();
+
   const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
   const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
   const [ruleName, setRuleName] = useState('');
   const [config, setConfig] = useState<RuleConfig>({ ...DEFAULT_CONFIG });
-  const [saving, setSaving] = useState(false);
 
   // Step accordion
   const [openStep, setOpenStep] = useState<number>(1);
@@ -383,70 +386,29 @@ export default function AutomationsPage() {
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [confirmRunRule, setConfirmRunRule] = useState<Rule | null>(null);
 
-  // Activity log
-  const [activityLog, setActivityLog] = useState<HistoryEvent[]>([]);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
   /* ─── API ─── */
-  const fetchRules = useCallback(async () => {
-    try {
-      const res = await fetch('/api/automations/rules');
-      const data = await res.json();
-
-      setRules(data.data || []);
-    } catch (err) {
-      logger.error('Failed to fetch rules', err);
-    }
-  }, []);
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const res = await fetch('/api/automations/history');
-      const data = await res.json();
-
-      setActivityLog(data.data || []);
-    } catch (err) {
-      logger.error('Failed to fetch history', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRules();
-    fetchHistory();
-  }, [fetchRules, fetchHistory]);
-
   const handleSave = async () => {
-    setSaving(true);
-
     try {
       const { nodes, edges } = configToNodes(config);
-      const method = selectedRule ? 'PUT' : 'POST';
-      const body = {
+
+      await saveRule.mutateAsync({
         ...(selectedRule && { id: selectedRule.id }),
         name: ruleName,
         is_active: selectedRule?.is_active ?? false,
         nodes,
         edges,
-      };
-
-      await fetch('/api/automations/rules', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
       });
-      await fetchRules();
       setViewMode('list');
     } catch (err) {
       logger.error('Save failed', err);
-    } finally {
-      setSaving(false);
     }
   };
 
   const handleDelete = async (ruleId: string) => {
     try {
-      await fetch(`/api/automations/rules?id=${ruleId}`, { method: 'DELETE' });
-      fetchRules();
+      await deleteRule.mutateAsync(ruleId);
       if (selectedRule?.id === ruleId) setSelectedRule(null);
     } catch (err) {
       logger.error('Delete failed', err);
@@ -455,12 +417,7 @@ export default function AutomationsPage() {
 
   const handleToggle = async (rule: Rule) => {
     try {
-      await fetch('/api/automations/rules', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: rule.id, is_active: !rule.is_active }),
-      });
-      fetchRules();
+      await toggleRule.mutateAsync({ id: rule.id, is_active: !rule.is_active });
     } catch (err) {
       logger.error('Toggle failed', err);
     }
@@ -559,17 +516,12 @@ export default function AutomationsPage() {
       setTestDialogOpen(true);
 
       // Log to activity history
-      await fetch('/api/automations/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rule_name: ruleName,
-          type: 'test',
-          matched: data.matched || 0,
-          results: data.results || [],
-        }),
+      await logHistory.mutateAsync({
+        rule_name: ruleName,
+        type: 'test',
+        matched: data.matched || 0,
+        results: data.results || [],
       });
-      fetchHistory();
     } catch (err) {
       setTestResults({ error: String(err) });
       setTestDialogOpen(true);
@@ -605,17 +557,12 @@ export default function AutomationsPage() {
       setRunDialogOpen(true);
 
       // Log to activity history
-      await fetch('/api/automations/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rule_name: rule.name,
-          type: 'live',
-          matched: data.matched || 0,
-          results: data.results || [],
-        }),
+      await logHistory.mutateAsync({
+        rule_name: rule.name,
+        type: 'live',
+        matched: data.matched || 0,
+        results: data.results || [],
       });
-      fetchHistory();
     } catch (err) {
       setRunResults({ error: String(err) });
       setRunDialogOpen(true);
@@ -625,7 +572,7 @@ export default function AutomationsPage() {
   };
 
   /* ─── Rollback ─── */
-  const handleRollback = async (eventId: string, results: TestResultEntry[]) => {
+  const handleRollback = async (eventId: string, results: Array<Record<string, unknown>>) => {
     setRollingBackId(eventId);
 
     try {
@@ -711,9 +658,9 @@ export default function AutomationsPage() {
                 <Play className="mr-1.5 h-3.5 w-3.5" />
                 {testing ? 'Testing...' : 'Test Rule'}
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving}>
+              <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
                 <Save className="mr-1.5 h-3.5 w-3.5" />
-                {saving ? 'Saving...' : 'Save Rule'}
+                {saveRule.isPending ? 'Saving...' : 'Save Rule'}
               </Button>
             </>
           )}
@@ -921,8 +868,10 @@ export default function AutomationsPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             {!isTest &&
-                              event.results?.some((r: TestResultEntry) =>
-                                ['paused', 'activated', 'promoted'].includes(r.action)
+                              event.results?.some((r) =>
+                                r.action
+                                  ? ['paused', 'activated', 'promoted'].includes(r.action)
+                                  : false
                               ) && (
                                 <button
                                   onClick={() => handleRollback(event.id, event.results || [])}
@@ -950,7 +899,7 @@ export default function AutomationsPage() {
                                 <span className="font-medium text-gray-700">{event.matched}</span>{' '}
                                 ad{event.matched !== 1 ? 's' : ''} matched
                               </p>
-                              {event.results?.map((r: TestResultEntry, i: number) => (
+                              {event.results?.map((r, i) => (
                                 <div
                                   key={i}
                                   className="flex items-center justify-between border-l-2 border-gray-100 pl-3"
@@ -1577,9 +1526,9 @@ export default function AutomationsPage() {
                     <Play className="mr-1.5 h-3.5 w-3.5" />
                     {testing ? 'Testing...' : 'Test Rule'}
                   </Button>
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
                     <Save className="mr-1.5 h-3.5 w-3.5" />
-                    {saving ? 'Saving...' : 'Save Rule'}
+                    {saveRule.isPending ? 'Saving...' : 'Save Rule'}
                   </Button>
                 </div>
               </div>

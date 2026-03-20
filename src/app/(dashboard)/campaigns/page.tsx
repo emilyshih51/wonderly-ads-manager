@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,209 +14,169 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { TableSkeleton } from '@/components/skeletons/table-skeleton';
 import { useAppStore } from '@/stores/app-store';
-import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
+import { useCampaigns, type CampaignRow } from '@/lib/queries/meta/use-campaigns';
+import { apiPost } from '@/lib/queries/api-fetch';
+import { queryKeys } from '@/lib/queries/keys';
+import { formatCurrency, formatPercent, formatNumber, cn } from '@/lib/utils';
 import { getResultCount, getCostPerResult } from '@/lib/automation-utils';
 import { Copy, RefreshCw } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Campaigns');
 
-interface Campaign {
-  id: string;
-  name: string;
-  status: string;
-  objective: string;
-  daily_budget?: string;
-  lifetime_budget?: string;
-  insights?: {
-    spend: string;
-    cpm: string;
-    ctr: string;
-    cpc: string;
-    actions?: Array<{ action_type: string; value: string }>;
-    cost_per_action_type?: Array<{ action_type: string; value: string }>;
-  } | null;
-}
-
 export default function CampaignsPage() {
   const { datePreset } = useAppStore();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: campaigns = [], isLoading, isFetching, refetch } = useCampaigns(datePreset);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<CampaignRow | null>(null);
   const [newName, setNewName] = useState('');
-  const [duplicating, setDuplicating] = useState(false);
 
-  const fetchCampaigns = useCallback(async () => {
-    setLoading(true);
+  const queryClient = useQueryClient();
+  const duplicateMutation = useMutation({
+    mutationFn: (payload: { type: string; id: string; newName: string }) =>
+      apiPost('/api/meta/duplicate', payload),
+    onSuccess: () => {
+      setDuplicateDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.meta.campaignsBase() });
+    },
+    onError: (error) => logger.error('Duplicate failed', error),
+  });
 
-    try {
-      const res = await fetch(`/api/meta/campaigns?with_insights=true&date_preset=${datePreset}`);
-      const data = await res.json();
-
-      setCampaigns(data.data || []);
-    } catch (error) {
-      logger.error('Failed to fetch campaigns', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [datePreset]);
-
-  useEffect(() => {
-    fetchCampaigns();
-  }, [fetchCampaigns]);
-
-  const handleDuplicate = async () => {
+  const handleDuplicate = () => {
     if (!selectedCampaign) return;
-    setDuplicating(true);
-
-    try {
-      const res = await fetch('/api/meta/duplicate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'campaign',
-          id: selectedCampaign.id,
-          newName: newName || `${selectedCampaign.name} (Copy)`,
-        }),
-      });
-      const data = await res.json();
-
-      if (data.id) {
-        setDuplicateDialogOpen(false);
-        fetchCampaigns();
-      }
-    } catch (error) {
-      logger.error('Duplicate failed', error);
-    } finally {
-      setDuplicating(false);
-    }
+    duplicateMutation.mutate({
+      type: 'campaign',
+      id: selectedCampaign.id,
+      newName: newName || `${selectedCampaign.name} (Copy)`,
+    });
   };
 
   return (
     <div>
       <Header title="Campaigns" description="Manage and duplicate your ad campaigns">
-        <Button variant="outline" size="sm" onClick={fetchCampaigns} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
           Refresh
         </Button>
       </Header>
 
       <div className="p-8">
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/50">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Objective
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Spend
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Results
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      CTR
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      CPC
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Cost/Result
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={9} className="py-12 text-center text-gray-400">
-                        Loading campaigns...
-                      </td>
+        {isLoading ? (
+          <TableSkeleton columns={8} rows={6} />
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Objective
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Spend
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Results
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        CTR
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        CPC
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Cost/Result
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Actions
+                      </th>
                     </tr>
-                  ) : campaigns.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-12 text-center text-gray-400">
-                        No campaigns found
-                      </td>
-                    </tr>
-                  ) : (
-                    campaigns.map((campaign) => (
-                      <tr key={campaign.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                        <td className="max-w-[250px] truncate px-4 py-3 font-medium text-gray-900">
-                          {campaign.name}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={campaign.status} />
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-500">
-                          {campaign.objective?.replace('OUTCOME_', '')}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(campaign.insights?.spend)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {/* Generic conversion fallback — see automation-utils.ts */}
-                          {formatNumber(
-                            getResultCount(
-                              { actions: campaign.insights?.actions, campaign_id: campaign.id },
-                              campaign.id,
-                              {}
-                            )
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatPercent(campaign.insights?.ctr)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(campaign.insights?.cpc)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {formatCurrency(
-                            getCostPerResult(
-                              {
-                                spend: campaign.insights?.spend || '0',
-                                actions: campaign.insights?.actions,
-                                campaign_id: campaign.id,
-                              },
-                              campaign.id,
-                              {}
-                            )
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedCampaign(campaign);
-                              setNewName(`${campaign.name} (Copy)`);
-                              setDuplicateDialogOpen(true);
-                            }}
-                          >
-                            <Copy className="mr-1 h-4 w-4" /> Duplicate
-                          </Button>
+                  </thead>
+                  <tbody>
+                    {campaigns.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-gray-400">
+                          No campaigns found
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                    ) : (
+                      campaigns.map((campaign) => (
+                        <tr
+                          key={campaign.id}
+                          className="border-b border-gray-50 hover:bg-gray-50/50"
+                        >
+                          <td className="max-w-[250px] truncate px-4 py-3 font-medium text-gray-900">
+                            {campaign.name}
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={campaign.status} />
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {campaign.objective?.replace('OUTCOME_', '')}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {formatCurrency(campaign.insights?.spend)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {/* Generic conversion fallback — see automation-utils.ts */}
+                            {formatNumber(
+                              getResultCount(
+                                { actions: campaign.insights?.actions, campaign_id: campaign.id },
+                                campaign.id,
+                                {}
+                              )
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {formatPercent(campaign.insights?.ctr)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {formatCurrency(campaign.insights?.cpc)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {formatCurrency(
+                              getCostPerResult(
+                                {
+                                  spend: campaign.insights?.spend || '0',
+                                  actions: campaign.insights?.actions,
+                                  campaign_id: campaign.id,
+                                },
+                                campaign.id,
+                                {}
+                              )
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedCampaign(campaign);
+                                setNewName(`${campaign.name} (Copy)`);
+                                setDuplicateDialogOpen(true);
+                              }}
+                            >
+                              <Copy className="mr-1 h-4 w-4" /> Duplicate
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Duplicate Dialog */}
@@ -241,8 +202,8 @@ export default function CampaignsPage() {
               <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleDuplicate} disabled={duplicating}>
-                {duplicating ? 'Duplicating...' : 'Duplicate Campaign'}
+              <Button onClick={handleDuplicate} disabled={duplicateMutation.isPending}>
+                {duplicateMutation.isPending ? 'Duplicating...' : 'Duplicate Campaign'}
               </Button>
             </div>
           </div>

@@ -65,6 +65,12 @@ src/
 - Use types from `src/types/index.ts` for all domain objects (campaigns, ad sets, ads, sessions, insights).
 - Prefer `interface` for domain types, `type` for unions and utility types.
 
+### JSDoc
+
+- Add JSDoc to all exported functions and hooks in new or modified files.
+- Use `@param` for each parameter and `@returns` for non-void return values.
+- Do not over-document — skip obvious params like `children` or `className`. One-line summary + params/returns only.
+
 ### Imports
 
 - Always use the `@/` alias (maps to `src/`). Never use relative imports like `../logger`.

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
 import { CALL_TO_ACTION_TYPES } from '@/lib/utils';
+import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
+import { useAdSets } from '@/lib/queries/meta/use-adsets';
 import {
   Copy,
   Plus,
@@ -25,7 +27,6 @@ import {
   Rocket,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
-import type { MetaCampaign, MetaAdSet } from '@/types';
 
 const logger = createLogger('AdSets');
 
@@ -91,8 +92,8 @@ const INITIAL_STATE: LaunchState = {
 
 export default function LaunchPage() {
   const [state, setState] = useState<LaunchState>(INITIAL_STATE);
-  const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
-  const [adSets, setAdSets] = useState<MetaAdSet[]>([]);
+  const { data: campaigns = [] } = useCampaignList();
+  const { data: adSets = [], isError: adSetsError } = useAdSets({});
   const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [fetchError, setFetchError] = useState('');
@@ -154,28 +155,10 @@ export default function LaunchPage() {
     }
   };
 
-  /* ---------- Fetch campaigns and ad sets ---------- */
+  /* ---------- Sync query error to local fetchError state ---------- */
   useEffect(() => {
-    const fetch = async () => {
-      setFetchError('');
-
-      try {
-        const [campaignsRes, adSetsRes] = await Promise.all([
-          window.fetch('/api/meta/campaigns'),
-          window.fetch('/api/meta/adsets'),
-        ]);
-        const campaignsData = await campaignsRes.json();
-        const adSetsData = await adSetsRes.json();
-
-        setCampaigns(campaignsData.data || []);
-        setAdSets(adSetsData.data || []);
-      } catch (error) {
-        setFetchError(error instanceof Error ? error.message : 'Failed to load data');
-      }
-    };
-
-    fetch();
-  }, []);
+    if (adSetsError) setFetchError('Failed to load data');
+  }, [adSetsError]);
 
   /* ---------- Build source options (filtered by search) ---------- */
   useEffect(() => {

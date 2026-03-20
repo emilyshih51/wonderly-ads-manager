@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import NextImage from 'next/image';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,14 @@ import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/stores/app-store';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { StatusBadge } from '@/components/ui/badge';
+import { useCampaigns } from '@/lib/queries/meta/use-campaigns';
+import {
+  useDashboardInsights,
+  useDrillDown,
+  useBudgetMutation,
+} from '@/lib/queries/meta/use-dashboard';
+import type { AdSetRow } from '@/lib/queries/meta/use-adsets';
+import { DashboardSkeleton } from '@/components/skeletons/dashboard-skeleton';
 import {
   AreaChart,
   Area,
@@ -29,56 +37,13 @@ import {
   TrendingUp,
   BarChart3,
   ArrowLeft,
+  RefreshCw,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Dashboard');
 
 /* ---------- Types ---------- */
-
-interface InsightRow {
-  spend: string;
-  impressions: string;
-  clicks: string;
-  ctr: string;
-  cpc: string;
-  cpm: string;
-  reach: string;
-  actions?: Array<{ action_type: string; value: string }>;
-  cost_per_action_type?: Array<{ action_type: string; value: string }>;
-  cost_per_inline_link_click?: string;
-  inline_link_clicks?: string;
-  date_start?: string;
-  date_stop?: string;
-}
-
-interface CampaignRow {
-  id: string;
-  name: string;
-  status: string;
-  objective: string;
-  insights: InsightRow | null;
-  result_action_type?: string | null; // From ad set optimization_goal + promoted_object
-}
-
-interface AdSetRow {
-  id: string;
-  name: string;
-  campaign_id: string;
-  campaign?: { name: string };
-  status: string;
-  daily_budget?: string;
-  insights: InsightRow | null;
-}
-
-interface AdRow {
-  id: string;
-  name: string;
-  adset_id: string;
-  status: string;
-  creative?: { thumbnail_url?: string; image_url?: string; body?: string };
-  insights: InsightRow | null;
-}
 
 /* ---------- Helpers ---------- */
 
@@ -177,15 +142,23 @@ function getCostPerResult(
 
 export default function DashboardPage() {
   const { datePreset } = useAppStore();
-  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
-  const [timeSeries, setTimeSeries] = useState<InsightRow[]>([]);
 
-  // Fetched on-demand when a campaign is selected
-  const [drillAdSets, setDrillAdSets] = useState<AdSetRow[]>([]);
-  const [drillAds, setDrillAds] = useState<AdRow[]>([]);
-  const [drillLoading, setDrillLoading] = useState(false);
+  // TanStack Query hooks
+  const {
+    data: campaigns = [],
+    isLoading: campaignsLoading,
+    isFetching: campaignsFetching,
+  } = useCampaigns(datePreset);
+  const { data: timeSeries = [], isLoading: insightsLoading } = useDashboardInsights(datePreset);
+  const {
+    adSets: drillAdSets,
+    ads: drillAds,
+    isLoading: drillLoading,
+  } = useDrillDown(selectedCampaign, datePreset);
+  const budgetMutation = useBudgetMutation();
+
+  const loading = campaignsLoading || insightsLoading;
 
   // Inline budget editing
   const [editingBudget, setEditingBudget] = useState<{
@@ -193,11 +166,9 @@ export default function DashboardPage() {
     type: 'adset' | 'campaign';
     value: string;
   } | null>(null);
-  const [savingBudget, setSavingBudget] = useState(false);
 
   const handleBudgetSave = async () => {
     if (!editingBudget) return;
-    setSavingBudget(true);
 
     try {
       const entity =
@@ -216,106 +187,21 @@ export default function DashboardPage() {
             : undefined
           : undefined;
 
-      await fetch('/api/meta/adsets/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adset_id: editingBudget.id,
-          adset_name: entityName,
-          daily_budget: editingBudget.value,
-          previous_budget: previousBudget,
-        }),
+      await budgetMutation.mutateAsync({
+        adset_id: editingBudget.id,
+        adset_name: entityName,
+        daily_budget: editingBudget.value,
+        previous_budget: previousBudget,
       });
-
-      // Update local state
-      if (editingBudget.type === 'adset') {
-        setDrillAdSets((prev) =>
-          prev.map((a) =>
-            a.id === editingBudget.id
-              ? {
-                  ...a,
-                  daily_budget: String(Math.round(parseFloat(editingBudget.value) * 100)),
-                }
-              : a
-          )
-        );
-      }
 
       setEditingBudget(null);
     } catch (e) {
       logger.error('Budget save failed', e);
-    } finally {
-      setSavingBudget(false);
     }
   };
 
-  /* -- Fetch campaigns + time series -- */
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      const [campaignsRes, timeSeriesRes] = await Promise.all([
-        fetch(`/api/meta/campaigns?with_insights=true&date_preset=${datePreset}`),
-        fetch(`/api/meta/insights?date_preset=${datePreset}&time_increment=1`),
-      ]);
-      const campaignsData = await campaignsRes.json();
-      const timeSeriesData = await timeSeriesRes.json();
-
-      setCampaigns(campaignsData.data || []);
-      setTimeSeries(timeSeriesData.data || []);
-    } catch (error) {
-      logger.error('Dashboard fetch error', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [datePreset]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  /* -- Fetch ad sets + ads when a campaign is selected (server-side filter) -- */
-  const fetchDrillDown = useCallback(
-    async (campaignId: string) => {
-      if (campaignId === 'all') {
-        setDrillAdSets([]);
-        setDrillAds([]);
-
-        return;
-      }
-
-      setDrillLoading(true);
-
-      try {
-        const adSetsRes = await fetch(
-          `/api/meta/adsets?campaign_id=${campaignId}&with_insights=true&date_preset=${datePreset}`
-        );
-        const adSetsData = await adSetsRes.json();
-        const adSets: AdSetRow[] = adSetsData.data || [];
-
-        // Fetch ads for each ad set in the campaign rather than all ads in the account
-        const adSetIds = adSets.map((a) => a.id);
-        const adPromises = adSetIds.map((id) =>
-          fetch(`/api/meta/ads?adset_id=${id}&with_insights=true&date_preset=${datePreset}`)
-            .then((r) => r.json())
-            .then((d) => (d.data || []) as AdRow[])
-        );
-        const filteredAds = (await Promise.all(adPromises)).flat();
-
-        setDrillAdSets(adSets);
-        setDrillAds(filteredAds);
-      } catch (error) {
-        logger.error('Drill-down fetch error', error);
-      } finally {
-        setDrillLoading(false);
-      }
-    },
-    [datePreset]
-  );
-
   const handleSelectCampaign = (campaignId: string) => {
     setSelectedCampaign(campaignId);
-    fetchDrillDown(campaignId);
   };
 
   /* ---------- Compute summary metrics ---------- */
@@ -464,15 +350,22 @@ export default function DashboardPage() {
     ...campaigns.map((c) => ({ label: c.name, value: c.id })),
   ];
 
+  if (loading && campaigns.length === 0) {
+    return <DashboardSkeleton />;
+  }
+
   return (
     <div>
       <Header title="Dashboard" description="Overview of your ad account performance">
-        <SelectNative
-          value={selectedCampaign}
-          onChange={(e) => handleSelectCampaign(e.target.value)}
-          options={campaignOptions}
-          className="w-72"
-        />
+        <div className="flex items-center gap-3">
+          {campaignsFetching && <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />}
+          <SelectNative
+            value={selectedCampaign}
+            onChange={(e) => handleSelectCampaign(e.target.value)}
+            options={campaignOptions}
+            className="w-72"
+          />
+        </div>
       </Header>
 
       <div className="space-y-8 p-8">
@@ -773,14 +666,14 @@ export default function DashboardPage() {
                                       if (e.key === 'Escape') setEditingBudget(null);
                                     }}
                                     autoFocus
-                                    disabled={savingBudget}
+                                    disabled={budgetMutation.isPending}
                                   />
                                   <button
                                     onClick={handleBudgetSave}
                                     className="text-xs font-medium text-green-600 hover:text-green-700"
-                                    disabled={savingBudget}
+                                    disabled={budgetMutation.isPending}
                                   >
-                                    {savingBudget ? '...' : '✓'}
+                                    {budgetMutation.isPending ? '...' : '✓'}
                                   </button>
                                   <button
                                     onClick={() => setEditingBudget(null)}

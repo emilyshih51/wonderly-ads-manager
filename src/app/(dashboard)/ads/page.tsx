@@ -1,49 +1,19 @@
 'use client';
 
 import NextImage from 'next/image';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { SelectNative } from '@/components/ui/select-native';
+import { TableSkeleton } from '@/components/skeletons/table-skeleton';
 import { useAppStore } from '@/stores/app-store';
-import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS } from '@/lib/utils';
+import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
+import { useAds } from '@/lib/queries/meta/use-ads';
+import { formatCurrency, formatPercent, formatNumber, cn, DATE_PRESETS } from '@/lib/utils';
 import { getResultCount } from '@/lib/automation-utils';
-import { RefreshCw, Loader2, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
-import { createLogger } from '@/services/logger';
-
-const logger = createLogger('Ads');
-
-interface Campaign {
-  id: string;
-  name: string;
-}
-
-interface AdInsight {
-  spend: string;
-  impressions: string;
-  clicks: string;
-  ctr: string;
-  cpc: string;
-  actions?: Array<{ action_type: string; value: string }>;
-  cost_per_action_type?: Array<{ action_type: string; value: string }>;
-}
-
-interface Ad {
-  id: string;
-  name: string;
-  campaign_id: string;
-  campaign_name?: string;
-  status: string;
-  creative?: {
-    title?: string;
-    body?: string;
-    thumbnail_url?: string;
-    image_url?: string;
-  };
-  insights?: AdInsight | null;
-}
+import { RefreshCw, Trophy, TrendingUp, Image as ImageIcon } from 'lucide-react';
 
 const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
 
@@ -51,31 +21,14 @@ export default function TopPerformingAdsPage() {
   const { setDatePreset } = useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [allAds, setAllAds] = useState<Ad[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      // Fetch campaigns and ads in parallel
-      const [campaignsRes, adsRes] = await Promise.all([
-        fetch('/api/meta/campaigns'),
-        fetch(`/api/meta/ads?with_insights=true&date_preset=${localDatePreset}`),
-      ]);
-
-      const campaignsData = await campaignsRes.json();
-      const adsData = await adsRes.json();
-
-      setCampaigns(campaignsData.data || []);
-      setAllAds((adsData.data || []) as Ad[]);
-    } catch (error) {
-      logger.error('Failed to fetch data', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [localDatePreset]);
+  const { data: campaigns = [] } = useCampaignList();
+  const {
+    data: allAds = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useAds({ datePreset: localDatePreset });
 
   // Campaign filtering and ranking applied client-side via useMemo
   const ads = useMemo(() => {
@@ -131,10 +84,6 @@ export default function TopPerformingAdsPage() {
     );
   }, [allAds, selectedCampaign]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const handleDatePresetChange = (value: string) => {
     setLocalDatePreset(value);
     setDatePreset(value);
@@ -143,8 +92,8 @@ export default function TopPerformingAdsPage() {
   return (
     <div>
       <Header title="Top Performing Ads" description="Your best performing ads ranked by results">
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
           Refresh
         </Button>
       </Header>
@@ -175,10 +124,8 @@ export default function TopPerformingAdsPage() {
         </div>
 
         {/* Loading State */}
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+        {isLoading ? (
+          <TableSkeleton columns={7} rows={8} />
         ) : ads.length === 0 ? (
           /* Empty State */
           <Card className="border-dashed">
@@ -317,7 +264,7 @@ export default function TopPerformingAdsPage() {
         )}
 
         {/* Summary */}
-        {!loading && ads.length > 0 && (
+        {!isLoading && ads.length > 0 && (
           <div className="mt-6 text-sm text-gray-600">
             Showing <span className="font-semibold text-gray-900">{ads.length}</span> top performing
             ads

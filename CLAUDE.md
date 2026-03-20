@@ -34,12 +34,15 @@ src/
 │   ├── ui/                    # Reusable headless UI components (Radix-based)
 │   ├── layout/                # Sidebar, header
 │   └── automations/           # Automation flow node components
+├── config/
+│   └── env.ts                 # validateEnv() — required env var check, called from next.config.ts
 ├── lib/
 │   ├── automation-utils.ts    # Pure functions: evaluateCondition, getResultCount, getCostPerResult
 │   ├── redis.ts               # getRedisClient() — null-safe Redis connection helper
 │   ├── session.ts             # Cookie-based session management (getSession, setSession)
 │   ├── slack-context.ts       # fetchAdContextData, formatContextForClaude (used by Slack bot)
 │   └── utils.ts               # Shared utilities (cn, formatCurrency, etc.)
+├── middleware.ts               # Auth redirect + per-IP rate limiting (60 req/min)
 ├── services/
 │   ├── anthropic/             # AnthropicService — Claude API wrapper
 │   ├── logger/                # createLogger() — structured console logger
@@ -119,16 +122,11 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 ## Known Issues (Do Not Introduce More)
 
-| Issue                                   | Severity | Notes                                        |
-| --------------------------------------- | -------- | -------------------------------------------- |
-| No login restriction by default         | Critical | Set `ALLOWED_EMAILS` in production           |
-| No Slack action restriction by default  | Critical | Set `ALLOWED_SLACK_USER_IDS` in production   |
-| Single system token for all accounts    | High     | One compromised token affects all accounts   |
-| No data freshness checks in automations | High     | Meta reporting delays can cause false pauses |
-| No server-side sessions                 | High     | Cannot remotely revoke access                |
-| No audit trail in UI                    | Medium   | History stored in cookies but not displayed  |
-| No rate limiting                        | Medium   | No throttling on any endpoint                |
-| No rollback mechanism                   | Medium   | No batch-undo for automation actions         |
+| Issue                                | Severity | Notes                                      |
+| ------------------------------------ | -------- | ------------------------------------------ |
+| Single system token for all accounts | High     | One compromised token affects all accounts |
+| No server-side sessions              | High     | Cannot remotely revoke access              |
+| No rollback mechanism                | Medium   | No batch-undo for automation actions       |
 
 ---
 
@@ -136,7 +134,14 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 All secrets live in Vercel environment variables. **Never commit `.env` files.**
 
-See [`.env.example`](.env.example) for the full list of required variables and their descriptions.
+See [`.env.example`](.env.example) for the full list of variables and their descriptions.
+
+Required variables are validated at build time in `src/config/env.ts`. The build (and `next dev`) will throw with a clear error if any are missing. Required variables:
+
+- `META_APP_ID`, `META_APP_SECRET`, `META_SYSTEM_ACCESS_TOKEN`
+- `NEXT_PUBLIC_APP_URL`
+- `ANTHROPIC_API_KEY`
+- `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`
 
 ---
 

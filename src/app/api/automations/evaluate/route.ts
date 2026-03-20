@@ -234,9 +234,29 @@ async function evaluateRule(
 
   const results: unknown[] = [];
 
+  // For "today" preset, Meta's reporting pipeline can lag 1–3 hours.
+  // A row with zero impressions has no delivery data yet — skip it to
+  // prevent false pauses on ads that simply haven't reported yet.
+  const isToday = datePreset === 'today';
+
   for (const row of insightsData) {
     const entityId = (row.ad_id ?? row.adset_id ?? row.campaign_id) as string;
     const entityName = (row.ad_name ?? row.adset_name ?? row.campaign_name ?? entityId) as string;
+    const impressions = parseInt(row.impressions ?? '0');
+
+    if (isToday && impressions === 0 && !dryRun) {
+      logger.info(
+        `Skipping "${entityName}" (${entityId}) — zero impressions on today preset (data may not have propagated yet)`
+      );
+      results.push({
+        rule: rule.name,
+        entity_id: entityId,
+        entity_name: entityName,
+        skipped: 'stale_data_today',
+      });
+      continue;
+    }
+
     const spend = parseFloat(row.spend ?? '0');
     const rowCampaignId = row.campaign_id;
     const resultCount = getResultCount(row, rowCampaignId, optimizationMap);
@@ -244,7 +264,7 @@ async function evaluateRule(
 
     const metrics = {
       spend,
-      impressions: parseInt(row.impressions ?? '0'),
+      impressions,
       clicks: parseInt(row.clicks ?? '0'),
       ctr: parseFloat(row.ctr ?? '0'),
       cpc: parseFloat(row.cpc ?? '0'),

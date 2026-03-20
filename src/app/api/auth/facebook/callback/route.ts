@@ -59,11 +59,18 @@ export async function GET(request: NextRequest) {
 
     // Allowlist check — only let authorized users in
     const allowedEmails = (process.env.ALLOWED_EMAILS ?? '')
+      .replace(/^["']|["']$/g, '') // strip wrapping quotes from env value
       .split(',')
-      .map((s) => s.trim())
+      .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
 
-    if (allowedEmails.length > 0 && !allowedEmails.includes(userData.email ?? '')) {
+    const userEmail = (userData.email ?? '').toLowerCase();
+
+    logger.info('Login attempt', { email: userEmail, allowedCount: allowedEmails.length });
+
+    if (allowedEmails.length > 0 && !allowedEmails.includes(userEmail)) {
+      logger.warn('Login rejected — email not in allowlist', { email: userEmail });
+
       return NextResponse.redirect(`${appUrl}/login?error=unauthorized`);
     }
 

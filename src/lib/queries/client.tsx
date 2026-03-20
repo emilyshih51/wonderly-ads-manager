@@ -1,6 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useState } from 'react';
 
 function makeQueryClient() {
@@ -21,5 +22,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
   // useState ensures one QueryClient per component lifecycle (SSR-safe)
   const [queryClient] = useState(makeQueryClient);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
 }

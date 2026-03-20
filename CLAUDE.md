@@ -39,7 +39,7 @@ src/
 ├── lib/
 │   ├── automation-utils.ts    # Pure functions: evaluateCondition, getResultCount, getCostPerResult
 │   ├── redis.ts               # getRedisClient() — null-safe Redis connection helper
-│   ├── session.ts             # Cookie-based session management (getSession, setSession)
+│   ├── session.ts             # Server-side session management — Redis-backed with cookie-only fallback
 │   ├── slack-context.ts       # fetchAdContextData, formatContextForClaude (used by Slack bot)
 │   └── utils.ts               # Shared utilities (cn, formatCurrency, etc.)
 ├── middleware.ts               # Auth redirect + per-IP rate limiting (60 req/min)
@@ -96,6 +96,7 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 - Client state: Zustand store at `src/stores/app-store.ts`.
 - Server state: fetched fresh on each request — no client-side caching layer.
+- Sessions: Redis-backed server-side sessions (session ID in cookie, data in Redis). Falls back to cookie-only storage when `REDIS_URL` is unset (dev). Allows server-side revocation on logout.
 - Rules persistence: Redis (for cron) + cookies (for UI). Both are written on every save.
 
 ---
@@ -124,10 +125,9 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 ## Known Issues (Do Not Introduce More)
 
-| Issue                   | Severity | Notes                                |
-| ----------------------- | -------- | ------------------------------------ |
-| No server-side sessions | High     | Cannot remotely revoke access        |
-| No rollback mechanism   | Medium   | No batch-undo for automation actions |
+| Issue                 | Severity | Notes                                |
+| --------------------- | -------- | ------------------------------------ |
+| No rollback mechanism | Medium   | No batch-undo for automation actions |
 
 ---
 

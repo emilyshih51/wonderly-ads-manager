@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Allow larger request bodies for video uploads (default is 1MB in App Router)
@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '50mb',
     },
+  },
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '**.fbcdn.net' },
+      { protocol: 'https', hostname: '**.facebook.com' },
+    ],
   },
 };
 

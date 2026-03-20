@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { requireSession } from '@/lib/session';
+import { SlackService } from '@/services/slack';
+import { createLogger } from '@/services/logger';
 
+const logger = createLogger('Slack:Notify');
+
+/**
+ * POST /api/slack/notify
+ *
+ * Sends a Slack message using the OAuth connection stored in the
+ * wonderly_slack cookie. Uses the Slack Web API via SlackService.
+ * Body: `{ message, channel? }`.
+ */
 export async function POST(request: NextRequest) {
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+
   try {
     const cookieStore = await cookies();
     const slackCookie = cookieStore.get('wonderly_slack');
@@ -10,44 +26,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Slack not connected' }, { status: 400 });
     }
 
-    const slackConnection = JSON.parse(slackCookie.value);
+    const slackConnection = JSON.parse(slackCookie.value) as {
+      access_token?: string;
+      webhook_url?: string;
+      channel_id?: string;
+    };
     const body = await request.json();
     const { message, channel } = body;
 
-    // Use webhook or API
-    if (slackConnection.webhook_url) {
-      const response = await fetch(slackConnection.webhook_url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: message }),
-      });
+    const targetChannel = channel || slackConnection.channel_id;
 
-      if (!response.ok) {
-        throw new Error('Webhook delivery failed');
+    // Prefer bot token delivery via the Slack Web API; fall back to webhook if
+    // the connection was established with incoming-webhook scope only.
+    if (slackConnection.access_token) {
+      const slack = new SlackService(
+        slackConnection.access_token,
+        process.env.SLACK_SIGNING_SECRET ?? ''
+      );
+
+      if (!targetChannel) {
+        return NextResponse.json({ error: 'No channel configured' }, { status: 400 });
       }
+
+      const result = await slack.postMessage(targetChannel, message);
+
+      if (!result) {
+        throw new Error('Failed to send Slack message');
+      }
+    } else if (slackConnection.webhook_url) {
+      const slack = new SlackService('', process.env.SLACK_SIGNING_SECRET ?? '');
+
+      await slack.sendWebhookMessage(slackConnection.webhook_url, message);
     } else {
-      // Use Slack API
-      const response = await fetch('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${slackConnection.access_token}`,
-        },
-        body: JSON.stringify({
-          channel: channel || slackConnection.channel_id,
-          text: message,
-        }),
-      });
-
-      const data = await response.json();
-      if (!data.ok) {
-        throw new Error(data.error || 'Slack API error');
-      }
+      return NextResponse.json(
+        { error: 'No Slack access token or webhook URL configured' },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Slack notify error:', error);
+    logger.error('Slack notify error', error);
+
     return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
   }
 }

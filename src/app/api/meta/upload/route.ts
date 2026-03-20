@@ -1,71 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { metaApi } from '@/lib/meta-api';
+import { requireSession } from '@/lib/session';
+import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
 
-// Allow larger file uploads (videos can be 50MB+)
+const logger = createLogger('Meta:Upload');
+
 export const maxDuration = 60;
 
+/**
+ * POST /api/meta/upload
+ *
+ * Multipart form handler for Meta ad creation. Dispatches on the `action` field:
+ * - `upload_image` — Uploads an image to adimages and returns the image hash.
+ * - `upload_video` — Uploads a video to advideos and returns the video ID.
+ * - `create_ad` — Creates an ad creative (image or video) and then an ad.
+ *
+ * Maximum serverless duration: 60 seconds (video uploads can be large).
+ */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const formData = await request.formData();
     const action = formData.get('action') as string;
 
+    const meta = MetaService.fromSession(session);
+
     if (action === 'upload_image') {
-      // Upload image to Meta
-      const imageFormData = new FormData();
       const file = formData.get('file') as File;
+
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
-      const blob = new Blob([bytes], { type: file.type });
-      imageFormData.append('filename', blob, file.name);
-      imageFormData.append('access_token', session.meta_access_token);
+      const uploadFile = new File([bytes], file.name, { type: file.type });
 
-      const response = await fetch(
-        `https://graph.facebook.com/v21.0/act_${session.ad_account_id}/adimages`,
-        { method: 'POST', body: imageFormData }
-      );
-      const data = await response.json();
+      const data = await meta.uploadAdImage(uploadFile);
+
       return NextResponse.json(data);
     }
 
     if (action === 'upload_video') {
-      // Upload video to Meta ad account
       const file = formData.get('file') as File;
+
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
-      const blob = new Blob([bytes], { type: file.type });
+      const uploadFile = new File([bytes], file.name, { type: file.type });
 
-      const videoFormData = new FormData();
-      videoFormData.append('source', blob, file.name);
-      videoFormData.append('title', file.name.replace(/\.[^.]+$/, ''));
-      videoFormData.append('access_token', session.meta_access_token);
+      const data = await meta.uploadAdVideo(uploadFile);
 
-      const response = await fetch(
-        `https://graph.facebook.com/v21.0/act_${session.ad_account_id}/advideos`,
-        { method: 'POST', body: videoFormData }
-      );
-
-      // Handle non-JSON responses (e.g., if Meta returns an HTML error)
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error('[upload_video] Non-JSON response:', responseText.substring(0, 500));
-        return NextResponse.json({
-          error: { message: `Video upload failed: ${response.status} ${response.statusText}` }
-        }, { status: 500 });
-      }
-
-      if (data.error) {
-        return NextResponse.json({ error: data.error }, { status: 400 });
-      }
-      // Returns { id: "VIDEO_ID" }
       return NextResponse.json(data);
     }
 
@@ -73,44 +59,47 @@ export async function POST(request: NextRequest) {
       const adsetId = formData.get('adset_id') as string;
       const name = formData.get('name') as string;
       const pageId = formData.get('page_id') as string;
+      const link = formData.get('link') as string;
+
+      if (!adsetId || !name || !pageId || !link) {
+        return NextResponse.json(
+          { error: 'adset_id, name, page_id, and link are required' },
+          { status: 400 }
+        );
+      }
+
       const instagramActorId = formData.get('instagram_actor_id') as string;
       const message = formData.get('message') as string;
-      const link = formData.get('link') as string;
       const urlTags = formData.get('url_tags') as string;
       const headline = formData.get('headline') as string;
       const description = formData.get('description') as string;
       const callToAction = formData.get('call_to_action') as string;
       const imageHash = formData.get('image_hash') as string;
       const videoId = formData.get('video_id') as string;
-      const status = formData.get('status') as string || 'PAUSED';
+      const status = (formData.get('status') as string) || 'PAUSED';
 
-      // Build the creative based on whether it's an image or video ad
-      const objectStorySpec: any = {
-        page_id: pageId,
-      };
+      const objectStorySpec: Record<string, unknown> = { page_id: pageId };
+
       if (instagramActorId) {
         objectStorySpec.instagram_actor_id = instagramActorId;
       }
 
       if (videoId) {
-        // Video ad — uses video_data instead of link_data
-        const videoData: any = {
+        const videoData: Record<string, unknown> = {
           video_id: videoId,
-          call_to_action: {
-            type: callToAction || 'LEARN_MORE',
-            value: { link },
-          },
+          call_to_action: { type: callToAction || 'LEARN_MORE', value: { link } },
         };
+
         if (message) videoData.message = message;
         if (headline) videoData.title = headline;
         if (description) videoData.link_description = description;
         objectStorySpec.video_data = videoData;
       } else {
-        // Image ad — uses link_data
-        const linkData: any = {
+        const linkData: Record<string, unknown> = {
           link,
           call_to_action: { type: callToAction || 'LEARN_MORE' },
         };
+
         if (message) linkData.message = message;
         if (headline) linkData.name = headline;
         if (description) linkData.description = description;
@@ -118,30 +107,26 @@ export async function POST(request: NextRequest) {
         objectStorySpec.link_data = linkData;
       }
 
-      const creativeBody: any = {
+      const creativeBody: Record<string, unknown> = {
         name: `${name} Creative`,
         object_story_spec: objectStorySpec,
       };
 
-      // url_tags is the Meta-supported way to add dynamic tracking params
-      if (urlTags) {
-        creativeBody.url_tags = urlTags;
-      }
+      if (urlTags) creativeBody.url_tags = urlTags;
 
-      console.log('[create_ad] Creative body:', JSON.stringify(creativeBody, null, 2));
+      logger.info('Creative body', JSON.stringify(creativeBody, null, 2));
 
-      const creative = await metaApi(`/act_${session.ad_account_id}/adcreatives`, session.meta_access_token, {
+      const creative = await meta.request(`/act_${session.ad_account_id}/adcreatives`, {
         method: 'POST',
         body: creativeBody,
       });
 
-      // Create ad
-      const ad = await metaApi(`/act_${session.ad_account_id}/ads`, session.meta_access_token, {
+      const ad = await meta.request(`/act_${session.ad_account_id}/ads`, {
         method: 'POST',
         body: {
           name,
           adset_id: adsetId,
-          creative: { creative_id: creative.id },
+          creative: { creative_id: (creative as { id: string }).id },
           status,
         },
       });
@@ -150,19 +135,35 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
-    console.error('Upload error:', error);
-    const metaError = error?.metaError;
-    const message = metaError?.message || error?.message || 'Upload failed';
-    const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
-    return NextResponse.json({
-      error: {
-        message,
-        detail: errorDetail,
-        meta_error_code: metaError?.code,
-        meta_error_subcode: metaError?.error_subcode,
-        fbtrace_id: metaError?.fbtrace_id,
+  } catch (error: unknown) {
+    logger.error('Upload error', error);
+    const metaError = (
+      error as {
+        metaError?: {
+          message?: string;
+          error_user_msg?: string;
+          error_user_title?: string;
+          code?: number;
+          error_subcode?: number;
+          fbtrace_id?: string;
+        };
       }
-    }, { status: 500 });
+    )?.metaError;
+    const message =
+      metaError?.message || (error instanceof Error ? error.message : 'Upload failed');
+    const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
+
+    return NextResponse.json(
+      {
+        error: {
+          message,
+          detail: errorDetail,
+          meta_error_code: metaError?.code,
+          meta_error_subcode: metaError?.error_subcode,
+          fbtrace_id: metaError?.fbtrace_id,
+        },
+      },
+      { status: 500 }
+    );
   }
 }

@@ -287,19 +287,20 @@ export default function DashboardPage() {
       setDrillLoading(true);
 
       try {
-        const [adSetsRes, adsRes] = await Promise.all([
-          fetch(
-            `/api/meta/adsets?campaign_id=${campaignId}&with_insights=true&date_preset=${datePreset}`
-          ),
-          fetch(`/api/meta/ads?with_insights=true&date_preset=${datePreset}`),
-        ]);
+        const adSetsRes = await fetch(
+          `/api/meta/adsets?campaign_id=${campaignId}&with_insights=true&date_preset=${datePreset}`
+        );
         const adSetsData = await adSetsRes.json();
-        const adsData = await adsRes.json();
-
         const adSets: AdSetRow[] = adSetsData.data || [];
-        const allAds: AdRow[] = adsData.data || [];
+
+        // Fetch ads for each ad set in the campaign rather than all ads in the account
         const adSetIds = adSets.map((a) => a.id);
-        const filteredAds = allAds.filter((a) => adSetIds.includes(a.adset_id));
+        const adPromises = adSetIds.map((id) =>
+          fetch(`/api/meta/ads?adset_id=${id}&with_insights=true&date_preset=${datePreset}`)
+            .then((r) => r.json())
+            .then((d) => (d.data || []) as AdRow[])
+        );
+        const filteredAds = (await Promise.all(adPromises)).flat();
 
         setDrillAdSets(adSets);
         setDrillAds(filteredAds);

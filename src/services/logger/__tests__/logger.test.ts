@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Logger, createLogger } from '@/services/logger';
-import { LOG_LEVEL_WEIGHT } from '@/services/logger/constants';
+import { Logger, createLogger, LOG_LEVEL_WEIGHT } from '@/services/logger';
 
 describe('LOG_LEVEL_WEIGHT', () => {
   it('has correct ordering', () => {

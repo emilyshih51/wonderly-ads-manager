@@ -167,6 +167,7 @@ export default function CampaignsPage() {
                           {formatCurrency(campaign.insights?.spend)}
                         </td>
                         <td className="px-4 py-3 text-right">
+                          {/* Generic conversion fallback — see automation-utils.ts */}
                           {formatNumber(
                             getResultCount(
                               { actions: campaign.insights?.actions, campaign_id: campaign.id },

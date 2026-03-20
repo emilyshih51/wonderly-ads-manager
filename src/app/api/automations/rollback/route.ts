@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -20,9 +20,10 @@ const logger = createLogger('Automations:Rollback');
  * Only reverses live actions — dry-run (`would_*`) entries are ignored.
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const body = (await request.json()) as {
     results?: Array<{ entity_id?: string; action?: string; duplicated_ad_id?: string }>;
@@ -32,10 +33,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No results provided' }, { status: 400 });
   }
 
-  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+  const MAX_ROLLBACK_ACTIONS = 50;
+
+  if (body.results.length > MAX_ROLLBACK_ACTIONS) {
+    return NextResponse.json(
+      { error: `Too many results (max ${MAX_ROLLBACK_ACTIONS})` },
+      { status: 400 }
+    );
+  }
+
+  const meta = MetaService.fromSession(session);
   const reversed: Array<{ entity_id: string; action: string }> = [];
   const skipped: Array<{ entity_id: string; reason: string }> = [];
   const errors: Array<{ entity_id: string; error: string }> = [];
+
+  // Build list of rollback operations, skipping non-reversible entries
+  const operations: Array<{
+    entityId: string;
+    targetStatus: 'ACTIVE' | 'PAUSED';
+    resultAction: string;
+  }> = [];
 
   for (const result of body.results) {
     const entityId = result.entity_id;
@@ -43,29 +60,42 @@ export async function POST(request: NextRequest) {
 
     if (!entityId || !action) continue;
 
-    // Skip dry-run entries — they didn't actually change anything
     if (action.startsWith('would_')) {
       skipped.push({ entity_id: entityId, reason: 'dry_run' });
-      continue;
+    } else if (action === 'paused') {
+      operations.push({ entityId, targetStatus: 'ACTIVE', resultAction: 'reactivated' });
+    } else if (action === 'activated') {
+      operations.push({ entityId, targetStatus: 'PAUSED', resultAction: 're-paused' });
+    } else if (action === 'promoted' && result.duplicated_ad_id) {
+      operations.push({
+        entityId: result.duplicated_ad_id,
+        targetStatus: 'PAUSED',
+        resultAction: 'paused_duplicate',
+      });
+    } else {
+      skipped.push({ entity_id: entityId, reason: `no_inverse_for_${action}` });
     }
+  }
 
-    try {
-      if (action === 'paused') {
-        await meta.updateStatus(entityId, 'ACTIVE');
-        reversed.push({ entity_id: entityId, action: 'reactivated' });
-      } else if (action === 'activated') {
-        await meta.updateStatus(entityId, 'PAUSED');
-        reversed.push({ entity_id: entityId, action: 're-paused' });
-      } else if (action === 'promoted' && result.duplicated_ad_id) {
-        // Pause the duplicated ad that was created by the promote action
-        await meta.updateStatus(result.duplicated_ad_id, 'PAUSED');
-        reversed.push({ entity_id: result.duplicated_ad_id, action: 'paused_duplicate' });
+  // Execute rollback operations in parallel batches of 5 to avoid Meta rate limits
+  const BATCH_SIZE = 5;
+
+  for (let i = 0; i < operations.length; i += BATCH_SIZE) {
+    const batch = operations.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((op) => meta.updateStatus(op.entityId, op.targetStatus))
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const op = batch[j];
+      const result = results[j];
+
+      if (result.status === 'fulfilled') {
+        reversed.push({ entity_id: op.entityId, action: op.resultAction });
       } else {
-        skipped.push({ entity_id: entityId, reason: `no_inverse_for_${action}` });
+        logger.error(`Rollback failed for entity ${op.entityId}`, result.reason);
+        errors.push({ entity_id: op.entityId, error: String(result.reason) });
       }
-    } catch (err) {
-      logger.error(`Rollback failed for entity ${entityId}`, err);
-      errors.push({ entity_id: entityId, error: String(err) });
     }
   }
 

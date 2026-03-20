@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/session';
 
 /**
  * GET /api/auth/slack/redirect
  *
  * Initiates the Slack OAuth flow by redirecting the user to the Slack
- * authorization page. Requests chat:write, channels:read, and
- * incoming-webhook scopes.
+ * authorization page. Requires an active session — unauthenticated
+ * users are redirected to login.
  */
 export async function GET() {
+  const result = await requireSession();
+
+  if (result instanceof NextResponse) return result;
+
   const clientId = process.env.SLACK_CLIENT_ID!;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/slack/callback`;
   const scope = 'chat:write,channels:read,incoming-webhook';

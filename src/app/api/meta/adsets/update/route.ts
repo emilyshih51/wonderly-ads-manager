@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
-import { SlackService } from '@/services/slack';
+import { createSlackService } from '@/services/slack';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:AdSets');
@@ -16,9 +16,10 @@ const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL ?? '';
  * change is made. Required body field: `adset_id`, `campaign_id`, or `entity_id`.
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const body = (await request.json()) as {
@@ -43,24 +44,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    const meta = MetaService.fromSession(session);
 
-    if (daily_budget !== undefined) {
-      const budgetCents = Math.round(parseFloat(String(daily_budget)) * 100);
-
-      await meta.updateBudget(entityId, budgetCents);
+    if (daily_budget === undefined) {
+      return NextResponse.json({ error: 'No update fields provided' }, { status: 400 });
     }
 
-    if (SLACK_CHANNEL && daily_budget !== undefined) {
+    const budgetCents = Math.round(parseFloat(String(daily_budget)) * 100);
+
+    if (isNaN(budgetCents) || budgetCents <= 0) {
+      return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
+    }
+
+    await meta.updateBudget(entityId, budgetCents);
+
+    if (SLACK_CHANNEL) {
       const newBudget = parseFloat(String(daily_budget));
       const previousBudget =
         previous_budget !== undefined ? parseFloat(String(previous_budget)) : undefined;
 
       try {
-        const slack = new SlackService(
-          process.env.SLACK_BOT_TOKEN ?? '',
-          process.env.SLACK_SIGNING_SECRET ?? ''
-        );
+        const slack = createSlackService();
 
         await slack.sendBudgetNotification(SLACK_CHANNEL, {
           entityName: entityName ?? entityId,
@@ -74,10 +78,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    const metaError = (error as { metaError?: { message?: string } })?.metaError;
-    const message =
-      metaError?.message ?? (error instanceof Error ? error.message : 'Update failed');
+    logger.error('Update error', error);
 
-    return NextResponse.json({ error: { message } }, { status: 500 });
+    return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
 }

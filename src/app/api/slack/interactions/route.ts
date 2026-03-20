@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { SlackService } from '@/services/slack';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { type SlackService, createSlackService } from '@/services/slack';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -34,10 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const slack = new SlackService(
-    process.env.SLACK_BOT_TOKEN ?? '',
-    process.env.SLACK_SIGNING_SECRET ?? ''
-  );
+  const slack = createSlackService();
   const slackSignature = request.headers.get('x-slack-signature') ?? '';
   const slackTimestamp = request.headers.get('x-slack-request-timestamp') ?? '';
 
@@ -47,9 +44,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Acknowledge immediately — Slack requires a response within 3 seconds
-  processInteraction(payload, slack).catch((error) => {
-    logger.error('Background processing error', error);
+  // Acknowledge immediately — Slack requires a response within 3 seconds.
+  // Use after() to ensure the serverless function stays alive until processing completes.
+  after(async () => {
+    try {
+      await processInteraction(payload, slack);
+    } catch (error) {
+      logger.error('Background processing error', error);
+    }
   });
 
   return NextResponse.json({ ok: true });
@@ -81,7 +83,15 @@ async function processInteraction(payload: InteractionPayload, slack: SlackServi
     return;
   }
 
-  const actionValue = JSON.parse(actions[0].value || '{}') as ActionValue;
+  let actionValue: ActionValue;
+
+  try {
+    actionValue = JSON.parse(actions[0].value || '{}') as ActionValue;
+  } catch {
+    logger.warn('Malformed action value', actions[0].value);
+
+    return;
+  }
 
   logger.info('Processing action', {
     type: actionValue.action_type,

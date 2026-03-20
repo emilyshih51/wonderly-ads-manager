@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { fetchAdContextData } from '@/lib/slack-context';
 import { generateMockChatData } from './mock';
 import { createLogger } from '@/services/logger';
@@ -13,14 +13,14 @@ const logger = createLogger('Chat:Data');
  * mock data when USE_MOCK_DATA is set or no real data is returned.
  */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const useMock =
-    process.env.USE_MOCK_DATA === 'true' || request.nextUrl.searchParams.get('mock') === 'true';
+    process.env.USE_MOCK_DATA === 'true' ||
+    (process.env.NODE_ENV !== 'production' && request.nextUrl.searchParams.get('mock') === 'true');
 
   if (useMock) {
     logger.info('Using mock data for AI testing');
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
       breakdowns: data.breakdowns,
     });
   } catch (error) {
-    logger.error('Error fetching data', error);
+    logger.error('Error fetching data — falling back to mock', error);
 
-    return NextResponse.json(generateMockChatData());
+    return NextResponse.json({ ...generateMockChatData(), mock: true });
   }
 }

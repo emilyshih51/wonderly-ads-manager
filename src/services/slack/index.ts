@@ -31,16 +31,6 @@ import type {
   BudgetNotification,
 } from './types';
 
-export type {
-  SlackMessage,
-  SlackThreadMessage,
-  SlackBlock,
-  ActionBlock,
-  ActionBlockType,
-  AutomationNotification,
-  BudgetNotification,
-};
-
 const logger = createLogger('Slack');
 
 export class SlackService {
@@ -300,11 +290,11 @@ export class SlackService {
     if (customMessage) {
       text =
         prefix +
-        customMessage
-          .replace(/\{rule_name\}/g, ruleName)
+        SlackService.sanitizeMentions(customMessage)
+          .replace(/\{rule_name\}/g, SlackService.sanitizeMentions(ruleName))
           .replace(/\{action\}/g, actionVerb)
           .replace(/\{entity_type\}/g, entityType)
-          .replace(/\{entity_name\}/g, entityName)
+          .replace(/\{entity_name\}/g, SlackService.sanitizeMentions(entityName))
           .replace(/\{ad_link\}/g, `<${adManagerLink}|${entityName}>`)
           .replace(/\{spend\}/g, `$${metrics.spend.toFixed(2)}`)
           .replace(/\{results\}/g, String(resultDisplay))
@@ -558,4 +548,27 @@ export class SlackService {
 
     return response.json() as ReturnType<typeof SlackService.exchangeCodeForToken>;
   }
+
+  static sanitizeMentions(text: string): string {
+    return text.replace(/@(channel|here|everyone)/gi, '(@$1)');
+  }
+
+  async sendWebhookMessage(webhookUrl: string, text: string): Promise<void> {
+    const response = await this.fetchFn(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook delivery failed (${response.status})`);
+    }
+  }
+}
+
+export function createSlackService(): SlackService {
+  return new SlackService(
+    process.env.SLACK_BOT_TOKEN ?? '',
+    process.env.SLACK_SIGNING_SECRET ?? ''
+  );
 }

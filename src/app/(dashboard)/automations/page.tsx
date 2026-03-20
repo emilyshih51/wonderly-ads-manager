@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
@@ -19,7 +19,6 @@ import {
   Play,
   Pause,
   ArrowLeft,
-  Search,
   X,
   ChevronDown,
   ChevronUp,
@@ -37,6 +36,15 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import { CampaignSearch } from '@/components/automations/campaign-search';
+import { AdSetSearch } from '@/components/automations/adset-search';
+import {
+  configToNodes,
+  nodesToConfig,
+  parseCopilotInput,
+  METRIC_OPTIONS,
+} from '@/lib/automation-config';
+import type { RuleConfig, Condition } from '@/lib/automation-config';
 import type { AutomationNode, AutomationEdge } from '@/types';
 
 const logger = createLogger('Automations');
@@ -73,33 +81,6 @@ interface HistoryEvent {
   results?: TestResultEntry[];
 }
 
-interface Condition {
-  id: string;
-  metric: string;
-  operator: string;
-  threshold: string;
-}
-
-interface RuleConfig {
-  // Trigger
-  entity_type: string;
-  campaign_id: string;
-  campaign_name: string;
-  adset_filter: string; // 'all' | specific adset id
-  adset_name: string;
-  schedule: string;
-  date_preset: string;
-  // Conditions
-  conditions: Condition[];
-  // Action
-  action_type: string;
-  target_adset_id: string;
-  target_adset_name: string;
-  also_notify_slack: boolean;
-  slack_channel: string;
-  slack_message: string;
-}
-
 interface Rule {
   id: string;
   name: string;
@@ -107,21 +88,6 @@ interface Rule {
   nodes: AutomationNode[];
   edges: AutomationEdge[];
   config?: RuleConfig;
-}
-
-interface Campaign {
-  id: string;
-  name: string;
-  status: string;
-  objective: string;
-}
-
-interface AdSet {
-  id: string;
-  name: string;
-  status: string;
-  campaign_id: string;
-  campaign_name?: string;
 }
 
 interface PreviewAd {
@@ -138,18 +104,6 @@ interface PreviewAd {
 }
 
 /* ─────────── Constants ─────────── */
-
-const METRIC_OPTIONS = [
-  { label: 'Spend ($)', value: 'spend' },
-  { label: 'Results', value: 'results' },
-  { label: 'Cost per Result (CPA)', value: 'cost_per_result' },
-  { label: 'Impressions', value: 'impressions' },
-  { label: 'Clicks', value: 'clicks' },
-  { label: 'CTR (%)', value: 'ctr' },
-  { label: 'CPC ($)', value: 'cpc' },
-  { label: 'CPM ($)', value: 'cpm' },
-  { label: 'Frequency', value: 'frequency' },
-];
 
 const OPERATOR_OPTIONS = [
   { label: 'is greater than', value: '>' },
@@ -225,7 +179,7 @@ const TEMPLATES: Template[] = [
       ],
       action_type: 'pause',
       also_notify_slack: true,
-      slack_channel: '#emily-space',
+      slack_channel: '',
     },
   },
   {
@@ -242,7 +196,7 @@ const TEMPLATES: Template[] = [
       ],
       action_type: 'pause',
       also_notify_slack: true,
-      slack_channel: '#emily-space',
+      slack_channel: '',
     },
   },
   {
@@ -259,7 +213,7 @@ const TEMPLATES: Template[] = [
       ],
       action_type: 'promote',
       also_notify_slack: true,
-      slack_channel: '#emily-space',
+      slack_channel: '',
     },
   },
   {
@@ -276,497 +230,10 @@ const TEMPLATES: Template[] = [
       ],
       action_type: 'promote',
       also_notify_slack: true,
-      slack_channel: '#emily-space',
+      slack_channel: '',
     },
   },
 ];
-
-/* ─────────── Helper: convert config to nodes/edges for storage ─────────── */
-
-function configToNodes(config: RuleConfig) {
-  const nodes: AutomationNode[] = [
-    {
-      id: 't1',
-      type: 'trigger',
-      position: { x: 300, y: 50 },
-      data: {
-        label: 'Scan Ads in Campaign',
-        config: {
-          entity_type: config.entity_type,
-          schedule: config.schedule,
-          campaign_id: config.campaign_id,
-          campaign_name: config.campaign_name,
-          adset_filter: config.adset_filter,
-          adset_name: config.adset_name,
-          date_preset: config.date_preset,
-        },
-      },
-    },
-  ];
-
-  config.conditions.forEach((cond, i) => {
-    nodes.push({
-      id: cond.id || `c${i + 1}`,
-      type: 'condition',
-      position: { x: 300, y: 200 + i * 150 },
-      data: {
-        label: `${METRIC_OPTIONS.find((m) => m.value === cond.metric)?.label || cond.metric} ${cond.operator} ${cond.threshold}`,
-        config: { metric: cond.metric, operator: cond.operator, threshold: cond.threshold },
-      },
-    });
-  });
-
-  nodes.push({
-    id: 'a1',
-    type: 'action',
-    position: { x: 300, y: 200 + config.conditions.length * 150 },
-    data: {
-      label:
-        config.action_type === 'promote'
-          ? 'Promote to Winners'
-          : config.action_type === 'pause'
-            ? 'Pause Ad'
-            : 'Activate Ad',
-      config: {
-        action_type: config.action_type,
-        target_adset_id: config.target_adset_id,
-        target_adset_name: config.target_adset_name,
-        also_notify_slack: String(config.also_notify_slack),
-        slack_channel: config.slack_channel,
-        slack_message: config.slack_message,
-      },
-    },
-  });
-
-  const edges: AutomationEdge[] = [];
-
-  for (let i = 0; i < nodes.length - 1; i++) {
-    edges.push({
-      id: `e${i + 1}`,
-      source: nodes[i].id,
-      target: nodes[i + 1].id,
-    });
-  }
-
-  return { nodes, edges };
-}
-
-function nodesToConfig(nodes: AutomationNode[]): RuleConfig {
-  const trigger = nodes.find((n) => n.type === 'trigger');
-  const condNodes = nodes.filter((n) => n.type === 'condition');
-  const action = nodes.find((n) => n.type === 'action');
-  const tc = trigger?.data?.config || {};
-  const ac = action?.data?.config || {};
-
-  return {
-    entity_type: (tc.entity_type as string) || 'ad',
-    campaign_id: (tc.campaign_id as string) || '',
-    campaign_name: (tc.campaign_name as string) || '',
-    adset_filter: (tc.adset_filter as string) || 'all',
-    adset_name: (tc.adset_name as string) || '',
-    schedule: (tc.schedule as string) || 'hourly',
-    date_preset: (tc.date_preset as string) || 'last_7d',
-    conditions: condNodes.map((n, i) => ({
-      id: n.id || `c${i + 1}`,
-      metric: (n.data?.config?.metric as string) || 'spend',
-      operator: (n.data?.config?.operator as string) || '>=',
-      threshold: (n.data?.config?.threshold as string) || '',
-    })),
-    action_type: (ac.action_type as string) || 'pause',
-    target_adset_id: (ac.target_adset_id as string) || '',
-    target_adset_name: (ac.target_adset_name as string) || '',
-    also_notify_slack: ac.also_notify_slack === 'true' || ac.also_notify_slack === true,
-    slack_channel: (ac.slack_channel as string) || '',
-    slack_message: (ac.slack_message as string) || '',
-  };
-}
-
-/* ─────────── Campaign Search Component ─────────── */
-
-function CampaignSearch({
-  value,
-  displayName,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  displayName: string;
-  onChange: (id: string, name: string) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClick);
-
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  const searchCampaigns = useCallback(async (q: string) => {
-    setLoading(true);
-
-    try {
-      const res = await fetch(`/api/automations/search?type=campaigns&q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-
-      setResults(data.data || []);
-    } catch {
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleInputChange = (val: string) => {
-    setQuery(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => searchCampaigns(val), 300);
-  };
-
-  const handleFocus = () => {
-    setOpen(true);
-    if (results.length === 0) searchCampaigns(query);
-  };
-
-  return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          value={open ? query : displayName || query}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onFocus={handleFocus}
-          placeholder={placeholder || 'Search campaigns...'}
-          className="h-10 w-full rounded-lg border border-gray-200 pr-8 pl-9 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        />
-        {value && (
-          <button
-            onClick={() => {
-              onChange('', '');
-              setQuery('');
-            }}
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 hover:bg-gray-100"
-          >
-            <X className="h-3.5 w-3.5 text-gray-400" />
-          </button>
-        )}
-      </div>
-      {open && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {loading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-            </div>
-          ) : results.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-500">No campaigns found</div>
-          ) : (
-            results.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  onChange(c.id, c.name);
-                  setQuery(c.name);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between border-b border-gray-50 px-4 py-2.5 text-left last:border-0 hover:bg-gray-50 ${
-                  c.id === value ? 'bg-blue-50' : ''
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-gray-900">{c.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">
-                    {c.objective} · {c.status}
-                  </p>
-                </div>
-                {c.id === value && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─────────── AdSet Search Component ─────────── */
-
-function AdSetSearch({
-  value,
-  displayName,
-  campaignId,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  displayName: string;
-  campaignId?: string;
-  onChange: (id: string, name: string) => void;
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<AdSet[]>([]);
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClick);
-
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  const searchAdSets = useCallback(
-    async (q: string) => {
-      setLoading(true);
-
-      try {
-        let url = `/api/automations/search?type=adsets&q=${encodeURIComponent(q)}`;
-
-        if (campaignId) url += `&campaign_id=${campaignId}`;
-        const res = await fetch(url);
-        const data = await res.json();
-
-        setResults(data.data || []);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [campaignId]
-  );
-
-  const handleInputChange = (val: string) => {
-    setQuery(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => searchAdSets(val), 300);
-  };
-
-  const handleFocus = () => {
-    setOpen(true);
-    if (results.length === 0) searchAdSets(query);
-  };
-
-  return (
-    <div ref={containerRef} className="relative">
-      <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          value={open ? query : displayName || query}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onFocus={handleFocus}
-          placeholder={placeholder || 'Search ad sets...'}
-          className="h-10 w-full rounded-lg border border-gray-200 pr-8 pl-9 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-        />
-        {value && (
-          <button
-            onClick={() => {
-              onChange('', '');
-              setQuery('');
-            }}
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 hover:bg-gray-100"
-          >
-            <X className="h-3.5 w-3.5 text-gray-400" />
-          </button>
-        )}
-      </div>
-      {open && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {loading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-            </div>
-          ) : results.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-500">No ad sets found</div>
-          ) : (
-            results.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => {
-                  onChange(a.id, a.name);
-                  setQuery(a.name);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between border-b border-gray-50 px-4 py-2.5 text-left last:border-0 hover:bg-gray-50 ${
-                  a.id === value ? 'bg-blue-50' : ''
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-gray-900">{a.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">
-                    {a.status}
-                    {a.campaign_name ? ` · ${a.campaign_name}` : ''}
-                  </p>
-                </div>
-                {a.id === value && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─────────── Copilot Parser ─────────── */
-
-function parseCopilotInput(text: string): { config: Partial<RuleConfig>; ruleName: string } {
-  const lowerText = text.toLowerCase();
-
-  // Extract action type
-  let actionType = 'pause';
-
-  if (lowerText.match(/\b(promote|duplicate|scale)\b/)) {
-    actionType = 'promote';
-  } else if (lowerText.match(/\b(notify|alert|slack|send)\b/)) {
-    actionType = 'notify';
-  } else if (lowerText.match(/\b(pause|stop)\b/)) {
-    actionType = 'pause';
-  }
-
-  // Extract campaign name: "in [name] campaign" or "in [name]"
-  let campaignName = '';
-  const campaignMatch =
-    text.match(/\bin\s+["']?([^"'\n]+?)["']?\s+campaign\b/i) ||
-    text.match(/\bin\s+["']?([^"'\n]+?)["']?\s*(?:\.|$)/i);
-
-  if (campaignMatch) {
-    campaignName = campaignMatch[1].trim();
-  }
-
-  // Extract date preset
-  let datePreset = 'last_7d';
-
-  if (lowerText.match(/\blast\s+30\s*d(?:ays?)?\b/)) datePreset = 'last_30d';
-  else if (lowerText.match(/\blast\s+14\s*d(?:ays?)?\b/)) datePreset = 'last_14d';
-  else if (lowerText.match(/\blast\s+3\s*d(?:ays?)?\b/)) datePreset = 'last_3d';
-  else if (lowerText.match(/\btoday\b/)) datePreset = 'today';
-  else if (lowerText.match(/\byesterday\b/)) datePreset = 'yesterday';
-  else if (lowerText.match(/\blast\s+7\s*d(?:ays?)?\b/)) datePreset = 'last_7d';
-
-  // Extract conditions: metric + operator + threshold
-  const conditions: Condition[] = [];
-
-  // Metric aliases
-  const metricAliases: Record<string, string> = {
-    cpa: 'cost_per_result',
-    'cost per result': 'cost_per_result',
-    'cost per acquisition': 'cost_per_result',
-    spend: 'spend',
-    spending: 'spend',
-    spent: 'spend',
-    cost: 'spend',
-    results: 'results',
-    conversions: 'results',
-    leads: 'results',
-    registrations: 'results',
-    clicks: 'clicks',
-    ctr: 'ctr',
-    'click through rate': 'ctr',
-    impressions: 'impressions',
-  };
-
-  // Operator patterns
-  // Find condition phrases: "metric operator value"
-  // Match: "CPA over $25", "spend > $30", "results >= 3", "0 results", etc.
-  const simplifiedRegex =
-    /(cpa|cost per result|cost per acquisition|spend|spending|spent|cost|results?|conversions?|leads?|registrations?|clicks?|ctr|click through rate|impressions?)\s+(?:is\s+)?(over|above|more than|greater than|exceeds?|under|below|less than|lower than|equal to|exactly|is|>=|<=|==)\s*(\$)?(\d+(?:\.\d+)?)/gi;
-
-  let match;
-
-  while ((match = simplifiedRegex.exec(text)) !== null) {
-    const metricStr = match[1].trim().toLowerCase();
-    const operatorStr = match[2].toLowerCase();
-    const thresholdStr = match[4];
-
-    // Find metric
-    let metric = '';
-
-    for (const [alias, value] of Object.entries(metricAliases)) {
-      if (metricStr.includes(alias)) {
-        metric = value;
-        break;
-      }
-    }
-
-    if (metric && thresholdStr) {
-      // Determine operator
-      let operator = '>=';
-
-      if (operatorStr.match(/over|above|more|greater|exceeds|>=/)) operator = '>=';
-      else if (operatorStr.match(/under|below|less|lower|<=/)) operator = '<=';
-      else if (operatorStr.match(/equal|exactly|^is$/)) operator = '==';
-
-      conditions.push({
-        id: `c${conditions.length + 1}`,
-        metric,
-        operator,
-        threshold: thresholdStr,
-      });
-    }
-  }
-
-  // Handle "0 results" pattern
-  if (lowerText.match(/\b0\s+(results?|conversions?|leads?)\b/)) {
-    conditions.push({
-      id: `c${conditions.length + 1}`,
-      metric: 'results',
-      operator: '==',
-      threshold: '0',
-    });
-  }
-
-  // Default to at least one condition if none found
-  if (conditions.length === 0) {
-    conditions.push({
-      id: 'c1',
-      metric: 'spend',
-      operator: '>=',
-      threshold: '30',
-    });
-  }
-
-  // Generate rule name from input (truncate to ~50 chars)
-  const ruleName = text.length > 50 ? text.substring(0, 47) + '...' : text;
-
-  const config: Partial<RuleConfig> = {
-    entity_type: 'ad',
-    campaign_name: campaignName,
-    campaign_id: '', // Will be filled by campaign search
-    adset_filter: 'all',
-    schedule: 'hourly',
-    date_preset: datePreset,
-    conditions,
-    action_type: actionType,
-    target_adset_id: '',
-    target_adset_name: '',
-    also_notify_slack: actionType === 'notify',
-    slack_channel: actionType === 'notify' ? '#emily-space' : '',
-    slack_message: '',
-  };
-
-  return { config, ruleName };
-}
 
 /* ─────────── Step Component ─────────── */
 
@@ -1208,11 +675,7 @@ export default function AutomationsPage() {
     !!config.action_type && (config.action_type !== 'promote' || !!config.target_adset_id);
 
   /* ─── Rule summary for list ─── */
-  const getRuleSummary = (rule: Rule) => {
-    const cfg = nodesToConfig(rule.nodes);
-
-    return cfg;
-  };
+  const getRuleSummary = (rule: Rule) => nodesToConfig(rule.nodes);
 
   /* ─────────── RENDER ─────────── */
   return (
@@ -1951,7 +1414,7 @@ export default function AutomationsPage() {
                               })
                             }
                             className="mt-1 h-9"
-                            placeholder="#emily-space"
+                            placeholder="#alerts"
                           />
                         </div>
                         <div>

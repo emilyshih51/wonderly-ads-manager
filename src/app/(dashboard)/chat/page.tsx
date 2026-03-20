@@ -23,6 +23,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Chat');
@@ -191,33 +192,14 @@ function pctChange(current: number, previous: number): string {
   return (current >= previous ? '+' : '') + pct + '%';
 }
 
-/* ───── build context string ───── */
-function buildRichContext(data: ChatData): string {
+/* ───── build context string — helper functions ───── */
+
+function buildAccountOverview(
+  today: ChatData['today'],
+  yesterday: ChatData['yesterday'],
+  date: ChatData['date']
+): string[] {
   const sections: string[] = [];
-  const { today, yesterday, breakdowns, date, optimizationMap } = data;
-  const optMap = optimizationMap || {};
-
-  // Tell Claude what time it is so it knows today's data is partial
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-  const dayStr = now.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  });
-
-  sections.push(
-    `CURRENT TIME: ${timeStr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
-  );
-
-  // Helper to look up result action type for a campaign
-  const rat = (campaignId?: string) => (campaignId ? optMap[campaignId] : undefined);
-
-  // Account overview comparison
   const todayAcct = today.account[0];
   const yesterdayAcct = yesterday.account[0];
 
@@ -252,16 +234,22 @@ function buildRichContext(data: ChatData): string {
     sections.push('Today: No account data yet (campaigns may not have started delivering).');
   }
 
-  // Campaign comparison
+  return sections;
+}
+
+function buildCampaignComparison(
+  todayCampaignMap: Map<string | undefined, InsightRow>,
+  yesterdayCampaignMap: Map<string | undefined, InsightRow>,
+  campaignIds: Set<string | undefined>,
+  rat: (campaignId?: string) => string | undefined
+): string[] {
+  const sections: string[] = [];
+
   sections.push('\n=== CAMPAIGNS: TODAY vs YESTERDAY ===');
-  const campaignIds = new Set([
-    ...today.campaigns.map((c) => c.campaign_id),
-    ...yesterday.campaigns.map((c) => c.campaign_id),
-  ]);
 
   for (const cid of campaignIds) {
-    const t = today.campaigns.find((c) => c.campaign_id === cid);
-    const y = yesterday.campaigns.find((c) => c.campaign_id === cid);
+    const t = todayCampaignMap.get(cid);
+    const y = yesterdayCampaignMap.get(cid);
     const name = t?.campaign_name || y?.campaign_name || cid;
 
     if (t && y) {
@@ -293,16 +281,22 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // Ad Set comparison
+  return sections;
+}
+
+function buildAdSetComparison(
+  todayAdSetMap: Map<string | undefined, InsightRow>,
+  yesterdayAdSetMap: Map<string | undefined, InsightRow>,
+  adsetIds: Set<string | undefined>,
+  rat: (campaignId?: string) => string | undefined
+): string[] {
+  const sections: string[] = [];
+
   sections.push('\n=== AD SETS: TODAY vs YESTERDAY ===');
-  const adsetIds = new Set([
-    ...today.adSets.map((a) => a.adset_id),
-    ...yesterday.adSets.map((a) => a.adset_id),
-  ]);
 
   for (const aid of adsetIds) {
-    const t = today.adSets.find((a) => a.adset_id === aid);
-    const y = yesterday.adSets.find((a) => a.adset_id === aid);
+    const t = todayAdSetMap.get(aid);
+    const y = yesterdayAdSetMap.get(aid);
     const name = t?.adset_name || y?.adset_name || aid;
     const r = rat(t?.campaign_id || y?.campaign_id);
 
@@ -326,15 +320,24 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // Ad-level data: today vs yesterday
-  const adIds = new Set([...today.ads.map((a) => a.ad_id), ...yesterday.ads.map((a) => a.ad_id)]);
+  return sections;
+}
+
+function buildAdComparison(
+  todayAdMap: Map<string | undefined, InsightRow>,
+  yesterdayAdMap: Map<string | undefined, InsightRow>,
+  adIds: Set<string | undefined>,
+  rat: (campaignId?: string) => string | undefined,
+  history: ChatData['history']
+): string[] {
+  const sections: string[] = [];
 
   if (adIds.size > 0) {
     sections.push('\n=== INDIVIDUAL ADS: TODAY vs YESTERDAY ===');
 
     for (const adId of adIds) {
-      const t = today.ads.find((a) => a.ad_id === adId);
-      const y = yesterday.ads.find((a) => a.ad_id === adId);
+      const t = todayAdMap.get(adId);
+      const y = yesterdayAdMap.get(adId);
       const name = t?.ad_name || y?.ad_name || adId;
       const cid = t?.campaign_id || y?.campaign_id;
       const r = rat(cid);
@@ -358,21 +361,19 @@ function buildRichContext(data: ChatData): string {
   }
 
   // Ad-level 7-day history (for accurate multi-day totals)
-  const { history } = data;
-
   if (history?.adDaily && history.adDaily.length > 0) {
     sections.push('\n=== AD DAILY PERFORMANCE (LAST 7 DAYS) ===');
     // Group by ad_id, show totals
-    const adMap = new Map<string, { name: string; rows: InsightRow[] }>();
+    const adHistMap = new Map<string, { name: string; rows: InsightRow[] }>();
 
     for (const row of history.adDaily) {
       const key = row.ad_id || 'unknown';
 
-      if (!adMap.has(key)) adMap.set(key, { name: row.ad_name || key, rows: [] });
-      adMap.get(key)!.rows.push(row);
+      if (!adHistMap.has(key)) adHistMap.set(key, { name: row.ad_name || key, rows: [] });
+      adHistMap.get(key)!.rows.push(row);
     }
 
-    for (const [_adId, { name, rows }] of adMap) {
+    for (const [_adId, { name, rows }] of adHistMap) {
       const totalSpend = rows.reduce((s, r) => s + parseFloat(r.spend || '0'), 0);
       const totalClicks = rows.reduce((s, r) => s + parseInt(r.clicks || '0'), 0);
       const cid = rows[0]?.campaign_id;
@@ -396,7 +397,16 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // Hourly breakdown helper
+  return sections;
+}
+
+function buildHourlyAnalysis(
+  today: ChatData['today'],
+  yesterday: ChatData['yesterday'],
+  rat: (campaignId?: string) => string | undefined
+): string[] {
+  const sections: string[] = [];
+
   const formatHour = (h: string) => {
     const hourNum = parseInt(h?.split(':')[0] || '0');
 
@@ -410,7 +420,6 @@ function buildRichContext(data: ChatData): string {
   const getHourKey = (row: InsightRow) =>
     row.hourly_stats_aggregated_by_advertiser_time_zone || '00:00:00';
 
-  // Build hourly data indexed by campaign → hour for both days
   const todayHourly = today.hourly || [];
   const yesterdayHourly = yesterday.hourly || [];
 
@@ -420,7 +429,6 @@ function buildRichContext(data: ChatData): string {
       'Format: Hour | TODAY: Spend/Results/Clicks/Impr/CTR/CPC | YESTERDAY: Spend/Results/Clicks/Impr/CTR/CPC | CHANGE'
     );
 
-    // Group by campaign ID (using ID for matching across days, name for display)
     const allCampaignIds = new Set([
       ...todayHourly.map((r) => r.campaign_id || 'unknown'),
       ...yesterdayHourly.map((r) => r.campaign_id || 'unknown'),
@@ -432,7 +440,6 @@ function buildRichContext(data: ChatData): string {
       const yesterdayRows = yesterdayHourly.filter((row) => (row.campaign_id || 'unknown') === cid);
       const campaignName = todayRows[0]?.campaign_name || yesterdayRows[0]?.campaign_name || cid;
 
-      // Index by hour
       const todayByHour: Record<string, InsightRow> = {};
 
       for (const row of todayRows) todayByHour[getHourKey(row)] = row;
@@ -440,22 +447,18 @@ function buildRichContext(data: ChatData): string {
 
       for (const row of yesterdayRows) yesterdayByHour[getHourKey(row)] = row;
 
-      // Get all hours present in either day, sorted
       const allHours = [
         ...new Set([...Object.keys(todayByHour), ...Object.keys(yesterdayByHour)]),
       ].sort();
 
       sections.push(`\nCampaign "${campaignName}":`);
 
-      // Accumulate running totals for summary
       let tTotalSpend = 0,
         tTotalResults = 0,
-        tTotalClicks = 0,
-        _tTotalImpr = 0;
+        tTotalClicks = 0;
       let yTotalSpend = 0,
         yTotalResults = 0,
-        yTotalClicks = 0,
-        _yTotalImpr = 0;
+        yTotalClicks = 0;
 
       for (const hour of allHours) {
         const t = todayByHour[hour];
@@ -477,13 +480,10 @@ function buildRichContext(data: ChatData): string {
         tTotalSpend += tSpend;
         tTotalResults += tResults;
         tTotalClicks += tClicks;
-        _tTotalImpr += tImpr;
         yTotalSpend += ySpend;
         yTotalResults += yResults;
         yTotalClicks += yClicks;
-        _yTotalImpr += yImpr;
 
-        // Only show hours that have data on at least one day
         if (t && y) {
           const spendDelta = ySpend > 0 ? pctChange(tSpend, ySpend) : tSpend > 0 ? 'new' : '';
           const resultsDelta =
@@ -505,7 +505,6 @@ function buildRichContext(data: ChatData): string {
         }
       }
 
-      // Campaign hourly summary
       const spendChg = yTotalSpend > 0 ? pctChange(tTotalSpend, yTotalSpend) : 'N/A';
       const resultsChg = yTotalResults > 0 ? pctChange(tTotalResults, yTotalResults) : 'N/A';
 
@@ -517,7 +516,12 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // Breakdowns
+  return sections;
+}
+
+function buildBreakdowns(breakdowns: ChatData['breakdowns']): string[] {
+  const sections: string[] = [];
+
   if (breakdowns.ageGender.length > 0) {
     sections.push('\n=== AGE & GENDER BREAKDOWN (TODAY) ===');
 
@@ -548,119 +552,180 @@ function buildRichContext(data: ChatData): string {
     }
   }
 
-  // ──── HISTORICAL DAILY DATA (last 30 days) ────
-  if (history) {
-    // Account-level daily totals (last 30 days)
-    if (history.accountDaily.length > 0) {
-      sections.push('\n=== DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ===');
+  return sections;
+}
+
+function buildHistoricalTrends(
+  history: ChatData['history'],
+  rat: (campaignId?: string) => string | undefined
+): string[] {
+  const sections: string[] = [];
+
+  if (!history) return sections;
+
+  // Account-level daily totals (last 30 days)
+  if (history.accountDaily.length > 0) {
+    sections.push('\n=== DAILY ACCOUNT PERFORMANCE (LAST 30 DAYS) ===');
+    sections.push('Date | Spend | Impressions | Clicks | CTR | CPC | CPM | Results | Cost/Result');
+    const sorted = [...history.accountDaily].sort((a, b) =>
+      a.date_start.localeCompare(b.date_start)
+    );
+
+    for (const row of sorted) {
+      const results = getResults(row);
+      const cpr = getCostPerResult(row);
+      const cpc = row.cost_per_inline_link_click || row.cpc;
+
       sections.push(
-        'Date | Spend | Impressions | Clicks | CTR | CPC | CPM | Results | Cost/Result'
+        `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Impr ${row.impressions}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${cpc}, CPM $${row.cpm}, Results ${results}, Cost/Result $${cpr}`
       );
-      // Sort by date ascending
-      const sorted = [...history.accountDaily].sort((a, b) =>
-        a.date_start.localeCompare(b.date_start)
+    }
+
+    const last7 = sorted.slice(-7);
+    const last14 = sorted.slice(-14);
+    const avg = (rows: InsightRow[], field: 'spend' | 'clicks' | 'impressions') =>
+      rows.reduce((sum, r) => sum + parseFloat(r[field] || '0'), 0) / (rows.length || 1);
+    const avgResults = (rows: InsightRow[]) =>
+      rows.reduce((sum, r) => sum + getResults(r), 0) / (rows.length || 1);
+
+    if (last7.length >= 7) {
+      sections.push(
+        `\n7-Day Averages: Spend $${avg(last7, 'spend').toFixed(2)}/day, Clicks ${avg(last7, 'clicks').toFixed(0)}/day, Impr ${avg(last7, 'impressions').toFixed(0)}/day, Results ${avgResults(last7).toFixed(1)}/day`
       );
+    }
+
+    if (last14.length >= 14) {
+      sections.push(
+        `14-Day Averages: Spend $${avg(last14, 'spend').toFixed(2)}/day, Clicks ${avg(last14, 'clicks').toFixed(0)}/day, Impr ${avg(last14, 'impressions').toFixed(0)}/day, Results ${avgResults(last14).toFixed(1)}/day`
+      );
+    }
+
+    const all30 = sorted;
+
+    if (all30.length >= 20) {
+      sections.push(
+        `30-Day Averages: Spend $${avg(all30, 'spend').toFixed(2)}/day, Clicks ${avg(all30, 'clicks').toFixed(0)}/day, Impr ${avg(all30, 'impressions').toFixed(0)}/day, Results ${avgResults(all30).toFixed(1)}/day`
+      );
+    }
+  }
+
+  // Campaign-level daily data (last 30 days) — grouped by campaign
+  if (history.campaignDaily.length > 0) {
+    sections.push('\n=== DAILY CAMPAIGN PERFORMANCE (LAST 30 DAYS) ===');
+    const byCampaign: Record<string, InsightRow[]> = {};
+
+    for (const row of history.campaignDaily) {
+      const key = row.campaign_id || 'unknown';
+
+      if (!byCampaign[key]) byCampaign[key] = [];
+      byCampaign[key].push(row);
+    }
+
+    for (const [cid, rows] of Object.entries(byCampaign)) {
+      const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
+      const name = sorted[0]?.campaign_name || cid;
+      const r = rat(cid);
+
+      sections.push(`\nCampaign "${name}" daily:`);
 
       for (const row of sorted) {
-        const results = getResults(row);
-        const cpr = getCostPerResult(row);
-        const cpc = row.cost_per_inline_link_click || row.cpc;
+        const results = getResults(row, r);
+        const cpr = getCostPerResult(row, r);
 
         sections.push(
-          `${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Impr ${row.impressions}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${cpc}, CPM $${row.cpm}, Results ${results}, Cost/Result $${cpr}`
+          `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${row.cost_per_inline_link_click || row.cpc}, Cost/Result $${cpr}`
         );
-      }
-
-      // Compute 7-day and 14-day averages for easy comparison
-      const last7 = sorted.slice(-7);
-      const last14 = sorted.slice(-14);
-      const avg = (rows: InsightRow[], field: 'spend' | 'clicks' | 'impressions') =>
-        rows.reduce((sum, r) => sum + parseFloat(r[field] || '0'), 0) / (rows.length || 1);
-      const avgResults = (rows: InsightRow[]) =>
-        rows.reduce((sum, r) => sum + getResults(r), 0) / (rows.length || 1);
-
-      if (last7.length >= 7) {
-        sections.push(
-          `\n7-Day Averages: Spend $${avg(last7, 'spend').toFixed(2)}/day, Clicks ${avg(last7, 'clicks').toFixed(0)}/day, Impr ${avg(last7, 'impressions').toFixed(0)}/day, Results ${avgResults(last7).toFixed(1)}/day`
-        );
-      }
-
-      if (last14.length >= 14) {
-        sections.push(
-          `14-Day Averages: Spend $${avg(last14, 'spend').toFixed(2)}/day, Clicks ${avg(last14, 'clicks').toFixed(0)}/day, Impr ${avg(last14, 'impressions').toFixed(0)}/day, Results ${avgResults(last14).toFixed(1)}/day`
-        );
-      }
-
-      const all30 = sorted;
-
-      if (all30.length >= 20) {
-        sections.push(
-          `30-Day Averages: Spend $${avg(all30, 'spend').toFixed(2)}/day, Clicks ${avg(all30, 'clicks').toFixed(0)}/day, Impr ${avg(all30, 'impressions').toFixed(0)}/day, Results ${avgResults(all30).toFixed(1)}/day`
-        );
-      }
-    }
-
-    // Campaign-level daily data (last 30 days) — grouped by campaign
-    if (history.campaignDaily.length > 0) {
-      sections.push('\n=== DAILY CAMPAIGN PERFORMANCE (LAST 30 DAYS) ===');
-      // Group by campaign
-      const byCampaign: Record<string, InsightRow[]> = {};
-
-      for (const row of history.campaignDaily) {
-        const key = row.campaign_id || 'unknown';
-
-        if (!byCampaign[key]) byCampaign[key] = [];
-        byCampaign[key].push(row);
-      }
-
-      for (const [cid, rows] of Object.entries(byCampaign)) {
-        const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
-        const name = sorted[0]?.campaign_name || cid;
-        const r = rat(cid);
-
-        sections.push(`\nCampaign "${name}" daily:`);
-
-        for (const row of sorted) {
-          const results = getResults(row, r);
-          const cpr = getCostPerResult(row, r);
-
-          sections.push(
-            `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, CPC $${row.cost_per_inline_link_click || row.cpc}, Cost/Result $${cpr}`
-          );
-        }
-      }
-    }
-
-    // Ad-set daily data (last 7 days) — summarized
-    if (history.adsetDaily.length > 0) {
-      sections.push('\n=== DAILY AD SET PERFORMANCE (LAST 7 DAYS) ===');
-      const byAdset: Record<string, InsightRow[]> = {};
-
-      for (const row of history.adsetDaily) {
-        const key = row.adset_id || 'unknown';
-
-        if (!byAdset[key]) byAdset[key] = [];
-        byAdset[key].push(row);
-      }
-
-      for (const [aid, rows] of Object.entries(byAdset)) {
-        const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
-        const name = sorted[0]?.adset_name || aid;
-        const r = rat(sorted[0]?.campaign_id);
-
-        sections.push(`\nAd Set "${name}" daily:`);
-
-        for (const row of sorted) {
-          const results = getResults(row, r);
-          const cpr = getCostPerResult(row, r);
-
-          sections.push(
-            `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, Cost/Result $${cpr}`
-          );
-        }
       }
     }
   }
+
+  // Ad-set daily data (last 7 days) — summarized
+  if (history.adsetDaily.length > 0) {
+    sections.push('\n=== DAILY AD SET PERFORMANCE (LAST 7 DAYS) ===');
+    const byAdset: Record<string, InsightRow[]> = {};
+
+    for (const row of history.adsetDaily) {
+      const key = row.adset_id || 'unknown';
+
+      if (!byAdset[key]) byAdset[key] = [];
+      byAdset[key].push(row);
+    }
+
+    for (const [aid, rows] of Object.entries(byAdset)) {
+      const sorted = rows.sort((a, b) => a.date_start.localeCompare(b.date_start));
+      const name = sorted[0]?.adset_name || aid;
+      const r = rat(sorted[0]?.campaign_id);
+
+      sections.push(`\nAd Set "${name}" daily:`);
+
+      for (const row of sorted) {
+        const results = getResults(row, r);
+        const cpr = getCostPerResult(row, r);
+
+        sections.push(
+          `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${results}, Clicks ${row.clicks}, CTR ${row.ctr}%, Cost/Result $${cpr}`
+        );
+      }
+    }
+  }
+
+  return sections;
+}
+
+/* ───── build context string ───── */
+function buildRichContext(data: ChatData): string {
+  const { today, yesterday, breakdowns, date, optimizationMap, history } = data;
+  const optMap = optimizationMap || {};
+
+  // Tell Claude what time it is so it knows today's data is partial
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const dayStr = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  const sections: string[] = [];
+
+  sections.push(
+    `CURRENT TIME: ${timeStr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
+  );
+
+  // Helper to look up result action type for a campaign
+  const rat = (campaignId?: string) => (campaignId ? optMap[campaignId] : undefined);
+
+  // Pre-build Map lookups for O(1) access instead of O(n) .find() loops
+  const todayCampaignMap = new Map(today.campaigns.map((c) => [c.campaign_id, c]));
+  const yesterdayCampaignMap = new Map(yesterday.campaigns.map((c) => [c.campaign_id, c]));
+  const todayAdSetMap = new Map(today.adSets.map((a) => [a.adset_id, a]));
+  const yesterdayAdSetMap = new Map(yesterday.adSets.map((a) => [a.adset_id, a]));
+  const todayAdMap = new Map(today.ads.map((a) => [a.ad_id, a]));
+  const yesterdayAdMap = new Map(yesterday.ads.map((a) => [a.ad_id, a]));
+
+  const campaignIds = new Set([
+    ...today.campaigns.map((c) => c.campaign_id),
+    ...yesterday.campaigns.map((c) => c.campaign_id),
+  ]);
+  const adsetIds = new Set([
+    ...today.adSets.map((a) => a.adset_id),
+    ...yesterday.adSets.map((a) => a.adset_id),
+  ]);
+  const adIds = new Set([...today.ads.map((a) => a.ad_id), ...yesterday.ads.map((a) => a.ad_id)]);
+
+  sections.push(...buildAccountOverview(today, yesterday, date));
+  sections.push(
+    ...buildCampaignComparison(todayCampaignMap, yesterdayCampaignMap, campaignIds, rat)
+  );
+  sections.push(...buildAdSetComparison(todayAdSetMap, yesterdayAdSetMap, adsetIds, rat));
+  sections.push(...buildAdComparison(todayAdMap, yesterdayAdMap, adIds, rat, history));
+  sections.push(...buildHourlyAnalysis(today, yesterday, rat));
+  sections.push(...buildBreakdowns(breakdowns));
+  sections.push(...buildHistoricalTrends(history, rat));
 
   return sections.join('\n');
 }
@@ -1104,7 +1169,7 @@ export default function ChatPage() {
           <li
             key={i}
             className="ml-4 list-disc text-sm"
-            dangerouslySetInnerHTML={{ __html: html.slice(2) }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html.slice(2)) }}
           />
         );
       // Numbered
@@ -1115,7 +1180,7 @@ export default function ChatPage() {
           <li
             key={i}
             className="ml-4 list-decimal text-sm"
-            dangerouslySetInnerHTML={{ __html: html.slice(numMatch[0].length) }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html.slice(numMatch[0].length)) }}
           />
         );
       // Empty
@@ -1135,7 +1200,13 @@ export default function ChatPage() {
           '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Confidence: Low</span>'
         );
 
-      return <p key={i} className="text-sm" dangerouslySetInnerHTML={{ __html: html }} />;
+      return (
+        <p
+          key={i}
+          className="text-sm"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+        />
+      );
     });
   };
 

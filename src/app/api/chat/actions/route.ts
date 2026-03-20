@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
     }
 
-    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    const meta = MetaService.fromSession(session);
     const label = action.name || action.id;
 
     const actionType = action.type.startsWith('pause')

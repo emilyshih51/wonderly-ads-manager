@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -13,9 +13,10 @@ const logger = createLogger('Meta:AdSets');
  * `billing_event`, `status`, `targeting`.
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const body = await request.json();
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       age_max: 65,
     };
 
-    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    const meta = MetaService.fromSession(session);
     const result = await meta.request(`/act_${session.ad_account_id}/adsets`, {
       method: 'POST',
       body: {

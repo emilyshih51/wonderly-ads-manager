@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { evaluateCondition, getResultCount } from '@/lib/automation-utils';
+import { requireSession } from '@/lib/session';
+import {
+  evaluateCondition,
+  parseInsightMetrics,
+  COST_PER_RESULT_NO_DATA,
+} from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
-import type { MetaInsightsRow } from '@/types';
 
 const logger = createLogger('Automations:Search');
 
@@ -34,14 +37,14 @@ interface AdSetResult {
  * - For preview: campaign_id, conditions (JSON), date_preset
  */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
-  const accessToken = session.meta_access_token;
   const rawAdAccountId = session.ad_account_id;
 
-  const meta = new MetaService(accessToken, rawAdAccountId);
+  const meta = MetaService.fromSession(session);
 
   const { searchParams } = request.nextUrl;
   const type = searchParams.get('type') || 'campaigns';
@@ -50,17 +53,20 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'campaigns') {
-      const data = await meta.request(`/act_${rawAdAccountId}/campaigns`, {
-        params: {
-          fields: 'id,name,status,objective',
-          limit: '100',
-          filtering: JSON.stringify([
-            { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
-          ]),
-        },
-      });
+      const data = await meta.request<{ data?: CampaignResult[] }>(
+        `/act_${rawAdAccountId}/campaigns`,
+        {
+          params: {
+            fields: 'id,name,status,objective',
+            limit: '100',
+            filtering: JSON.stringify([
+              { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+            ]),
+          },
+        }
+      );
 
-      let campaigns = (data as { data?: CampaignResult[] }).data || [];
+      let campaigns = data.data || [];
 
       if (query) {
         campaigns = campaigns.filter((c) => c.name.toLowerCase().includes(query));
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
     if (type === 'adsets') {
       const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${rawAdAccountId}/adsets`;
 
-      const data = await meta.request(endpoint, {
+      const data = await meta.request<{ data?: AdSetResult[] }>(endpoint, {
         params: {
           fields: 'id,name,status,campaign_id,campaign{name}',
           limit: '100',
@@ -89,7 +95,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      let adsets = (data as { data?: AdSetResult[] }).data || [];
+      let adsets = data.data || [];
 
       if (query) {
         adsets = adsets.filter((a) => a.name.toLowerCase().includes(query));
@@ -130,28 +136,13 @@ export async function GET(request: NextRequest) {
       }
 
       const matchingAds = insightsData
-        .map((row: MetaInsightsRow) => {
-          const spend = parseFloat(row.spend ?? '0');
-          const cId = row.campaign_id ?? '';
-          const resultCount = getResultCount(row, cId, optimizationMap);
-          const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
-
-          const metrics: Record<string, number> = {
-            spend,
-            impressions: parseInt(row.impressions ?? '0'),
-            clicks: parseInt(row.clicks ?? '0'),
-            ctr: parseFloat(row.ctr ?? '0'),
-            cpc: parseFloat(row.cpc ?? '0'),
-            cpm: parseFloat(row.cpm ?? '0'),
-            frequency: parseFloat(row.frequency ?? '0'),
-            results: resultCount,
-            cost_per_result: costPerResult === Infinity ? 99999 : costPerResult,
-          };
+        .map((row) => {
+          const metrics = parseInsightMetrics(row, optimizationMap);
 
           const allMet = conditions.every((cond) => {
-            if (cond.metric === 'cost_per_result' && resultCount === 0) return false;
+            if (cond.metric === 'cost_per_result' && metrics.results === 0) return false;
 
-            const actual = metrics[cond.metric] ?? 0;
+            const actual = metrics[cond.metric as keyof typeof metrics] ?? 0;
             const threshold = parseFloat(cond.threshold || '0');
 
             return evaluateCondition(actual, cond.operator, threshold);
@@ -164,9 +155,12 @@ export async function GET(request: NextRequest) {
             ad_name: row.ad_name || row.ad_id,
             adset_id: row.adset_id,
             campaign_id: row.campaign_id,
-            spend: spend.toFixed(2),
-            results: resultCount,
-            cpa: costPerResult === Infinity ? 'N/A' : costPerResult.toFixed(2),
+            spend: metrics.spend.toFixed(2),
+            results: metrics.results,
+            cpa:
+              metrics.cost_per_result === COST_PER_RESULT_NO_DATA
+                ? 'N/A'
+                : metrics.cost_per_result.toFixed(2),
             impressions: metrics.impressions,
             clicks: metrics.clicks,
             ctr: metrics.ctr.toFixed(2),
@@ -185,6 +179,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Search error', error);
 
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
   }
 }

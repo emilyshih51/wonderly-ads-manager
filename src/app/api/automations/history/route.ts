@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 
 interface HistoryEvent {
@@ -31,9 +31,10 @@ function redisKey(userId: string) {
  * Returns automation run history from Redis, sorted by timestamp descending.
  */
 export async function GET() {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const redis = await getRedisClient();
 
@@ -52,8 +53,7 @@ export async function GET() {
     }
   }
 
-  history.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
+  // Data is already in descending order from lPush (newest first)
   return NextResponse.json({ data: history });
 }
 
@@ -64,9 +64,10 @@ export async function GET() {
  * Body: { rule_name, type, matched, results, timestamp? }
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const redis = await getRedisClient();
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
   }>;
 
   const event: HistoryEvent = {
-    id: `run_${Date.now()}`,
+    id: `run_${crypto.randomUUID()}`,
     rule_name: body.rule_name || 'Unknown',
     type: body.type || 'test',
     matched: body.matched || 0,
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
   await redis.lPush(key, JSON.stringify(event));
   await redis.lTrim(key, 0, MAX_ENTRIES - 1);
 
-  return NextResponse.json({ success: true, event });
+  return NextResponse.json({ success: true, event }, { status: 201 });
 }
 
 /**
@@ -113,9 +114,10 @@ export async function POST(request: NextRequest) {
  * Clear all history for the current user.
  */
 export async function DELETE() {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const redis = await getRedisClient();
 

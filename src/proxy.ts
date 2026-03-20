@@ -21,12 +21,17 @@ interface RateLimitEntry {
 
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
-/**
- * Check whether the given IP has exceeded the rate limit.
- * Uses a fixed sliding window: resets the counter once the window expires.
- *
- * @returns `true` if the request should be blocked.
- */
+// Periodically evict stale entries instead of doing it on the request path
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+
+    for (const [key, val] of rateLimitMap) {
+      if (now - val.windowStart > RATE_LIMIT_WINDOW_MS) rateLimitMap.delete(key);
+    }
+  }, RATE_LIMIT_WINDOW_MS);
+}
+
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
@@ -38,13 +43,6 @@ function isRateLimited(ip: string): boolean {
   }
 
   entry.count++;
-
-  // Evict stale entries to prevent unbounded memory growth
-  if (rateLimitMap.size > 10_000) {
-    for (const [key, val] of rateLimitMap) {
-      if (now - val.windowStart > RATE_LIMIT_WINDOW_MS) rateLimitMap.delete(key);
-    }
-  }
 
   return entry.count > RATE_LIMIT_MAX;
 }

@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, setSession } from '@/lib/session';
+import { requireSession, setSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Accounts');
+
+interface AdAccountRow {
+  id: string;
+  name: string;
+  account_status: number;
+  business?: { name: string };
+}
 
 /**
  * GET /api/meta/accounts — List all ad accounts the user has access to
@@ -11,24 +18,18 @@ const logger = createLogger('Meta:Accounts');
  */
 
 export async function GET() {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const meta = new MetaService(session.meta_access_token, '');
-    const data = await meta.request('/me/adaccounts', {
+    const data = await meta.request<{ data?: AdAccountRow[] }>('/me/adaccounts', {
       params: { fields: 'id,name,account_status,business{name}' },
     });
 
-    interface AdAccountRow {
-      id: string;
-      name: string;
-      account_status: number;
-      business?: { name: string };
-    }
-
-    const accounts = ((data as { data?: AdAccountRow[] }).data ?? []).map((acc) => ({
+    const accounts = (data.data ?? []).map((acc) => ({
       id: acc.id.replace('act_', ''),
       name: acc.name,
       business_name: acc.business?.name ?? null,
@@ -45,9 +46,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const { ad_account_id } = await request.json();
@@ -56,15 +58,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'ad_account_id required' }, { status: 400 });
     }
 
-    // Update session with new account
+    const normalizedId = ad_account_id.replace('act_', '');
+
+    // Verify the user owns this ad account before switching
+    const userAccounts = await MetaService.getMyAdAccounts(session.meta_access_token);
+    const ownsAccount = userAccounts.data?.some(
+      (acc) => acc.id.replace('act_', '') === normalizedId
+    );
+
+    if (!ownsAccount) {
+      return NextResponse.json({ error: 'Access denied to this ad account' }, { status: 403 });
+    }
+
     await setSession({
       ...session,
-      ad_account_id: ad_account_id.replace('act_', ''),
+      ad_account_id: normalizedId,
     });
 
     return NextResponse.json({
       success: true,
-      ad_account_id: ad_account_id.replace('act_', ''),
+      ad_account_id: normalizedId,
     });
   } catch (error) {
     logger.error('Switch account error', error);

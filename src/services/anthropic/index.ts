@@ -13,18 +13,11 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { ChatParams, CompleteParams, MessageParam } from './types';
+import type { CompletionParams, MessageParam } from './types';
 
-export type { ChatParams, CompleteParams, MessageParam };
+export type { CompletionParams, MessageParam };
 
-export enum ClaudeModel {
-  Opus4 = 'claude-opus-4-6',
-  Sonnet4 = 'claude-sonnet-4-6',
-  Sonnet = 'claude-sonnet-4-20250514',
-  Haiku4 = 'claude-haiku-4-5-20251001',
-}
-
-const DEFAULT_MODEL = ClaudeModel.Sonnet;
+const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_MAX_TOKENS = 4000;
 
 export class AnthropicService {
@@ -33,7 +26,7 @@ export class AnthropicService {
 
   /**
    * @param apiKey - Anthropic API key (`ANTHROPIC_API_KEY`)
-   * @param model - Model ID override (defaults to `ClaudeModel.Sonnet`)
+   * @param model - Model ID override (defaults to `claude-sonnet-4-20250514`)
    */
   constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });
@@ -50,7 +43,7 @@ export class AnthropicService {
    * @returns SSE `ReadableStream` compatible with Next.js streaming responses
    * @throws When the Anthropic API returns an error
    */
-  async chat(params: ChatParams): Promise<ReadableStream> {
+  async chat(params: CompletionParams): Promise<ReadableStream> {
     const { message, systemPrompt, context, history = [] } = params;
 
     const messages: Anthropic.MessageParam[] = [
@@ -61,7 +54,7 @@ export class AnthropicService {
     const stream = await this.client.messages.stream({
       model: this.model,
       max_tokens: DEFAULT_MAX_TOKENS,
-      system: systemPrompt + (context ?? 'No data available.'),
+      system: `${systemPrompt}\n\n${context ?? 'No data available.'}`,
       messages,
     });
 
@@ -97,7 +90,7 @@ export class AnthropicService {
    * @returns Full text response from the model
    * @throws When the Anthropic API returns an error or the response has no text content
    */
-  async complete(params: CompleteParams): Promise<string> {
+  async complete(params: CompletionParams): Promise<string> {
     const { message, systemPrompt, context, history = [] } = params;
 
     const messages: Anthropic.MessageParam[] = [
@@ -108,13 +101,13 @@ export class AnthropicService {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: DEFAULT_MAX_TOKENS,
-      system: systemPrompt + (context ?? 'No data available.'),
+      system: `${systemPrompt}\n\n${context ?? 'No data available.'}`,
       messages,
     });
 
     const textBlock = response.content.find((b) => b.type === 'text');
 
-    if (!textBlock || textBlock.type !== 'text') {
+    if (!textBlock) {
       throw new Error('Anthropic response contained no text content');
     }
 

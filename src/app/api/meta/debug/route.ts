@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 
 /**
@@ -14,11 +14,12 @@ export async function GET() {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
-  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+  const meta = MetaService.fromSession(session);
   const results: Record<string, unknown> = {
     ad_account_id: session.ad_account_id,
     timestamp: new Date().toISOString(),

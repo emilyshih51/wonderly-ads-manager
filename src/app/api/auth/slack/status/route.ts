@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 
 /**
  * GET /api/auth/slack/status
@@ -9,11 +9,9 @@ import { getSession } from '@/lib/session';
  * Response: `{ connected: boolean, info?: { team_name, channel_name } }`
  */
 export async function GET() {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (result instanceof NextResponse) return result;
 
   const cookieStore = await cookies();
   const slackCookie = cookieStore.get('wonderly_slack');

@@ -63,7 +63,7 @@ describe('AnthropicService', () => {
 
       expect(instance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          system: 'You are an expert.Spend: $100, Results: 5',
+          system: 'You are an expert.\n\nSpend: $100, Results: 5',
         })
       );
     });

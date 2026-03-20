@@ -64,6 +64,39 @@ export function formatNumber(value: number | string | null | undefined): string 
   return new Intl.NumberFormat('en-US').format(num);
 }
 
+/**
+ * Merge insight rows into entity objects by matching on the given ID field.
+ * @param entities - An array of objects representing entities (e.g. ad sets, ads) with an `id` field.
+ * @param insightRows - An array of insight objects containing metrics, each with an ID field matching the entities.
+ * @param idField - The key in the insight rows that corresponds to the entity ID (e.g. "ad_id", "adset_id").
+ * @returns A new array of entities, each augmented with an `insights` property containing the matching insight row or `null`.
+ */
+export function attachInsights<T extends { id: string }, R extends object>(
+  entities: T[],
+  insightRows: R[],
+  idField: keyof R
+): Array<T & { insights: R | null }> {
+  const insightsMap = new Map<string, R>();
+
+  for (const row of insightRows) {
+    const id = String(row[idField]);
+
+    if (id) insightsMap.set(id, row);
+  }
+
+  return entities.map((entity) => ({
+    ...entity,
+    insights: insightsMap.get(entity.id) ?? null,
+  }));
+}
+
+/**
+ * Safely extract a message string from an unknown error value.
+ */
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 /** Available date presets for Meta API insight queries, ordered from shortest to longest window. */
 export const DATE_PRESETS = [
   { label: 'Today', value: 'today' },

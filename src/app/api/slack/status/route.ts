@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 
 /**
  * GET /api/slack/status
@@ -7,11 +7,9 @@ import { getSession } from '@/lib/session';
  * Returns whether Slack bot is configured
  */
 export async function GET() {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (result instanceof NextResponse) return result;
 
   const slackBotToken = process.env.SLACK_BOT_TOKEN;
   const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;

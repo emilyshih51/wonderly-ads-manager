@@ -13,6 +13,7 @@
  * Session TTL: 30 days, refreshed on every write.
  */
 
+import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getRedisClient } from '@/lib/redis';
 import { UserSession } from '@/types';
@@ -108,6 +109,18 @@ export async function setSession(session: UserSession): Promise<void> {
     maxAge: SESSION_TTL_SECONDS,
     path: '/',
   });
+}
+
+/**
+ * Return the current session or a 401 response. Use in protected API routes
+ * to replace the repeated `getSession() + if (!session)` boilerplate.
+ */
+export async function requireSession(): Promise<UserSession | NextResponse> {
+  const session = await getSession();
+
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  return session;
 }
 
 /**

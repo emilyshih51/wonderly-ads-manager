@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { AnthropicService } from '@/services/anthropic';
 import { createLogger } from '@/services/logger';
 
@@ -97,9 +97,9 @@ Here is the user's current Meta Ads account data:
 `;
 
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
 
   try {
     const { message, context, history } = await request.json();
@@ -111,25 +111,7 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
-      const readable = new ReadableStream({
-        start(controller) {
-          const data = JSON.stringify({
-            text: 'The Anthropic API key is not configured. Please add ANTHROPIC_API_KEY to your environment variables.',
-          });
-
-          controller.enqueue(`data: ${data}\n\n`);
-          controller.enqueue('data: [DONE]\n\n');
-          controller.close();
-        },
-      });
-
-      return new NextResponse(readable, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-        },
-      });
+      return NextResponse.json({ error: 'Anthropic API key not configured' }, { status: 503 });
     }
 
     const ai = new AnthropicService(apiKey);

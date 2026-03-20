@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { attachInsights } from '@/lib/utils';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Ads');
@@ -18,16 +19,17 @@ const logger = createLogger('Meta:Ads');
  * - `fields` — Custom field list (requires adset_id)
  */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const adSetId = request.nextUrl.searchParams.get('adset_id') || undefined;
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
   const customFields = request.nextUrl.searchParams.get('fields');
 
-  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+  const meta = MetaService.fromSession(session);
 
   try {
     let data;
@@ -40,36 +42,24 @@ export async function GET(request: NextRequest) {
       data = await meta.getAds(adSetId);
     }
 
-    const ads = (data as { data?: unknown[] }).data || [];
+    const ads = (data as { data?: Array<{ id: string }> }).data || [];
 
     if (withInsights) {
       try {
         const bulkInsights = await meta.getAdLevelInsights(datePreset);
-        const insightsMap: Record<string, unknown> = {};
 
-        for (const row of (bulkInsights as { data?: Array<{ ad_id: string }> }).data || []) {
-          insightsMap[row.ad_id] = row;
-        }
-
-        const adsWithInsights = (ads as Array<{ id: string }>).map((ad) => ({
-          ...ad,
-          insights: insightsMap[ad.id] || null,
-        }));
-
-        return NextResponse.json({ data: adsWithInsights });
+        return NextResponse.json({ data: attachInsights(ads, bulkInsights.data || [], 'ad_id') });
       } catch {
-        const adsNoInsights = (ads as Array<{ id: string }>).map((a) => ({ ...a, insights: null }));
-
-        return NextResponse.json({ data: adsNoInsights });
+        return NextResponse.json({
+          data: ads.map((a) => ({ ...a, insights: null })),
+        });
       }
     }
 
-    return NextResponse.json(data);
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ data: ads });
+  } catch (error) {
+    logger.error('Ad fetch error', error);
 
-    logger.error('Ad fetch error', msg);
-
-    return NextResponse.json({ error: `Failed to fetch ads: ${msg}` }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch ads' }, { status: 500 });
   }
 }

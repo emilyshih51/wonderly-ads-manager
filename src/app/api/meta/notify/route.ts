@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-import { SlackService } from '@/services/slack';
+import { requireSession } from '@/lib/session';
+import { SlackService, createSlackService } from '@/services/slack';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Notify');
@@ -16,9 +16,9 @@ const SLACK_CHANNEL = process.env.SLACK_NOTIFICATION_CHANNEL || '';
  *   `{status}` placeholders.
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
 
   try {
     const body = await request.json();
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
       let text: string;
 
       if (custom_message) {
-        text = custom_message
-          .replace(/\{adset_name\}/g, adset_name || '')
+        text = SlackService.sanitizeMentions(custom_message)
+          .replace(/\{adset_name\}/g, SlackService.sanitizeMentions(adset_name || ''))
           .replace(/\{budget\}/g, budgetDisplay)
           .replace(/\{ad_count\}/g, String(ad_count || 0))
           .replace(/\{status\}/g, statusLabel);
@@ -53,10 +53,7 @@ export async function POST(request: NextRequest) {
           `${ad_count} ad${ad_count !== 1 ? 's' : ''} created as ${statusLabel}`;
       }
 
-      const slack = new SlackService(
-        process.env.SLACK_BOT_TOKEN || '',
-        process.env.SLACK_SIGNING_SECRET || ''
-      );
+      const slack = createSlackService();
 
       await slack.postMessage(channel, text);
 

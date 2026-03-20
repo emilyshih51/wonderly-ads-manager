@@ -13,15 +13,20 @@ const logger = createLogger('Redis');
 
 let client: RedisClientType | null = null;
 let connecting: Promise<RedisClientType | null> | null = null;
+let lastFailureTime = 0;
+const BACKOFF_MS = 5_000;
 
 /**
  * Return a connected Redis client, or `null` if `REDIS_URL` is not set
- * or the connection fails.
+ * or the connection fails. Backs off for 5s after a failure to avoid
+ * hammering a down Redis instance on every request.
  */
 export async function getRedisClient(): Promise<RedisClientType | null> {
   if (!process.env.REDIS_URL) return null;
 
   if (client?.isOpen) return client;
+
+  if (Date.now() - lastFailureTime < BACKOFF_MS) return null;
 
   // Avoid multiple parallel connection attempts
   if (connecting) return connecting;
@@ -42,6 +47,7 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
     } catch (error) {
       logger.error('Redis connection failed', error);
       client = null;
+      lastFailureTime = Date.now();
 
       return null;
     } finally {

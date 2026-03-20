@@ -8,16 +8,12 @@
  * All functions are pure (no side effects) so they can be unit tested in isolation.
  */
 
-import type { MetaInsightsRow, MetaAction } from '@/types';
+import type { MetaInsightsRow } from '@/types';
 
-/**
- * Evaluate a numeric condition using a comparison operator.
- *
- * @param actual - The measured metric value
- * @param operator - Comparison operator: `'>'`, `'<'`, `'>='`, `'<='`, or `'=='`
- * @param threshold - The threshold value to compare against
- * @returns `true` if the condition is met, `false` otherwise (including unknown operators)
- */
+export const COST_PER_RESULT_NO_DATA = 99999;
+
+export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==';
+
 export function evaluateCondition(actual: number, operator: string, threshold: number): boolean {
   switch (operator) {
     case '>':
@@ -40,12 +36,7 @@ export function evaluateCondition(actual: number, operator: string, threshold: n
  *
  * When the optimization goal is known (via the optimization map), ONLY that specific
  * action type is counted. Otherwise, falls back to the first conversion-type action,
- * excluding engagement-only events (`link_click`, `page_engagement`, etc.).
- *
- * @param row - A Meta insights row containing an `actions` array
- * @param campaignId - Campaign ID used to look up the optimization goal
- * @param optimizationMap - Map of campaign ID → Meta action type string
- * @returns Number of results (conversions), or `0` if none found
+ * excluding engagement-only events.
  */
 export function getResultCount(
   row: Pick<MetaInsightsRow, 'actions' | 'campaign_id'>,
@@ -59,7 +50,7 @@ export function getResultCount(
   const resultType = campaignId && optimizationMap[campaignId];
 
   if (resultType) {
-    const found = (actions as MetaAction[]).find((a) => a.action_type === resultType);
+    const found = actions.find((a) => a.action_type === resultType);
 
     return found ? parseInt(found.value) || 0 : 0;
   }
@@ -67,7 +58,7 @@ export function getResultCount(
   // Generic fallback — find the first conversion action, excluding non-conversion events.
   // Includes standalone 'lead' and 'complete_registration' action types that Meta
   // sometimes returns for certain campaign objectives.
-  const conversion = (actions as MetaAction[]).find(
+  const conversion = actions.find(
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
         a.action_type.startsWith('onsite_conversion.') ||
@@ -101,4 +92,39 @@ export function getCostPerResult(
   const spend = parseFloat(row.spend || '0');
 
   return spend / results;
+}
+
+export interface ParsedMetrics {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  results: number;
+  cost_per_result: number;
+}
+
+/** Parse numeric metrics from a Meta insights row. */
+export function parseInsightMetrics(
+  row: MetaInsightsRow,
+  optimizationMap: Record<string, string>
+): ParsedMetrics {
+  const spend = parseFloat(row.spend ?? '0');
+  const campaignId = row.campaign_id;
+  const resultCount = getResultCount(row, campaignId, optimizationMap);
+  const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
+
+  return {
+    spend,
+    impressions: parseInt(row.impressions ?? '0', 10),
+    clicks: parseInt(row.clicks ?? '0', 10),
+    ctr: parseFloat(row.ctr ?? '0'),
+    cpc: parseFloat(row.cpc ?? '0'),
+    cpm: parseFloat(row.cpm ?? '0'),
+    frequency: parseFloat(row.frequency ?? '0'),
+    results: resultCount,
+    cost_per_result: costPerResult === Infinity ? COST_PER_RESULT_NO_DATA : costPerResult,
+  };
 }

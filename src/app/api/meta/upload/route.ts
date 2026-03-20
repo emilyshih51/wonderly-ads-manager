@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
-import { META_BASE_URL } from '@/services/meta/constants';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Upload');
@@ -19,15 +18,16 @@ export const maxDuration = 60;
  * Maximum serverless duration: 60 seconds (video uploads can be large).
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const formData = await request.formData();
     const action = formData.get('action') as string;
 
-    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    const meta = MetaService.fromSession(session);
 
     if (action === 'upload_image') {
       const file = formData.get('file') as File;
@@ -35,17 +35,9 @@ export async function POST(request: NextRequest) {
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
-      const blob = new Blob([bytes], { type: file.type });
-      const imageFormData = new FormData();
+      const uploadFile = new File([bytes], file.name, { type: file.type });
 
-      imageFormData.append('filename', blob, file.name);
-      imageFormData.append('access_token', session.meta_access_token);
-
-      const response = await fetch(`${META_BASE_URL}/act_${session.ad_account_id}/adimages`, {
-        method: 'POST',
-        body: imageFormData,
-      });
-      const data = await response.json();
+      const data = await meta.uploadAdImage(uploadFile);
 
       return NextResponse.json(data);
     }
@@ -56,35 +48,9 @@ export async function POST(request: NextRequest) {
       if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
       const bytes = await file.arrayBuffer();
-      const blob = new Blob([bytes], { type: file.type });
-      const videoFormData = new FormData();
+      const uploadFile = new File([bytes], file.name, { type: file.type });
 
-      videoFormData.append('source', blob, file.name);
-      videoFormData.append('title', file.name.replace(/\.[^.]+$/, ''));
-      videoFormData.append('access_token', session.meta_access_token);
-
-      const response = await fetch(`${META_BASE_URL}/act_${session.ad_account_id}/advideos`, {
-        method: 'POST',
-        body: videoFormData,
-      });
-
-      const responseText = await response.text();
-      let data;
-
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        logger.error('Non-JSON response', responseText.substring(0, 500));
-
-        return NextResponse.json(
-          { error: { message: `Video upload failed: ${response.status} ${response.statusText}` } },
-          { status: 500 }
-        );
-      }
-
-      if (data.error) {
-        return NextResponse.json({ error: data.error }, { status: 400 });
-      }
+      const data = await meta.uploadAdVideo(uploadFile);
 
       return NextResponse.json(data);
     }
@@ -93,9 +59,17 @@ export async function POST(request: NextRequest) {
       const adsetId = formData.get('adset_id') as string;
       const name = formData.get('name') as string;
       const pageId = formData.get('page_id') as string;
+      const link = formData.get('link') as string;
+
+      if (!adsetId || !name || !pageId || !link) {
+        return NextResponse.json(
+          { error: 'adset_id, name, page_id, and link are required' },
+          { status: 400 }
+        );
+      }
+
       const instagramActorId = formData.get('instagram_actor_id') as string;
       const message = formData.get('message') as string;
-      const link = formData.get('link') as string;
       const urlTags = formData.get('url_tags') as string;
       const headline = formData.get('headline') as string;
       const description = formData.get('description') as string;

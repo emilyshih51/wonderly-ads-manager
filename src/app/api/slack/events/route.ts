@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { AnthropicService } from '@/services/anthropic';
-import { SlackService } from '@/services/slack';
+import { SlackService, createSlackService } from '@/services/slack';
 import { fetchAdContextData, formatContextForClaude } from '@/lib/slack-context';
 import { SYSTEM_PROMPT } from '@/app/api/chat/route';
 import { createLogger } from '@/services/logger';
@@ -69,10 +69,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ challenge: body.challenge });
   }
 
-  const slack = new SlackService(
-    process.env.SLACK_BOT_TOKEN ?? '',
-    process.env.SLACK_SIGNING_SECRET ?? ''
-  );
+  const slack = createSlackService();
   const slackSignature = request.headers.get('x-slack-signature') ?? '';
   const slackTimestamp = request.headers.get('x-slack-request-timestamp') ?? '';
 
@@ -123,10 +120,7 @@ interface AppMentionEvent {
 async function processAppMention(event: AppMentionEvent): Promise<void> {
   const channelId = event.channel;
   const threadTs = event.thread_ts ?? event.ts;
-  const slack = new SlackService(
-    process.env.SLACK_BOT_TOKEN ?? '',
-    process.env.SLACK_SIGNING_SECRET ?? ''
-  );
+  const slack = createSlackService();
 
   let question = event.text.replace(/<@.+?>/g, '').trim();
 

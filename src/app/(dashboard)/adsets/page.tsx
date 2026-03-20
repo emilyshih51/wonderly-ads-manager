@@ -25,22 +25,11 @@ import {
   Rocket,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import type { MetaCampaign, MetaAdSet } from '@/types';
 
 const logger = createLogger('AdSets');
 
 /* ---------- Types ---------- */
-interface Campaign {
-  id: string;
-  name: string;
-  status: string;
-}
-interface AdSet {
-  id: string;
-  name: string;
-  campaign_id: string;
-  campaign?: { name: string };
-  status: string;
-}
 interface SourceOption {
   id: string;
   name: string;
@@ -102,17 +91,26 @@ const INITIAL_STATE: LaunchState = {
 
 export default function LaunchPage() {
   const [state, setState] = useState<LaunchState>(INITIAL_STATE);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [adSets, setAdSets] = useState<AdSet[]>([]);
+  const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
+  const [adSets, setAdSets] = useState<MetaAdSet[]>([]);
   const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [_loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState('');
   const [launchSuccess, setLaunchSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [hasDefaults, setHasDefaults] = useState(false);
+
+  // Revoke object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      state.images.forEach((img) => {
+        if (img.preview) URL.revokeObjectURL(img.preview);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load saved defaults indicator on mount
   useEffect(() => {
@@ -159,7 +157,6 @@ export default function LaunchPage() {
   /* ---------- Fetch campaigns and ad sets ---------- */
   useEffect(() => {
     const fetch = async () => {
-      setLoading(true);
       setFetchError('');
 
       try {
@@ -174,8 +171,6 @@ export default function LaunchPage() {
         setAdSets(adSetsData.data || []);
       } catch (error) {
         setFetchError(error instanceof Error ? error.message : 'Failed to load data');
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -248,7 +243,13 @@ export default function LaunchPage() {
   };
 
   const removeImage = (imageId: string) => {
-    setState((prev) => ({ ...prev, images: prev.images.filter((img) => img.id !== imageId) }));
+    setState((prev) => {
+      const removed = prev.images.find((img) => img.id === imageId);
+
+      if (removed?.preview) URL.revokeObjectURL(removed.preview);
+
+      return { ...prev, images: prev.images.filter((img) => img.id !== imageId) };
+    });
   };
 
   const updateImage = (imageId: string, updates: Partial<QueuedImage>) => {
@@ -262,7 +263,225 @@ export default function LaunchPage() {
   const getFirstPrimaryText = () => state.primaryTexts.find((t) => t.trim()) || '';
   const getFirstHeadline = () => state.headlines.find((t) => t.trim()) || '';
 
-  /* ---------- Launch ads ---------- */
+  /* ---------- Launch helpers ---------- */
+
+  /** Duplicate the source ad set/campaign and return the target ad set ID. */
+  const duplicateSource = async (launch: LaunchState): Promise<string> => {
+    if (launch.sourceType === 'existing') {
+      return launch.sourceId;
+    }
+
+    const duplicateRes = await window.fetch('/api/meta/duplicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: launch.sourceType,
+        id: launch.sourceId,
+        newName: launch.newName,
+        ...(launch.sourceType === 'adset' &&
+          launch.targetCampaign && { targetCampaignId: launch.targetCampaign }),
+      }),
+    });
+    const duplicateData = await duplicateRes.json();
+
+    if (!duplicateData.id) {
+      throw new Error(duplicateData.error || 'Failed to duplicate source');
+    }
+
+    let adsetId: string = duplicateData.id;
+
+    // If we duplicated a campaign, get the ad set inside it
+    if (launch.sourceType === 'campaign') {
+      const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${adsetId}`);
+      const adSetsData = await adSetsRes.json();
+      const campaignAdSets = adSetsData.data || [];
+
+      if (campaignAdSets.length > 0) {
+        adsetId = campaignAdSets[0].id;
+      } else {
+        throw new Error('Duplicated campaign has no ad sets. Please duplicate an ad set instead.');
+      }
+    }
+
+    // Set daily budget on the new ad set if specified
+    if (launch.dailyBudget) {
+      try {
+        await window.fetch('/api/meta/adsets/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adset_id: adsetId,
+            adset_name: launch.newName,
+            daily_budget: launch.dailyBudget,
+          }),
+        });
+      } catch (e) {
+        logger.error('Failed to set budget', e);
+      }
+    }
+
+    return adsetId;
+  };
+
+  /** Upload each media file, create a creative, and attach an ad to the ad set. Returns the number of successfully created ads. */
+  const uploadMediaAndCreateAds = async (launch: LaunchState, adsetId: string): Promise<number> => {
+    // Resolve identity (page_id + instagram_actor_id) from source ad set's existing ads
+    let resolvedPageId = launch.pageId;
+    let instagramActorId = '';
+
+    try {
+      const identityRes = await window.fetch(
+        `/api/meta/ads?adset_id=${launch.sourceId}&fields=creative{object_story_spec}`
+      );
+      const identityData = await identityRes.json();
+      const existingAds = identityData.data || [];
+
+      if (existingAds.length > 0) {
+        const oss = existingAds[0]?.creative?.object_story_spec;
+
+        if (oss?.page_id) resolvedPageId = oss.page_id;
+        if (oss?.instagram_actor_id) instagramActorId = oss.instagram_actor_id;
+      }
+    } catch (e) {
+      logger.error('Failed to fetch source identity, using defaults', e);
+    }
+
+    const baseUrl = launch.websiteUrl.startsWith('http')
+      ? launch.websiteUrl
+      : `https://${launch.websiteUrl}`;
+    const urlTags = launch.urlParameters || '';
+    const primaryText = getFirstPrimaryText();
+    const headline = getFirstHeadline();
+
+    let successCount = 0;
+
+    for (const img of launch.images) {
+      if (img.status === 'done') continue;
+      updateImage(img.id, { status: 'uploading' });
+
+      try {
+        let imageHash: string | null = null;
+        let videoId: string | null = null;
+
+        if (img.mediaType === 'video') {
+          const vidForm = new FormData();
+
+          vidForm.append('action', 'upload_video');
+          vidForm.append('file', img.file);
+          const vidRes = await window.fetch('/api/meta/upload', {
+            method: 'POST',
+            body: vidForm,
+          });
+          const vidData = await vidRes.json();
+
+          if (!vidData.id) {
+            const errMsg =
+              vidData.error?.message ||
+              vidData.error?.detail ||
+              JSON.stringify(vidData.error) ||
+              'Video upload failed';
+
+            throw new Error(errMsg);
+          }
+
+          videoId = vidData.id;
+        } else {
+          const imgForm = new FormData();
+
+          imgForm.append('action', 'upload_image');
+          imgForm.append('file', img.file);
+          const imgRes = await window.fetch('/api/meta/upload', {
+            method: 'POST',
+            body: imgForm,
+          });
+          const imgData = await imgRes.json();
+
+          imageHash = imgData.images
+            ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash
+            : null;
+
+          if (!imageHash) {
+            const errMsg =
+              imgData.error?.message ||
+              imgData.error?.detail ||
+              JSON.stringify(imgData.error) ||
+              'Image upload failed — no hash returned';
+
+            throw new Error(errMsg);
+          }
+        }
+
+        // Create ad — using identity (page_id + instagram) from source ad set
+        const adForm = new FormData();
+
+        adForm.append('action', 'create_ad');
+        adForm.append('adset_id', adsetId);
+        const adBaseName = launch.sourceType === 'existing' ? launch.sourceName : launch.newName;
+
+        adForm.append('name', `${adBaseName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
+        adForm.append('page_id', resolvedPageId);
+        if (instagramActorId) adForm.append('instagram_actor_id', instagramActorId);
+        adForm.append('message', primaryText);
+        adForm.append('link', baseUrl);
+        if (urlTags) adForm.append('url_tags', urlTags);
+        adForm.append('headline', headline);
+        adForm.append('call_to_action', launch.callToAction);
+        if (imageHash) adForm.append('image_hash', imageHash);
+        if (videoId) adForm.append('video_id', videoId);
+        adForm.append('status', launch.launchActive ? 'ACTIVE' : 'PAUSED');
+
+        const adRes = await window.fetch('/api/meta/upload', {
+          method: 'POST',
+          body: adForm,
+        });
+        const adData = await adRes.json();
+
+        if (!adData.id) {
+          const errObj = adData.error || {};
+          const errMsg =
+            errObj.detail || errObj.message || JSON.stringify(errObj) || 'Ad creation failed';
+
+          throw new Error(errMsg);
+        }
+
+        updateImage(img.id, { status: 'done' });
+        successCount++;
+      } catch (err) {
+        updateImage(img.id, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    }
+
+    return successCount;
+  };
+
+  /** Send a best-effort Slack notification about the launch. */
+  const notifySlack = async (
+    launch: LaunchState,
+    adsetId: string,
+    adCount: number
+  ): Promise<void> => {
+    try {
+      await window.fetch('/api/meta/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'launch',
+          adset_name: launch.newName,
+          budget: launch.dailyBudget || null,
+          ad_count: adCount,
+          status: launch.launchActive ? 'ACTIVE' : 'PAUSED',
+          custom_message: launch.slackMessage || null,
+        }),
+      });
+    } catch {
+      /* Slack notification is best-effort */
+    }
+  };
+
+  /* ---------- Launch ads (orchestrator) ---------- */
   const handleLaunch = async () => {
     setLaunching(true);
     setLaunchError('');
@@ -285,221 +504,13 @@ export default function LaunchPage() {
       if (!getFirstHeadline()) {
         throw new Error('Please enter at least one headline');
       }
-      // pageId is optional — we'll resolve it from the source ad set's existing ads
 
-      let newAdSetId: string;
-
-      if (state.sourceType === 'existing') {
-        // Adding to existing ad set — no duplication needed
-        newAdSetId = state.sourceId;
-      } else {
-        // Step 1: Duplicate source
-        const duplicateRes = await window.fetch('/api/meta/duplicate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: state.sourceType,
-            id: state.sourceId,
-            newName: state.newName,
-            ...(state.sourceType === 'adset' &&
-              state.targetCampaign && { targetCampaignId: state.targetCampaign }),
-          }),
-        });
-        const duplicateData = await duplicateRes.json();
-
-        if (!duplicateData.id) {
-          throw new Error(duplicateData.error || 'Failed to duplicate source');
-        }
-
-        newAdSetId = duplicateData.id;
-
-        // If we duplicated a campaign, we need to get the ad set inside it
-        if (state.sourceType === 'campaign') {
-          const adSetsRes = await window.fetch(`/api/meta/adsets?campaign_id=${newAdSetId}`);
-          const adSetsData = await adSetsRes.json();
-          const campaignAdSets = adSetsData.data || [];
-
-          if (campaignAdSets.length > 0) {
-            newAdSetId = campaignAdSets[0].id;
-          } else {
-            throw new Error(
-              'Duplicated campaign has no ad sets. Please duplicate an ad set instead.'
-            );
-          }
-        }
-
-        // Set daily budget on the new ad set if specified
-        if (state.dailyBudget) {
-          try {
-            await window.fetch('/api/meta/adsets/update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                adset_id: newAdSetId,
-                adset_name: state.newName,
-                daily_budget: state.dailyBudget,
-              }),
-            });
-          } catch (e) {
-            logger.error('Failed to set budget', e);
-          }
-        }
-      }
-
-      // Step 1c: Fetch identity (page_id + instagram_actor_id) from source ad set's existing ads
-      // This ensures the new ads have the same Facebook Page + Instagram account as the originals
-      let resolvedPageId = state.pageId;
-      let instagramActorId = '';
-
-      try {
-        const identityRes = await window.fetch(
-          `/api/meta/ads?adset_id=${state.sourceId}&fields=creative{object_story_spec}`
-        );
-        const identityData = await identityRes.json();
-        const existingAds = identityData.data || [];
-
-        if (existingAds.length > 0) {
-          const oss = existingAds[0]?.creative?.object_story_spec;
-
-          if (oss?.page_id) resolvedPageId = oss.page_id;
-          if (oss?.instagram_actor_id) instagramActorId = oss.instagram_actor_id;
-        }
-      } catch (e) {
-        logger.error('Failed to fetch source identity, using defaults', e);
-      }
-
-      // Step 2: Upload images and create ads
-      // link = clean base URL; url_tags = tracking/UTM params (Meta appends these)
-      const baseUrl = state.websiteUrl.startsWith('http')
-        ? state.websiteUrl
-        : `https://${state.websiteUrl}`;
-      const urlTags = state.urlParameters || '';
-      const primaryText = getFirstPrimaryText();
-      const headline = getFirstHeadline();
-
-      let successCount = 0;
-
-      for (const img of state.images) {
-        if (img.status === 'done') continue;
-        updateImage(img.id, { status: 'uploading' });
-
-        try {
-          let imageHash: string | null = null;
-          let videoId: string | null = null;
-
-          if (img.mediaType === 'video') {
-            // Upload video to Meta
-            const vidForm = new FormData();
-
-            vidForm.append('action', 'upload_video');
-            vidForm.append('file', img.file);
-            const vidRes = await window.fetch('/api/meta/upload', {
-              method: 'POST',
-              body: vidForm,
-            });
-            const vidData = await vidRes.json();
-
-            if (!vidData.id) {
-              const errMsg =
-                vidData.error?.message ||
-                vidData.error?.detail ||
-                JSON.stringify(vidData.error) ||
-                'Video upload failed';
-
-              throw new Error(errMsg);
-            }
-
-            videoId = vidData.id;
-          } else {
-            // Upload image to Meta
-            const imgForm = new FormData();
-
-            imgForm.append('action', 'upload_image');
-            imgForm.append('file', img.file);
-            const imgRes = await window.fetch('/api/meta/upload', {
-              method: 'POST',
-              body: imgForm,
-            });
-            const imgData = await imgRes.json();
-
-            imageHash = imgData.images
-              ? Object.values(imgData.images as Record<string, { hash: string }>)[0]?.hash
-              : null;
-
-            if (!imageHash) {
-              const errMsg =
-                imgData.error?.message ||
-                imgData.error?.detail ||
-                JSON.stringify(imgData.error) ||
-                'Image upload failed — no hash returned';
-
-              throw new Error(errMsg);
-            }
-          }
-
-          // Create ad — using identity (page_id + instagram) from source ad set
-          const adForm = new FormData();
-
-          adForm.append('action', 'create_ad');
-          adForm.append('adset_id', newAdSetId);
-          const adBaseName = state.sourceType === 'existing' ? state.sourceName : state.newName;
-
-          adForm.append('name', `${adBaseName} - ${img.file.name.replace(/\.[^.]+$/, '')}`);
-          adForm.append('page_id', resolvedPageId);
-          if (instagramActorId) adForm.append('instagram_actor_id', instagramActorId);
-          adForm.append('message', primaryText);
-          adForm.append('link', baseUrl);
-          if (urlTags) adForm.append('url_tags', urlTags);
-          adForm.append('headline', headline);
-          adForm.append('call_to_action', state.callToAction);
-          if (imageHash) adForm.append('image_hash', imageHash);
-          if (videoId) adForm.append('video_id', videoId);
-          adForm.append('status', state.launchActive ? 'ACTIVE' : 'PAUSED');
-
-          const adRes = await window.fetch('/api/meta/upload', {
-            method: 'POST',
-            body: adForm,
-          });
-          const adData = await adRes.json();
-
-          if (!adData.id) {
-            const errObj = adData.error || {};
-            const errMsg =
-              errObj.detail || errObj.message || JSON.stringify(errObj) || 'Ad creation failed';
-
-            throw new Error(errMsg);
-          }
-
-          updateImage(img.id, { status: 'done' });
-          successCount++;
-        } catch (err) {
-          updateImage(img.id, {
-            status: 'error',
-            error: err instanceof Error ? err.message : 'Unknown error',
-          });
-        }
-      }
+      const adsetId = await duplicateSource(state);
+      const successCount = await uploadMediaAndCreateAds(state, adsetId);
 
       if (successCount > 0) {
         setLaunchSuccess(true);
-
-        // Send Slack notification
-        try {
-          await window.fetch('/api/meta/notify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'launch',
-              adset_name: state.newName,
-              budget: state.dailyBudget || null,
-              ad_count: successCount,
-              status: state.launchActive ? 'ACTIVE' : 'PAUSED',
-              custom_message: state.slackMessage || null,
-            }),
-          });
-        } catch {
-          /* Slack notification is best-effort */
-        }
+        await notifySlack(state, adsetId, successCount);
       } else {
         setLaunchError(
           'Ad set was duplicated but all ad creations failed. Check the error details on each image.'

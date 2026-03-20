@@ -90,6 +90,8 @@ export default function TopPerformingAdsPage() {
     return (
       processedAds
         .map((ad, idx) => {
+          // Empty optimizationMap uses the generic conversion fallback — acceptable for
+          // client-side display. The automation engine uses the full map from getCampaignOptimizationMap().
           const results = getResultCount(
             { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
             ad.campaign_id,
@@ -209,22 +211,22 @@ export default function TopPerformingAdsPage() {
                   <th className="w-20 px-6 py-3 text-left text-xs font-semibold text-gray-700">
                     Status
                   </th>
-                  <th className="w-24 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     Results
                   </th>
-                  <th className="w-20 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     CPA
                   </th>
-                  <th className="w-20 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     Spend
                   </th>
-                  <th className="w-16 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     CTR %
                   </th>
-                  <th className="w-16 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     Clicks
                   </th>
-                  <th className="w-24 px-6 py-3 text-left text-right text-xs font-semibold text-gray-700">
+                  <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-gray-700">
                     Impressions
                   </th>
                 </tr>

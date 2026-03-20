@@ -44,7 +44,7 @@ export function validateEnv(): void {
   if (missing.length > 0) {
     throw new Error(
       `\n\nMissing required environment variables:\n\n` +
-        missing.map((k) => `  ❌  ${k}`).join('\n') +
+        missing.map((k) => `  - ${k}`).join('\n') +
         `\n\nSee .env.example for descriptions. Set these in your .env.local (dev) or Vercel dashboard (production).\n`
     );
   }

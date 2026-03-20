@@ -75,49 +75,45 @@ export async function fetchAdContextData(
   const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
   try {
-    const results = await Promise.allSettled([
-      /* [0]  */ meta.getCampaignLevelInsights('today'),
-      /* [1]  */ meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'campaign'),
-      /* [2]  */ meta.getAdSetLevelInsights('today'),
-      /* [3]  */ meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'adset'),
-      /* [4]  */ meta.getAdLevelInsights('today'),
-      /* [5]  */ meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'ad'),
-      /* [6]  */ meta.getHourlyInsights('today', 'campaign'),
-      /* [7]  */ meta.getHourlyInsightsForDate(yesterdayStr, yesterdayStr, 'campaign'),
-      /* [8]  */ meta.getAccountInsights('today'),
-      /* [9]  */ meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'account'),
-      /* [10] */ meta.getInsightsWithBreakdowns('today', 'age,gender'),
-      /* [11] */ meta.getInsightsWithBreakdowns('today', 'device_platform'),
-      /* [12] */ meta.getInsightsWithBreakdowns('today', 'publisher_platform'),
-      /* [13] */ meta.getCampaignOptimizationMap(),
-      /* [14] */ meta.getDailyInsights('last_30d', 'account'),
-      /* [15] */ meta.getDailyInsights('last_30d', 'campaign'),
-      /* [16] */ meta.getDailyInsights('last_7d', 'adset'),
-      /* [17] */ meta.getCampaigns(),
-      /* [18] */ meta.getAdAccount(),
-    ]);
-
-    const extract = (index: number): MetaInsightsRow[] => {
-      const r = results[index];
-
-      return r.status === 'fulfilled'
-        ? ((r.value as { data?: MetaInsightsRow[] })?.data ?? [])
-        : [];
+    const fetches = {
+      todayCampaigns: meta.getCampaignLevelInsights('today'),
+      yesterdayCampaigns: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'campaign'),
+      todayAdSets: meta.getAdSetLevelInsights('today'),
+      yesterdayAdSets: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'adset'),
+      todayAds: meta.getAdLevelInsights('today'),
+      yesterdayAds: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'ad'),
+      todayHourly: meta.getHourlyInsights('today', 'campaign'),
+      yesterdayHourly: meta.getHourlyInsightsForDate(yesterdayStr, yesterdayStr, 'campaign'),
+      todayAccount: meta.getAccountInsights('today'),
+      yesterdayAccount: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'account'),
+      ageGender: meta.getInsightsWithBreakdowns('today', 'age,gender'),
+      device: meta.getInsightsWithBreakdowns('today', 'device_platform'),
+      publisher: meta.getInsightsWithBreakdowns('today', 'publisher_platform'),
+      optimizationMap: meta.getCampaignOptimizationMap(),
+      accountDaily: meta.getDailyInsights('last_30d', 'account'),
+      campaignDaily: meta.getDailyInsights('last_30d', 'campaign'),
+      adsetDaily: meta.getDailyInsights('last_7d', 'adset'),
+      campaigns: meta.getCampaigns(),
+      adAccount: meta.getAdAccount(),
     };
 
-    const optimizationMap =
-      results[13].status === 'fulfilled' ? (results[13].value as Record<string, string>) : {};
+    const keys = Object.keys(fetches);
+    const settled = await Promise.allSettled(Object.values(fetches));
+    const data: Record<string, unknown> = {};
 
-    const accountInfo =
-      results[18].status === 'fulfilled'
-        ? (results[18].value as { name?: string; timezone_name?: string })
-        : null;
+    settled.forEach((r, i) => {
+      data[keys[i]] = r.status === 'fulfilled' ? r.value : null;
+    });
+
+    const extractRows = (key: string): MetaInsightsRow[] =>
+      (data[key] as { data?: MetaInsightsRow[] })?.data ?? [];
+
+    const optimizationMap = (data.optimizationMap as Record<string, string>) ?? {};
+
+    const accountInfo = data.adAccount as { name?: string; timezone_name?: string } | null;
 
     const campaignObjects =
-      results[17].status === 'fulfilled'
-        ? ((results[17].value as { data?: Array<{ id: string; daily_budget?: string }> }).data ??
-          [])
-        : [];
+      (data.campaigns as { data?: Array<{ id: string; daily_budget?: string }> })?.data ?? [];
 
     return {
       accountName: accountInfo?.name ?? `Account ${adAccountId}`,
@@ -126,28 +122,30 @@ export async function fetchAdContextData(
       optimizationMap,
       campaignObjects,
       today: {
-        campaigns: extract(0),
-        adSets: extract(2),
-        ads: extract(4),
-        account: extract(8),
-        hourly: extract(6),
+        campaigns: extractRows('todayCampaigns'),
+        adSets: extractRows('todayAdSets'),
+        ads: extractRows('todayAds'),
+        account: extractRows('todayAccount'),
+        hourly: extractRows('todayHourly'),
       },
       yesterday: {
-        campaigns: extract(1),
-        adSets: extract(3),
-        ads: extract(5),
-        account: extract(9),
-        hourly: extract(7),
+        campaigns: extractRows('yesterdayCampaigns'),
+        adSets: extractRows('yesterdayAdSets'),
+        ads: extractRows('yesterdayAds'),
+        account: extractRows('yesterdayAccount'),
+        hourly: extractRows('yesterdayHourly'),
       },
       history: {
-        accountDaily: extract(14),
-        campaignDaily: extract(15),
-        adsetDaily: extract(16),
+        accountDaily: extractRows('accountDaily'),
+        campaignDaily: extractRows('campaignDaily'),
+        adsetDaily: extractRows('adsetDaily'),
       },
       breakdowns: {
-        ageGender: extract(10) as Array<MetaInsightsRow & { age?: string; gender?: string }>,
-        device: extract(11),
-        publisher: extract(12),
+        ageGender: extractRows('ageGender') as Array<
+          MetaInsightsRow & { age?: string; gender?: string }
+        >,
+        device: extractRows('device'),
+        publisher: extractRows('publisher'),
       },
     };
   } catch (error) {
@@ -237,6 +235,14 @@ export function formatContextForClaude(data: AdContextData): string {
     );
   }
 
+  // Pre-build Map lookups for O(1) access instead of O(n) .find() per iteration
+  const todayCampaignMap = new Map(data.today.campaigns.map((c) => [c.campaign_id, c]));
+  const yesterdayCampaignMap = new Map(data.yesterday.campaigns.map((c) => [c.campaign_id, c]));
+  const todayAdSetMap = new Map(data.today.adSets.map((a) => [a.adset_id, a]));
+  const yesterdayAdSetMap = new Map(data.yesterday.adSets.map((a) => [a.adset_id, a]));
+  const todayAdMap = new Map(data.today.ads.map((a) => [a.ad_id, a]));
+  const yesterdayAdMap = new Map(data.yesterday.ads.map((a) => [a.ad_id, a]));
+
   // Campaign breakdown
   sections.push('\n--- CAMPAIGNS (TODAY vs YESTERDAY) ---');
   const allCampaignIds = new Set<string>();
@@ -252,8 +258,8 @@ export function formatContextForClaude(data: AdContextData): string {
   }
 
   for (const cid of allCampaignIds) {
-    const t = data.today.campaigns.find((c) => c.campaign_id === cid);
-    const y = data.yesterday.campaigns.find((c) => c.campaign_id === cid);
+    const t = todayCampaignMap.get(cid);
+    const y = yesterdayCampaignMap.get(cid);
     const name = t?.campaign_name ?? y?.campaign_name ?? cid;
     const dailyBudget = budgetMap[cid] ?? 'N/A';
 
@@ -290,8 +296,8 @@ export function formatContextForClaude(data: AdContextData): string {
     }
 
     for (const asid of allAdSetIds) {
-      const t = data.today.adSets.find((a) => a.adset_id === asid);
-      const y = data.yesterday.adSets.find((a) => a.adset_id === asid);
+      const t = todayAdSetMap.get(asid);
+      const y = yesterdayAdSetMap.get(asid);
       const name = t?.adset_name ?? y?.adset_name ?? asid;
       let line = `Ad Set "${name}" (ID: ${asid}):`;
 
@@ -321,8 +327,8 @@ export function formatContextForClaude(data: AdContextData): string {
     }
 
     for (const adId of allAdIds) {
-      const t = data.today.ads.find((a) => a.ad_id === adId);
-      const y = data.yesterday.ads.find((a) => a.ad_id === adId);
+      const t = todayAdMap.get(adId);
+      const y = yesterdayAdMap.get(adId);
       const name = t?.ad_name ?? y?.ad_name ?? adId;
       const cid = t?.campaign_id ?? y?.campaign_id ?? '';
       let line = `Ad "${name}" (ID: ${adId}, campaign ${cid}):`;

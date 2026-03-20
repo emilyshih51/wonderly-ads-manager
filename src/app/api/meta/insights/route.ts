@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -15,14 +15,15 @@ const logger = createLogger('Meta:Insights');
  * - `time_increment` — Breakdown granularity (e.g. `1` for daily)
  */
 export async function GET(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const timeIncrement = request.nextUrl.searchParams.get('time_increment') || undefined;
 
-  const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+  const meta = MetaService.fromSession(session);
 
   try {
     const data = await meta.getAccountInsights(datePreset, timeIncrement);

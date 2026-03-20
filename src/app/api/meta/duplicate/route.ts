@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -13,15 +13,20 @@ const logger = createLogger('Meta:Duplicate');
  * Optional: `newName`, `targetCampaignId` (for ad set duplication).
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const body = await request.json();
     const { type, id, newName, targetCampaignId } = body;
 
-    const meta = new MetaService(session.meta_access_token, session.ad_account_id);
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const meta = MetaService.fromSession(session);
     let result;
 
     if (type === 'campaign') {

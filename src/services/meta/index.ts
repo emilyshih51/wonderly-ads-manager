@@ -13,7 +13,6 @@
 
 import {
   META_BASE_URL,
-  META_API_VERSION,
   META_OAUTH_URL,
   INSIGHT_FIELDS,
   INSIGHT_DETAIL_FIELDS,
@@ -24,40 +23,40 @@ import {
   ACTIVE_FILTER,
 } from './constants';
 
-export {
-  META_API_VERSION,
-  META_BASE_URL,
-  META_OAUTH_URL,
-  INSIGHT_FIELDS_AD,
-  INSIGHT_FIELDS_ADSET,
-  INSIGHT_FIELDS_CAMPAIGN,
-  ACTIVE_FILTER,
-};
-import type {
-  MetaRequestOptions,
+export { META_OAUTH_URL };
+import {
   MetaApiError,
-  InsightLevel,
-  CreateAdCreativeParams,
-  CreateAdParams,
-  IMetaService,
+  type MetaRequestOptions,
+  type InsightLevel,
+  type CreateAdCreativeParams,
+  type CreateAdParams,
+  type MetaImageUploadResponse,
+  type MetaVideoUploadResponse,
+  type MetaAdAccountInfo,
 } from './types';
-import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightsRow } from '@/types';
+import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightsRow, UserSession } from '@/types';
 
+export { MetaApiError };
 export type {
   MetaRequestOptions,
-  MetaApiError,
   InsightLevel,
   CreateAdCreativeParams,
   CreateAdParams,
-  IMetaService,
+  MetaImageUploadResponse,
+  MetaVideoUploadResponse,
+  MetaAdAccountInfo,
 };
 
-export class MetaService implements IMetaService {
+export class MetaService {
   constructor(
     private readonly accessToken: string,
     private readonly adAccountId: string,
     private readonly fetchFn: typeof fetch = fetch
   ) {}
+
+  static fromSession(session: UserSession): MetaService {
+    return new MetaService(session.meta_access_token, session.ad_account_id);
+  }
 
   /**
    * Make a request to the Meta Graph API.
@@ -91,11 +90,7 @@ export class MetaService implements IMetaService {
     const data = (await response.json()) as Record<string, unknown>;
 
     if (data.error) {
-      const errorData = data.error as MetaApiError['metaError'];
-      const err = new Error(errorData.message || 'Meta API Error') as MetaApiError;
-
-      err.metaError = errorData;
-      throw err;
+      throw new MetaApiError(data.error as MetaApiError['metaError']);
     }
 
     return data as T;
@@ -136,7 +131,7 @@ export class MetaService implements IMetaService {
    * @param campaignId - Source campaign ID
    * @param newName - Optional name override (defaults to `"<original> (Copy)"`)
    */
-  async duplicateCampaign(campaignId: string, newName?: string): Promise<unknown> {
+  async duplicateCampaign(campaignId: string, newName?: string): Promise<{ id: string }> {
     const original = (await this.request(`/${campaignId}`, {
       params: {
         fields:
@@ -169,33 +164,50 @@ export class MetaService implements IMetaService {
    * @returns `{ [campaignId]: actionType }` e.g. `{ "123": "offsite_conversion.fb_pixel_lead" }`
    */
   async getCampaignOptimizationMap(): Promise<Record<string, string>> {
-    const data = (await this.request(`/act_${this.adAccountId}/adsets`, {
-      params: { fields: 'campaign_id,optimization_goal,promoted_object', limit: '200' },
-    })) as { data?: Array<Record<string, unknown>> };
-
     const map: Record<string, string> = {};
+    let after: string | undefined;
 
-    for (const adset of data.data || []) {
-      const campaignId = adset.campaign_id as string;
+    // Paginate through all ad sets to handle accounts with >200 ad sets
+    for (;;) {
+      const params: Record<string, string> = {
+        fields: 'campaign_id,optimization_goal,promoted_object',
+        limit: '200',
+      };
 
-      if (map[campaignId]) continue;
+      if (after) params.after = after;
 
-      const goal = adset.optimization_goal as string;
-      const promoted = adset.promoted_object as Record<string, string> | undefined;
+      const data = (await this.request(`/act_${this.adAccountId}/adsets`, { params })) as {
+        data?: Array<Record<string, unknown>>;
+        paging?: { cursors?: { after?: string }; next?: string };
+      };
 
-      if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_event_type) {
-        const actionType = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
+      for (const adset of data.data || []) {
+        const campaignId = adset.campaign_id as string;
 
-        map[campaignId] = actionType
-          ? actionType
-          : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
-      } else if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_conversion_id) {
-        map[campaignId] = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
-      } else if (goal === 'LEAD_GENERATION') {
-        map[campaignId] = 'onsite_conversion.lead_grouped';
-      } else if (goal === 'CONVERSATIONS') {
-        map[campaignId] = 'onsite_conversion.messaging_conversation_started_7d';
+        if (map[campaignId]) continue;
+
+        const goal = adset.optimization_goal as string;
+        const promoted = adset.promoted_object as Record<string, string> | undefined;
+
+        if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_event_type) {
+          const actionType = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
+
+          map[campaignId] = actionType
+            ? actionType
+            : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
+        } else if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_conversion_id) {
+          map[campaignId] = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
+        } else if (goal === 'LEAD_GENERATION') {
+          map[campaignId] = 'onsite_conversion.lead_grouped';
+        } else if (goal === 'CONVERSATIONS') {
+          map[campaignId] = 'onsite_conversion.messaging_conversation_started_7d';
+        }
       }
+
+      // Follow pagination cursor if more pages exist
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
     }
 
     return map;
@@ -229,7 +241,7 @@ export class MetaService implements IMetaService {
     adSetId: string,
     newName?: string,
     targetCampaignId?: string
-  ): Promise<unknown> {
+  ): Promise<{ id: string }> {
     const original = (await this.request(`/${adSetId}`, {
       params: {
         fields:
@@ -289,7 +301,7 @@ export class MetaService implements IMetaService {
    * @param imageFile - Image file to upload
    * @returns Image hash and metadata from Meta
    */
-  async uploadAdImage(imageFile: File): Promise<unknown> {
+  async uploadAdImage(imageFile: File): Promise<MetaImageUploadResponse> {
     const formData = new FormData();
 
     formData.append('filename', imageFile);
@@ -300,7 +312,34 @@ export class MetaService implements IMetaService {
       body: formData,
     });
 
-    return response.json();
+    return response.json() as Promise<MetaImageUploadResponse>;
+  }
+
+  /**
+   * Upload a video to the ad account's video library.
+   *
+   * @param videoFile - Video file to upload
+   * @returns Video ID and metadata from Meta
+   */
+  async uploadAdVideo(videoFile: File): Promise<MetaVideoUploadResponse> {
+    const formData = new FormData();
+
+    formData.append('source', videoFile);
+    formData.append('title', videoFile.name?.replace(/\.[^.]+$/, '') ?? 'video');
+    formData.append('access_token', this.accessToken);
+
+    const response = await this.fetchFn(`${META_BASE_URL}/act_${this.adAccountId}/advideos`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = (await response.json()) as Record<string, unknown>;
+
+    if (data.error) {
+      throw new MetaApiError(data.error as MetaApiError['metaError']);
+    }
+
+    return data as unknown as MetaVideoUploadResponse;
   }
 
   /**
@@ -308,7 +347,7 @@ export class MetaService implements IMetaService {
    *
    * @param creative - Creative parameters including page ID, link, and call-to-action
    */
-  async createAdCreative(creative: CreateAdCreativeParams): Promise<unknown> {
+  async createAdCreative(creative: CreateAdCreativeParams): Promise<{ id: string }> {
     const objectStorySpec: Record<string, unknown> = {
       page_id: creative.pageId,
       link_data: {
@@ -321,7 +360,7 @@ export class MetaService implements IMetaService {
       },
     };
 
-    return this.request(`/act_${this.adAccountId}/adcreatives`, {
+    return this.request<{ id: string }>(`/act_${this.adAccountId}/adcreatives`, {
       method: 'POST',
       body: { name: creative.name, object_story_spec: objectStorySpec },
     });
@@ -332,7 +371,7 @@ export class MetaService implements IMetaService {
    *
    * @param ad - Ad name, target ad set, creative ID, and optional status
    */
-  async createAd(ad: CreateAdParams): Promise<unknown> {
+  async createAd(ad: CreateAdParams): Promise<{ id: string }> {
     return this.request(`/act_${this.adAccountId}/ads`, {
       method: 'POST',
       body: {
@@ -677,7 +716,7 @@ export class MetaService implements IMetaService {
   /**
    * Get ad account info: name, status, currency, timezone, and amount spent.
    */
-  async getAdAccount(): Promise<unknown> {
+  async getAdAccount(): Promise<MetaAdAccountInfo> {
     return this.request(`/act_${this.adAccountId}`, {
       params: { fields: 'id,name,account_status,currency,timezone_name,amount_spent' },
     });

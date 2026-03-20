@@ -33,22 +33,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const appId = process.env.META_APP_ID!;
-    const appSecret = process.env.META_APP_SECRET!;
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+
+    if (!appId || !appSecret) {
+      return NextResponse.redirect(`${appUrl}/login?error=missing_config`);
+    }
+
     const redirectUri = `${appUrl}/api/auth/facebook/callback`;
 
     const tokenData = await MetaService.exchangeCodeForToken(appId, appSecret, code, redirectUri);
 
-    if (tokenData.error) {
+    if (tokenData.error || !tokenData.access_token) {
       return NextResponse.redirect(`${appUrl}/login?error=token_error`);
     }
 
     const longLivedData = await MetaService.exchangeForLongLivedToken(
       appId,
       appSecret,
-      tokenData.access_token!
+      tokenData.access_token
     );
-    const accessToken = longLivedData.access_token ?? tokenData.access_token!;
+    const accessToken = longLivedData.access_token ?? tokenData.access_token;
 
     const userData = await MetaService.getMe(accessToken);
 
@@ -87,6 +92,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Facebook auth error', error);
 
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=auth_failed`);
+    return NextResponse.redirect(`${appUrl}/login?error=auth_failed`);
   }
 }

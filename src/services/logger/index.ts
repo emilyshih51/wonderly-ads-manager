@@ -13,15 +13,64 @@
  */
 /* eslint-disable no-console */
 
-import { LOG_LEVEL_WEIGHT, LEVEL_COLOR, ANSI, DEFAULT_MIN_LEVEL, DEV_MIN_LEVEL } from './constants';
-import type { LogLevel, LogEntry, LoggerOptions } from './types';
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-export type { LogLevel, LogEntry, LoggerOptions };
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * A structured log entry emitted in production (server-side).
+ * Shape is flat so Vercel log drain parsers can index every field.
+ */
+interface LogEntry {
+  /** ISO 8601 timestamp */
+  timestamp: string;
+  level: LogLevel;
+  /** The bracket prefix label, e.g. "Slack" — stored without brackets */
+  scope: string;
+  message: string;
+  /** Additional data passed to the log call (non-Error values) */
+  data?: unknown;
+  /** Serialized error fields, present only when data is an Error instance */
+  error?: { name: string; message: string; stack?: string };
+}
+
+interface LoggerOptions {
+  /**
+   * Minimum level to emit. Calls below this level are silenced.
+   * Defaults to 'debug' in development, 'info' in production.
+   */
+  minLevel?: LogLevel;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+/** Numeric weight for level filtering. Higher = more severe. */
+export const LOG_LEVEL_WEIGHT: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+
+/** ANSI escape codes for dev-mode colored terminal output. */
+const ANSI = {
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  cyan: '\x1b[36m',
+  gray: '\x1b[90m',
+} as const;
+
+/** Maps each log level to an ANSI color for terminal output. */
+const LEVEL_COLOR: Record<LogLevel, string> = {
+  debug: ANSI.gray,
+  info: ANSI.cyan,
+  warn: ANSI.yellow,
+  error: ANSI.red,
+};
 
 // Safe for Edge Runtime and browser — avoids any Node.js-only globals.
 const isBrowser = typeof window !== 'undefined';
 // Next.js inlines NODE_ENV at build time for client bundles; safe in Edge Runtime too.
 const isDevelopment = process.env.NODE_ENV === 'development';
+
+// ─── Logger ──────────────────────────────────────────────────────────────────
 
 export class Logger {
   private readonly scope: string;
@@ -35,7 +84,7 @@ export class Logger {
   constructor(scope: string, options: LoggerOptions = {}) {
     this.scope = scope;
     this.prefix = `[${scope}]`;
-    this.minLevel = options.minLevel ?? (isDevelopment ? DEV_MIN_LEVEL : DEFAULT_MIN_LEVEL);
+    this.minLevel = options.minLevel ?? (isDevelopment ? 'debug' : 'info');
   }
 
   /**
@@ -161,11 +210,7 @@ export class Logger {
 
     if (data !== undefined) {
       if (data instanceof Error) {
-        entry.error = {
-          name: data.name,
-          message: data.message,
-          stack: data.stack,
-        };
+        entry.error = { name: data.name, message: data.message, stack: data.stack };
       } else {
         entry.data = data;
       }

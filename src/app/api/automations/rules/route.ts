@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 import { RulesStoreService, type StoredRule } from '@/services/rules-store';
 import { createLogger } from '@/services/logger';
@@ -14,9 +14,10 @@ async function createRulesStore(): Promise<RulesStoreService> {
 }
 
 export async function GET(_request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const store = await createRulesStore();
   const allRules = await store.getAll();
@@ -29,9 +30,10 @@ export async function GET(_request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const body = await request.json();
@@ -48,7 +50,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'edges must be an array' }, { status: 400 });
     }
 
-    const ruleId = `rule_${Date.now()}`;
+    const validNodeTypes = new Set(['trigger', 'condition', 'action']);
+
+    for (const node of body.nodes) {
+      if (!node?.id || !node?.type || !validNodeTypes.has(node.type)) {
+        return NextResponse.json(
+          { error: 'Each node must have an id and a valid type (trigger, condition, action)' },
+          { status: 400 }
+        );
+      }
+    }
+
+    for (const edge of body.edges) {
+      if (!edge?.id || !edge?.source || !edge?.target) {
+        return NextResponse.json(
+          { error: 'Each edge must have id, source, and target' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const ruleId = `rule_${crypto.randomUUID()}`;
 
     const newRule: StoredRule = {
       id: ruleId,
@@ -66,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     await store.save(newRule);
 
-    return NextResponse.json(newRule);
+    return NextResponse.json(newRule, { status: 201 });
   } catch (error) {
     logger.error('Create rule error', error);
 
@@ -75,9 +97,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   try {
     const body = await request.json();
@@ -90,6 +113,10 @@ export async function PUT(request: NextRequest) {
 
     if (!existingRule) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 });
+    }
+
+    if (existingRule.user_id && existingRule.user_id !== session.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const updatedRule: StoredRule = {
@@ -112,9 +139,10 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
   const ruleId = request.nextUrl.searchParams.get('id');
 
@@ -122,6 +150,11 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const store = await createRulesStore();
+    const existingRule = await store.get(ruleId);
+
+    if (existingRule?.user_id && existingRule.user_id !== session.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     await store.delete(ruleId);
 

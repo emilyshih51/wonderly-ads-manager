@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
+import { requireSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
-import { evaluateCondition, getResultCount } from '@/lib/automation-utils';
+import {
+  evaluateCondition,
+  parseInsightMetrics,
+  COST_PER_RESULT_NO_DATA,
+} from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
-import { SlackService } from '@/services/slack';
+import { createSlackService } from '@/services/slack';
 import { RulesStoreService } from '@/services/rules-store';
 import { createLogger } from '@/services/logger';
 import type { StoredRule } from '@/services/rules-store';
@@ -46,10 +50,9 @@ export async function GET(request: NextRequest) {
     logger.warn('CRON_SECRET not set — cron endpoint is unprotected (dev only)');
   }
 
-  const session = await getSession();
-  const accessToken = session?.meta_access_token || process.env.META_SYSTEM_ACCESS_TOKEN;
-  const defaultAdAccountId =
-    session?.ad_account_id || (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
+  // Cron endpoint uses only the system token — never fall back to user session tokens
+  const accessToken = process.env.META_SYSTEM_ACCESS_TOKEN;
+  const defaultAdAccountId = (process.env.META_AD_ACCOUNT_ID || '').replace(/^act_/, '');
 
   if (!accessToken) {
     return NextResponse.json({ error: 'No Meta credentials available' }, { status: 401 });
@@ -73,10 +76,10 @@ export async function GET(request: NextRequest) {
     rulesByAccount[accountId].push(rule);
   }
 
-  const results: unknown[] = [];
+  const results: EvaluateResult[] = [];
   const actionCap = {
     executed: 0,
-    max: parseInt(process.env.AUTOMATION_MAX_ACTIONS_PER_RUN || '20'),
+    max: parseInt(process.env.AUTOMATION_MAX_ACTIONS_PER_RUN || '20', 10) || 20,
   };
 
   for (const [adAccountId, accountRules] of Object.entries(rulesByAccount)) {
@@ -91,15 +94,9 @@ export async function GET(request: NextRequest) {
 
     for (const rule of accountRules) {
       try {
-        const result = await evaluateRule(
-          rule,
-          meta,
-          adAccountId,
-          optimizationMap,
-          false,
-          false,
-          actionCap
-        );
+        const result = await evaluateRule(rule, meta, adAccountId, optimizationMap, {
+          actionCap,
+        });
 
         results.push(...result);
       } catch (error) {
@@ -125,11 +122,11 @@ export async function GET(request: NextRequest) {
  * @param request - Request body: `{ rule: StoredRule, send_slack?: boolean, live?: boolean }`
  */
 export async function POST(request: NextRequest) {
-  const session = await getSession();
+  const result = await requireSession();
 
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (result instanceof NextResponse) return result;
+  const session = result;
 
-  const accessToken = session.meta_access_token;
   const rawAdAccountId = session.ad_account_id;
 
   const body = (await request.json()) as {
@@ -145,7 +142,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Rule required' }, { status: 400 });
   }
 
-  const meta = new MetaService(accessToken, rawAdAccountId);
+  const meta = MetaService.fromSession(session);
   let optimizationMap: Record<string, string> = {};
 
   try {
@@ -156,14 +153,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const dryRun = !live;
-    const results = await evaluateRule(
-      rule,
-      meta,
-      rawAdAccountId,
-      optimizationMap,
+    const results = await evaluateRule(rule, meta, rawAdAccountId, optimizationMap, {
       dryRun,
-      sendSlack || live
-    );
+      sendSlack: sendSlack || live,
+    });
 
     return NextResponse.json({
       test: !live,
@@ -175,7 +168,9 @@ export async function POST(request: NextRequest) {
       results,
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    logger.error('Manual evaluate error', error);
+
+    return NextResponse.json({ error: 'Evaluation failed' }, { status: 500 });
   }
 }
 
@@ -188,11 +183,32 @@ interface NodeConfig {
   slack_channel?: string;
   also_notify_slack?: string | boolean;
   slack_message?: string;
+  metric?: string;
+  operator?: string;
+  threshold?: string;
 }
 
-interface FlowNode {
-  type: string;
-  data?: { config?: NodeConfig };
+interface EvaluateResult {
+  rule: string;
+  entity_type?: string;
+  entity_id?: string;
+  entity_name?: string;
+  metrics?: { spend: number; results: number; cost_per_result: number | string };
+  action?: string;
+  dry_run?: boolean;
+  warning?: string;
+  duplicated_ad_id?: string;
+  slack_sent?: boolean;
+  slack_channel?: string;
+  skipped?: string;
+  account?: string;
+  error?: string;
+}
+
+interface EvaluateRuleOptions {
+  dryRun?: boolean;
+  sendSlack?: boolean;
+  actionCap?: { executed: number; max: number };
 }
 
 async function evaluateRule(
@@ -200,19 +216,18 @@ async function evaluateRule(
   meta: MetaService,
   adAccountId: string,
   optimizationMap: Record<string, string>,
-  dryRun = false,
-  sendSlack = false,
-  actionCap?: { executed: number; max: number }
-): Promise<unknown[]> {
-  const nodes = rule.nodes as FlowNode[];
+  options: EvaluateRuleOptions = {}
+): Promise<EvaluateResult[]> {
+  const { dryRun = false, sendSlack = false, actionCap } = options;
+  const nodes = rule.nodes;
   const triggerNode = nodes.find((n) => n.type === 'trigger');
   const conditionNodes = nodes.filter((n) => n.type === 'condition');
   const actionNode = nodes.find((n) => n.type === 'action');
 
   if (!triggerNode || !actionNode) return [];
 
-  const triggerConfig = triggerNode.data?.config ?? {};
-  const actionConfig = actionNode.data?.config ?? {};
+  const triggerConfig = (triggerNode.data?.config ?? {}) as NodeConfig;
+  const actionConfig = (actionNode.data?.config ?? {}) as NodeConfig;
   const entityType = triggerConfig.entity_type ?? 'ad';
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
   const campaignId = triggerConfig.campaign_id;
@@ -230,7 +245,8 @@ async function evaluateRule(
     return [{ rule: rule.name, skipped: 'no_data_returned', account: adAccountId }];
   }
 
-  const results: unknown[] = [];
+  const results: EvaluateResult[] = [];
+  const slack = createSlackService();
 
   // For "today" preset, Meta's reporting pipeline can lag 1–3 hours.
   // A row with zero impressions has no delivery data yet — skip it to
@@ -240,7 +256,7 @@ async function evaluateRule(
   for (const row of insightsData) {
     const entityId = (row.ad_id ?? row.adset_id ?? row.campaign_id) as string;
     const entityName = (row.ad_name ?? row.adset_name ?? row.campaign_name ?? entityId) as string;
-    const impressions = parseInt(row.impressions ?? '0');
+    const impressions = parseInt(row.impressions ?? '0', 10);
 
     if (isToday && impressions === 0 && !dryRun) {
       logger.info(
@@ -255,33 +271,18 @@ async function evaluateRule(
       continue;
     }
 
-    const spend = parseFloat(row.spend ?? '0');
-    const rowCampaignId = row.campaign_id;
-    const resultCount = getResultCount(row, rowCampaignId, optimizationMap);
-    const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
-
-    const metrics = {
-      spend,
-      impressions,
-      clicks: parseInt(row.clicks ?? '0'),
-      ctr: parseFloat(row.ctr ?? '0'),
-      cpc: parseFloat(row.cpc ?? '0'),
-      cpm: parseFloat(row.cpm ?? '0'),
-      frequency: parseFloat(row.frequency ?? '0'),
-      results: resultCount,
-      cost_per_result: costPerResult === Infinity ? 99999 : costPerResult,
-    };
+    const metrics = parseInsightMetrics(row, optimizationMap);
 
     let allConditionsMet = true;
 
     for (const condNode of conditionNodes) {
-      const config = (condNode as FlowNode).data?.config ?? {};
-      const metric = (config as Record<string, string>).metric ?? 'spend';
-      const operator = (config as Record<string, string>).operator ?? '>';
-      const threshold = parseFloat((config as Record<string, string>).threshold ?? '0');
-      const actual = (metrics as Record<string, number>)[metric] ?? 0;
+      const condConfig = (condNode.data?.config ?? {}) as NodeConfig;
+      const metric = condConfig.metric ?? 'spend';
+      const operator = condConfig.operator ?? '>';
+      const threshold = parseFloat(condConfig.threshold ?? '0');
+      const actual = metrics[metric as keyof typeof metrics] ?? 0;
 
-      if (metric === 'cost_per_result' && resultCount === 0) {
+      if (metric === 'cost_per_result' && metrics.results === 0) {
         allConditionsMet = false;
         break;
       }
@@ -295,15 +296,18 @@ async function evaluateRule(
     if (!allConditionsMet) continue;
 
     const actionType = actionConfig.action_type ?? '';
-    const actionResult: Record<string, unknown> = {
+    const actionResult: EvaluateResult = {
       rule: rule.name,
       entity_type: entityType,
       entity_id: entityId,
       entity_name: entityName,
       metrics: {
-        spend,
-        results: resultCount,
-        cost_per_result: costPerResult === Infinity ? 'N/A' : costPerResult.toFixed(2),
+        spend: metrics.spend,
+        results: metrics.results,
+        cost_per_result:
+          metrics.cost_per_result === COST_PER_RESULT_NO_DATA
+            ? 'N/A'
+            : metrics.cost_per_result.toFixed(2),
       },
     };
 
@@ -351,11 +355,6 @@ async function evaluateRule(
         (actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true)
       ) {
         if (!dryRun || sendSlack) {
-          const slack = new SlackService(
-            process.env.SLACK_BOT_TOKEN ?? '',
-            process.env.SLACK_SIGNING_SECRET ?? ''
-          );
-
           await slack
             .sendAutomationNotification(actionConfig.slack_channel, {
               ruleName: rule.name,

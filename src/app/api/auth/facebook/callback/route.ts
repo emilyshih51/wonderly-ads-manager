@@ -32,6 +32,15 @@ export async function GET(request: NextRequest) {
     );
     const userData = await userResponse.json();
 
+    // Allowlist check — only let authorized users in
+    const allowedEmails = (process.env.ALLOWED_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (allowedEmails.length > 0 && !allowedEmails.includes(userData.email)) {
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/login?error=unauthorized`);
+    }
+
     // Get ad accounts
     const adAccountsResponse = await fetch(
       `https://graph.facebook.com/v21.0/me/adaccounts?fields=id,name,account_status&access_token=${accessToken}`

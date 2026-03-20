@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySlackSignature, updateSlackMessage } from '@/lib/slack';
+import { verifySlackSignature, updateSlackMessage, postSlackMessage } from '@/lib/slack';
 import { updateStatus, metaApi } from '@/lib/meta-api';
 
 /**
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function processInteraction(payload: any) {
-  const { type, actions, channel, trigger_id } = payload;
+  const { type, actions, channel } = payload;
 
   if (type !== 'block_actions' || !actions || actions.length === 0) {
     console.warn('[Slack Interactions] Unexpected interaction type');
@@ -73,6 +73,26 @@ async function processInteraction(payload: any) {
     id: actionValue.action_id,
     name: actionValue.action_name,
   });
+
+  // Allowlist check — only permitted Slack users can execute actions
+  const allowedSlackUsers = (process.env.ALLOWED_SLACK_USER_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const requestingUserId = payload.user?.id;
+  if (allowedSlackUsers.length > 0 && !allowedSlackUsers.includes(requestingUserId)) {
+    const channelId = actionValue.channel_id || channel?.id;
+    const threadTs = actionValue.thread_ts;
+    if (channelId) {
+      await postSlackMessage(
+        channelId,
+        "You don't have permission to execute actions.",
+        undefined,
+        threadTs
+      );
+    }
+    return;
+  }
 
   try {
     const metaSystemToken = process.env.META_SYSTEM_ACCESS_TOKEN;
@@ -125,7 +145,6 @@ async function processInteraction(payload: any) {
 
     // Update the Slack message with the result
     const channelId = actionValue.channel_id || channel?.id;
-    const threadTs = actionValue.thread_ts;
 
     if (channelId) {
       // Find the message timestamp from the payload
@@ -164,11 +183,7 @@ async function processInteraction(payload: any) {
     const messageTs = payload.message?.ts;
 
     if (channelId && messageTs) {
-      await updateSlackMessage(
-        channelId,
-        messageTs,
-        `❌ Action failed: ${errorMsg}`
-      );
+      await updateSlackMessage(channelId, messageTs, `❌ Action failed: ${errorMsg}`);
     }
   }
 }

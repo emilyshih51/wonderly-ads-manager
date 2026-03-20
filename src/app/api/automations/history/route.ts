@@ -8,6 +8,7 @@ interface HistoryEvent {
   type: string;
   matched: number;
   results: Array<{
+    entity_id?: string;
     entity_name?: string;
     action?: string;
     metrics?: unknown;
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
     type: body.type || 'test',
     matched: body.matched || 0,
     results: (body.results || []).slice(0, 10).map((r) => ({
+      entity_id: r.entity_id,
       entity_name: r.entity_name,
       action: r.action,
       metrics: r.metrics,

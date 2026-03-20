@@ -123,12 +123,6 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 ---
 
-## Known Issues (Do Not Introduce More)
-
-| Issue                 | Severity | Notes                                |
-| --------------------- | -------- | ------------------------------------ |
-| No rollback mechanism | Medium   | No batch-undo for automation actions |
-
 ---
 
 ## Environment Variables

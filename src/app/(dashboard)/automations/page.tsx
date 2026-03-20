@@ -34,6 +34,7 @@ import {
   Copy,
   ArrowRight,
   Wand2,
+  RotateCcw,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 
@@ -887,6 +888,7 @@ export default function AutomationsPage() {
 
   // Activity log
   const [activityLog, setActivityLog] = useState<any[]>([]);
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
   /* ─── API ─── */
   const fetchRules = useCallback(async () => {
@@ -1122,6 +1124,23 @@ export default function AutomationsPage() {
       setRunDialogOpen(true);
     } finally {
       setRunningRuleId(null);
+    }
+  };
+
+  /* ─── Rollback ─── */
+  const handleRollback = async (eventId: string, results: any[]) => {
+    setRollingBackId(eventId);
+
+    try {
+      await fetch('/api/automations/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ results }),
+      });
+    } catch (err) {
+      logger.error('Rollback failed', err);
+    } finally {
+      setRollingBackId(null);
     }
   };
 
@@ -1407,7 +1426,27 @@ export default function AutomationsPage() {
                             </span>
                             <p className="text-sm font-medium text-gray-900">{event.rule_name}</p>
                           </div>
-                          <p className="text-xs text-gray-400">{timeStr}</p>
+                          <div className="flex items-center gap-2">
+                            {!isTest &&
+                              event.results?.some((r: any) =>
+                                ['paused', 'activated', 'promoted'].includes(r.action)
+                              ) && (
+                                <button
+                                  onClick={() => handleRollback(event.id, event.results)}
+                                  disabled={rollingBackId === event.id}
+                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                                  title="Undo actions from this run"
+                                >
+                                  {rollingBackId === event.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3 w-3" />
+                                  )}
+                                  Undo
+                                </button>
+                              )}
+                            <p className="text-xs text-gray-400">{timeStr}</p>
+                          </div>
                         </div>
                         <div className="mt-2 text-xs text-gray-500">
                           {event.matched === 0 ? (

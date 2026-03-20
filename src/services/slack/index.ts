@@ -14,9 +14,6 @@
 
 import crypto from 'crypto';
 import { createLogger } from '@/services/logger';
-
-const moduleLogger = createLogger('Slack');
-
 import {
   SLACK_ENDPOINTS,
   SLACK_BLOCK_MAX_CHARS,
@@ -32,7 +29,6 @@ import type {
   ActionBlockType,
   AutomationNotification,
   BudgetNotification,
-  ISlackService,
 } from './types';
 
 export type {
@@ -43,12 +39,11 @@ export type {
   ActionBlockType,
   AutomationNotification,
   BudgetNotification,
-  ISlackService,
 };
 
-export class SlackService implements ISlackService {
-  private readonly logger = createLogger('Slack');
+const logger = createLogger('Slack');
 
+export class SlackService {
   constructor(
     private readonly botToken: string,
     private readonly signingSecret: string,
@@ -69,7 +64,7 @@ export class SlackService implements ISlackService {
    */
   verifySignature(signature: string, timestamp: string, body: string): boolean {
     if (!this.signingSecret) {
-      this.logger.warn('No signing secret configured');
+      logger.warn('No signing secret configured');
 
       return false;
     }
@@ -77,7 +72,7 @@ export class SlackService implements ISlackService {
     const now = Math.floor(Date.now() / 1000);
 
     if (Math.abs(now - parseInt(timestamp)) > SLACK_TIMESTAMP_TOLERANCE_SECONDS) {
-      this.logger.warn('Request timestamp too old');
+      logger.warn('Request timestamp too old');
 
       return false;
     }
@@ -109,7 +104,7 @@ export class SlackService implements ISlackService {
     threadTs?: string
   ): Promise<SlackMessage | null> {
     if (!this.botToken) {
-      this.logger.warn('No bot token configured');
+      logger.warn('No bot token configured');
 
       return null;
     }
@@ -137,14 +132,14 @@ export class SlackService implements ISlackService {
       };
 
       if (!data.ok) {
-        this.logger.error('Post message error', data.error);
+        logger.error('Post message error', data.error);
 
         return null;
       }
 
       return { ts: data.ts!, channel: data.channel! };
     } catch (error) {
-      this.logger.error('Post message exception', error);
+      logger.error('Post message exception', error);
 
       return null;
     }
@@ -166,7 +161,7 @@ export class SlackService implements ISlackService {
     blocks?: SlackBlock[]
   ): Promise<boolean> {
     if (!this.botToken) {
-      this.logger.warn('No bot token configured');
+      logger.warn('No bot token configured');
 
       return false;
     }
@@ -184,14 +179,14 @@ export class SlackService implements ISlackService {
       const data = (await response.json()) as { ok: boolean; error?: string };
 
       if (!data.ok) {
-        this.logger.error('Update message error', data.error);
+        logger.error('Update message error', data.error);
 
         return false;
       }
 
       return true;
     } catch (error) {
-      this.logger.error('Update message exception', error);
+      logger.error('Update message exception', error);
 
       return false;
     }
@@ -253,7 +248,7 @@ export class SlackService implements ISlackService {
 
       return messages;
     } catch (error) {
-      this.logger.error('Failed to fetch thread messages', error);
+      logger.error('Failed to fetch thread messages', error);
 
       return [];
     }
@@ -389,7 +384,7 @@ export class SlackService implements ISlackService {
       try {
         actions.push(JSON.parse(match[1]) as ActionBlock);
       } catch {
-        moduleLogger.error('Failed to parse action', match[1]);
+        logger.error('Failed to parse action', match[1]);
       }
     }
 

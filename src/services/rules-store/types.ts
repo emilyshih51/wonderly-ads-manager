@@ -36,17 +36,3 @@ export interface CookieStore {
   /** Delete a cookie by name. */
   delete(name: string): void;
 }
-
-/** Contract for the rules-store service. */
-export interface IRulesStoreService {
-  /** Return all stored rules for the current user. */
-  getAll(): Promise<StoredRule[]>;
-  /** Return only rules where `is_active` is `true`. */
-  getActive(): Promise<StoredRule[]>;
-  /** Return a single rule by ID, or `null` if not found. */
-  get(ruleId: string): Promise<StoredRule | null>;
-  /** Create or update a rule (upsert by `id`). */
-  save(rule: StoredRule): Promise<void>;
-  /** Permanently delete a rule by ID. */
-  delete(ruleId: string): Promise<void>;
-}

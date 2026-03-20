@@ -66,7 +66,7 @@ export class MetaService implements IMetaService {
    * @param options - Method, body, and query params
    * @throws {MetaApiError} When Meta returns an error object
    */
-  async request(endpoint: string, options: MetaRequestOptions = {}): Promise<unknown> {
+  async request<T = unknown>(endpoint: string, options: MetaRequestOptions = {}): Promise<T> {
     const { method = 'GET', body, params = {} } = options;
     const url = new URL(`${META_BASE_URL}${endpoint}`);
 
@@ -98,7 +98,7 @@ export class MetaService implements IMetaService {
       throw err;
     }
 
-    return data;
+    return data as T;
   }
 
   /**
@@ -107,12 +107,12 @@ export class MetaService implements IMetaService {
    * @returns Paginated list of campaigns with status, budget, and dates
    */
   async getCampaigns(): Promise<{ data: MetaCampaign[] }> {
-    return this.request(`/act_${this.adAccountId}/campaigns`, {
+    return this.request<{ data: MetaCampaign[] }>(`/act_${this.adAccountId}/campaigns`, {
       params: {
         fields: 'id,name,status,objective,daily_budget,lifetime_budget,created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: MetaCampaign[] }>;
+    });
   }
 
   /**
@@ -121,8 +121,11 @@ export class MetaService implements IMetaService {
    * @param campaignId - Meta campaign ID
    * @param datePreset - Date range preset (default: `'today'`)
    */
-  async getCampaignInsights(campaignId: string, datePreset = 'today'): Promise<unknown> {
-    return this.request(`/${campaignId}/insights`, {
+  async getCampaignInsights(
+    campaignId: string,
+    datePreset = 'today'
+  ): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/${campaignId}/insights`, {
       params: { fields: INSIGHT_FIELDS, date_preset: datePreset },
     });
   }
@@ -206,13 +209,13 @@ export class MetaService implements IMetaService {
   async getAdSets(campaignId?: string): Promise<{ data: MetaAdSet[] }> {
     const endpoint = campaignId ? `/${campaignId}/adsets` : `/act_${this.adAccountId}/adsets`;
 
-    return this.request(endpoint, {
+    return this.request<{ data: MetaAdSet[] }>(endpoint, {
       params: {
         fields:
           'id,name,campaign_id,campaign{name},status,daily_budget,lifetime_budget,targeting,optimization_goal,billing_event,bid_amount,start_time,end_time,created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: MetaAdSet[] }>;
+    });
   }
 
   /**
@@ -259,13 +262,13 @@ export class MetaService implements IMetaService {
   async getAds(adSetId?: string): Promise<{ data: MetaAd[] }> {
     const endpoint = adSetId ? `/${adSetId}/ads` : `/act_${this.adAccountId}/ads`;
 
-    return this.request(endpoint, {
+    return this.request<{ data: MetaAd[] }>(endpoint, {
       params: {
         fields:
           'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type},created_time,updated_time',
         limit: '100',
       },
-    }) as Promise<{ data: MetaAd[] }>;
+    });
   }
 
   /**
@@ -274,8 +277,8 @@ export class MetaService implements IMetaService {
    * @param adId - Meta ad ID
    * @param datePreset - Date range preset (default: `'today'`)
    */
-  async getAdInsights(adId: string, datePreset = 'today'): Promise<unknown> {
-    return this.request(`/${adId}/insights`, {
+  async getAdInsights(adId: string, datePreset = 'today'): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/${adId}/insights`, {
       params: { fields: INSIGHT_FIELDS, date_preset: datePreset },
     });
   }
@@ -471,7 +474,7 @@ export class MetaService implements IMetaService {
         ? `/${campaignId}/insights`
         : `/act_${this.adAccountId}/insights`;
 
-    const response = await this.request(endpoint, {
+    const response = await this.request<{ data?: MetaInsightsRow[] }>(endpoint, {
       params: {
         fields: fieldsByLevel[level],
         date_preset: datePreset,
@@ -481,7 +484,7 @@ export class MetaService implements IMetaService {
       },
     });
 
-    let rows = ((response as { data?: MetaInsightsRow[] }).data || []) as MetaInsightsRow[];
+    let rows = response.data || [];
 
     // For adset/campaign level, campaignId filter must be applied client-side
     if ((level === 'adset' || level === 'campaign') && campaignId) {
@@ -497,12 +500,17 @@ export class MetaService implements IMetaService {
    * @param datePreset - Date range preset (default: `'today'`)
    * @param timeIncrement - Optional time breakdown, e.g. `'1'` for daily
    */
-  async getAccountInsights(datePreset = 'today', timeIncrement?: string): Promise<unknown> {
+  async getAccountInsights(
+    datePreset = 'today',
+    timeIncrement?: string
+  ): Promise<{ data: MetaInsightsRow[] }> {
     const params: Record<string, string> = { fields: INSIGHT_FIELDS, date_preset: datePreset };
 
     if (timeIncrement) params.time_increment = timeIncrement;
 
-    return this.request(`/act_${this.adAccountId}/insights`, { params });
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
+      params,
+    });
   }
 
   /**
@@ -510,8 +518,8 @@ export class MetaService implements IMetaService {
    *
    * @param datePreset - Date range preset (default: `'today'`)
    */
-  async getCampaignLevelInsights(datePreset = 'today'): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  async getCampaignLevelInsights(datePreset = 'today'): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: {
         fields: `campaign_id,campaign_name,${INSIGHT_FIELDS}`,
         date_preset: datePreset,
@@ -526,8 +534,8 @@ export class MetaService implements IMetaService {
    *
    * @param datePreset - Date range preset (default: `'today'`)
    */
-  async getAdSetLevelInsights(datePreset = 'today'): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  async getAdSetLevelInsights(datePreset = 'today'): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: {
         fields: `adset_id,adset_name,campaign_id,${INSIGHT_FIELDS}`,
         date_preset: datePreset,
@@ -542,8 +550,8 @@ export class MetaService implements IMetaService {
    *
    * @param datePreset - Date range preset (default: `'today'`)
    */
-  async getAdLevelInsights(datePreset = 'today'): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  async getAdLevelInsights(datePreset = 'today'): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: {
         fields: `ad_id,ad_name,adset_id,campaign_id,${INSIGHT_FIELDS}`,
         date_preset: datePreset,
@@ -562,7 +570,7 @@ export class MetaService implements IMetaService {
   async getDailyInsights(
     datePreset = 'last_7d',
     level: InsightLevel = 'campaign'
-  ): Promise<unknown> {
+  ): Promise<{ data: MetaInsightsRow[] }> {
     const detail = INSIGHT_DETAIL_FIELDS[level] ?? '';
     const fields = [detail, INSIGHT_FIELDS, 'frequency'].filter(Boolean).join(',');
     const params: Record<string, string> = {
@@ -574,7 +582,9 @@ export class MetaService implements IMetaService {
 
     if (level !== 'account') params.level = level;
 
-    return this.request(`/act_${this.adAccountId}/insights`, { params });
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
+      params,
+    });
   }
 
   /**
@@ -586,8 +596,8 @@ export class MetaService implements IMetaService {
   async getInsightsWithBreakdowns(
     datePreset = 'today',
     breakdowns = 'age,gender'
-  ): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  ): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: { fields: INSIGHT_FIELDS, date_preset: datePreset, breakdowns, limit: '200' },
     });
   }
@@ -603,7 +613,7 @@ export class MetaService implements IMetaService {
     since: string,
     until: string,
     level: InsightLevel = 'campaign'
-  ): Promise<unknown> {
+  ): Promise<{ data: MetaInsightsRow[] }> {
     const detail = INSIGHT_DETAIL_FIELDS[level] ?? '';
     const fields = [detail, INSIGHT_FIELDS, 'frequency'].filter(Boolean).join(',');
     const params: Record<string, string> = {
@@ -614,7 +624,9 @@ export class MetaService implements IMetaService {
 
     if (level !== 'account') params.level = level;
 
-    return this.request(`/act_${this.adAccountId}/insights`, { params });
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
+      params,
+    });
   }
 
   /**
@@ -624,8 +636,11 @@ export class MetaService implements IMetaService {
    * @param datePreset - Date range preset (default: `'today'`)
    * @param level - Breakdown level (default: `'account'`)
    */
-  async getHourlyInsights(datePreset = 'today', level = 'account'): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  async getHourlyInsights(
+    datePreset = 'today',
+    level = 'account'
+  ): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: {
         fields: `campaign_id,campaign_name,${INSIGHT_FIELDS}`,
         date_preset: datePreset,
@@ -647,8 +662,8 @@ export class MetaService implements IMetaService {
     dateStart: string,
     dateEnd: string,
     level = 'account'
-  ): Promise<unknown> {
-    return this.request(`/act_${this.adAccountId}/insights`, {
+  ): Promise<{ data: MetaInsightsRow[] }> {
+    return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params: {
         fields: `campaign_id,campaign_name,${INSIGHT_FIELDS}`,
         time_range: JSON.stringify({ since: dateStart, until: dateEnd }),

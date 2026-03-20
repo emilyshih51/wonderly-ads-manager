@@ -18,11 +18,11 @@
 import { type RedisClientType } from 'redis';
 import { createLogger } from '@/services/logger';
 import { RULE_COOKIE_PREFIX, RULES_REDIS_HASH_KEY, RULE_COOKIE_MAX_AGE } from './constants';
-import type { StoredRule, CookieStore, IRulesStoreService } from './types';
+import type { StoredRule, CookieStore } from './types';
 
-export type { StoredRule, CookieStore, IRulesStoreService };
+export type { StoredRule, CookieStore };
 
-export class RulesStoreService implements IRulesStoreService {
+export class RulesStoreService {
   private readonly logger = createLogger('RulesStore');
 
   constructor(

@@ -590,8 +590,7 @@ export default function LaunchPage() {
                   onClick={() =>
                     setState((prev) => ({
                       ...prev,
-                      sourceType:
-                        state.sourceType === ('existing' as any) ? null : ('existing' as any),
+                      sourceType: state.sourceType === 'existing' ? null : 'existing',
                       sourceId: '',
                       sourceName: '',
                       newName: '',
@@ -599,7 +598,7 @@ export default function LaunchPage() {
                     }))
                   }
                   className={`rounded-lg border-2 p-4 text-left transition-all ${
-                    state.sourceType === ('existing' as any)
+                    state.sourceType === 'existing'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}

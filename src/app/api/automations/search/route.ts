@@ -109,8 +109,15 @@ export async function GET(request: NextRequest) {
     if (type === 'preview') {
       const conditionsJson = searchParams.get('conditions');
       const datePreset = searchParams.get('date_preset') || 'today';
-      const conditions: Array<{ metric: string; operator: string; threshold: string }> =
-        conditionsJson ? (JSON.parse(conditionsJson) as typeof conditions) : [];
+      let conditions: Array<{ metric: string; operator: string; threshold: string }> = [];
+
+      if (conditionsJson) {
+        try {
+          conditions = JSON.parse(conditionsJson) as typeof conditions;
+        } catch {
+          return NextResponse.json({ error: 'Invalid conditions JSON' }, { status: 400 });
+        }
+      }
 
       const insightsData = await meta.getFilteredInsights('ad', { datePreset, campaignId });
 

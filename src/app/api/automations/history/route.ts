@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getSession } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
 
 interface HistoryEvent {
   id: string;
@@ -19,32 +19,39 @@ interface HistoryEvent {
   timestamp: number;
 }
 
+const MAX_ENTRIES = 50;
+
+function redisKey(userId: string) {
+  return `automation_history:${userId}`;
+}
+
 /**
  * GET /api/automations/history
  *
- * Returns automation run history stored in cookies.
- * Each run is stored as a separate cookie (wonderly_history_{timestamp}).
- * We keep the last 30 entries.
+ * Returns automation run history from Redis, sorted by timestamp descending.
  */
 export async function GET() {
   const session = await getSession();
 
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const cookieStore = await cookies();
+  const redis = await getRedisClient();
+
+  if (!redis) {
+    return NextResponse.json({ data: [] });
+  }
+
+  const raw = await redis.lRange(redisKey(session.id), 0, -1);
   const history: HistoryEvent[] = [];
 
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      try {
-        history.push(JSON.parse(cookie.value));
-      } catch {
-        /* skip */
-      }
+  for (const entry of raw) {
+    try {
+      history.push(JSON.parse(entry));
+    } catch {
+      /* skip malformed entries */
     }
   }
 
-  // Sort by timestamp descending (most recent first)
   history.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   return NextResponse.json({ data: history });
@@ -60,6 +67,12 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
 
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const redis = await getRedisClient();
+
+  if (!redis) {
+    return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
+  }
 
   const body = (await request.json()) as Partial<{
     rule_name: string;
@@ -86,57 +99,31 @@ export async function POST(request: NextRequest) {
     timestamp: body.timestamp || Date.now(),
   };
 
-  const cookieStore = await cookies();
-  const response = NextResponse.json({ success: true, event });
+  const key = redisKey(session.id);
 
-  // Store this event
-  response.cookies.set(`wonderly_history_${event.id}`, JSON.stringify(event), {
-    path: '/',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    httpOnly: true,
-    sameSite: 'lax',
-  });
+  await redis.lPush(key, JSON.stringify(event));
+  await redis.lTrim(key, 0, MAX_ENTRIES - 1);
 
-  // Clean up old entries (keep last 30)
-  const existing: string[] = [];
-
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      existing.push(cookie.name);
-    }
-  }
-
-  if (existing.length > 29) {
-    // Sort by name (which contains timestamp) and remove oldest
-    existing.sort();
-    const toRemove = existing.slice(0, existing.length - 29);
-
-    for (const name of toRemove) {
-      response.cookies.set(name, '', { path: '/', maxAge: 0 });
-    }
-  }
-
-  return response;
+  return NextResponse.json({ success: true, event });
 }
 
 /**
  * DELETE /api/automations/history
  *
- * Clear all history.
+ * Clear all history for the current user.
  */
 export async function DELETE() {
   const session = await getSession();
 
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const cookieStore = await cookies();
-  const response = NextResponse.json({ success: true });
+  const redis = await getRedisClient();
 
-  for (const cookie of cookieStore.getAll()) {
-    if (cookie.name.startsWith('wonderly_history_')) {
-      response.cookies.set(cookie.name, '', { path: '/', maxAge: 0 });
-    }
+  if (!redis) {
+    return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
   }
 
-  return response;
+  await redis.del(redisKey(session.id));
+
+  return NextResponse.json({ success: true });
 }

@@ -1,5 +1,8 @@
 // ─── Meta API Types ───────────────────────────────────────────────────────────
 
+/** Delivery status common to campaigns, ad sets, and ads. */
+export type MetaEntityStatus = 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+
 /** A Meta (Facebook) ad campaign. */
 export interface MetaCampaign {
   /** Unique campaign ID assigned by Meta. */
@@ -7,7 +10,7 @@ export interface MetaCampaign {
   /** Display name of the campaign. */
   name: string;
   /** Delivery status of the campaign. */
-  status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+  status: MetaEntityStatus;
   /** Campaign objective (e.g. `OUTCOME_LEADS`, `OUTCOME_SALES`). */
   objective: string;
   /** Daily budget in the account currency, as a string (Meta returns budgets as strings). */
@@ -33,7 +36,7 @@ export interface MetaAdSet {
   /** Minimal campaign object — present when the `campaign` field is requested. */
   campaign?: { name: string };
   /** Delivery status of the ad set. */
-  status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+  status: MetaEntityStatus;
   /** Daily budget in the account currency, as a string. */
   daily_budget?: string;
   /** Lifetime budget in the account currency, as a string. */
@@ -69,7 +72,7 @@ export interface MetaAd {
   /** ID of the parent campaign. */
   campaign_id: string;
   /** Delivery status of the ad. */
-  status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+  status: MetaEntityStatus;
   /** Creative asset attached to this ad. */
   creative?: MetaAdCreative;
   /** ISO 8601 creation timestamp. */

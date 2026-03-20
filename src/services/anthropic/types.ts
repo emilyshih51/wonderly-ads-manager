@@ -29,11 +29,3 @@ export interface CompleteParams {
   /** Prior conversation turns to maintain continuity. */
   history?: MessageParam[];
 }
-
-/** Contract for the Anthropic service. */
-export interface IAnthropicService {
-  /** Send a message and return a streaming response. */
-  chat(params: ChatParams): Promise<ReadableStream>;
-  /** Send a message and return the full response text once complete. */
-  complete(params: CompleteParams): Promise<string>;
-}

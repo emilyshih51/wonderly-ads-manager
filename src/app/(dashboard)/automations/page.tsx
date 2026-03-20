@@ -37,10 +37,41 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import type { AutomationNode, AutomationEdge } from '@/types';
 
 const logger = createLogger('Automations');
 
 /* ─────────── Types ─────────── */
+
+interface TestResultEntry {
+  entity_name: string;
+  action: string;
+  metrics?: {
+    spend?: number;
+    results?: number;
+    cost_per_result?: number | string;
+  };
+  warning?: string;
+  error?: string;
+  slack_sent?: boolean;
+  slack_channel?: string;
+  duplicated_ad_id?: string;
+}
+
+interface TestResult {
+  error?: string;
+  matched?: number;
+  results?: TestResultEntry[];
+}
+
+interface HistoryEvent {
+  id: string;
+  timestamp: string;
+  type: 'test' | 'live';
+  rule_name: string;
+  matched?: number;
+  results?: TestResultEntry[];
+}
 
 interface Condition {
   id: string;
@@ -73,8 +104,8 @@ interface Rule {
   id: string;
   name: string;
   is_active: boolean;
-  nodes: any[];
-  edges: any[];
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
   config?: RuleConfig;
 }
 
@@ -253,7 +284,7 @@ const TEMPLATES: Template[] = [
 /* ─────────── Helper: convert config to nodes/edges for storage ─────────── */
 
 function configToNodes(config: RuleConfig) {
-  const nodes: any[] = [
+  const nodes: AutomationNode[] = [
     {
       id: 't1',
       type: 'trigger',
@@ -307,47 +338,46 @@ function configToNodes(config: RuleConfig) {
     },
   });
 
-  const edges: any[] = [];
+  const edges: AutomationEdge[] = [];
 
   for (let i = 0; i < nodes.length - 1; i++) {
     edges.push({
       id: `e${i + 1}`,
       source: nodes[i].id,
       target: nodes[i + 1].id,
-      animated: true,
     });
   }
 
   return { nodes, edges };
 }
 
-function nodesToConfig(nodes: any[]): RuleConfig {
-  const trigger = nodes.find((n: any) => n.type === 'trigger');
-  const condNodes = nodes.filter((n: any) => n.type === 'condition');
-  const action = nodes.find((n: any) => n.type === 'action');
+function nodesToConfig(nodes: AutomationNode[]): RuleConfig {
+  const trigger = nodes.find((n) => n.type === 'trigger');
+  const condNodes = nodes.filter((n) => n.type === 'condition');
+  const action = nodes.find((n) => n.type === 'action');
   const tc = trigger?.data?.config || {};
   const ac = action?.data?.config || {};
 
   return {
-    entity_type: tc.entity_type || 'ad',
-    campaign_id: tc.campaign_id || '',
-    campaign_name: tc.campaign_name || '',
-    adset_filter: tc.adset_filter || 'all',
-    adset_name: tc.adset_name || '',
-    schedule: tc.schedule || 'hourly',
-    date_preset: tc.date_preset || 'last_7d',
-    conditions: condNodes.map((n: any, i: number) => ({
+    entity_type: (tc.entity_type as string) || 'ad',
+    campaign_id: (tc.campaign_id as string) || '',
+    campaign_name: (tc.campaign_name as string) || '',
+    adset_filter: (tc.adset_filter as string) || 'all',
+    adset_name: (tc.adset_name as string) || '',
+    schedule: (tc.schedule as string) || 'hourly',
+    date_preset: (tc.date_preset as string) || 'last_7d',
+    conditions: condNodes.map((n, i) => ({
       id: n.id || `c${i + 1}`,
-      metric: n.data?.config?.metric || 'spend',
-      operator: n.data?.config?.operator || '>=',
-      threshold: n.data?.config?.threshold || '',
+      metric: (n.data?.config?.metric as string) || 'spend',
+      operator: (n.data?.config?.operator as string) || '>=',
+      threshold: (n.data?.config?.threshold as string) || '',
     })),
-    action_type: ac.action_type || 'pause',
-    target_adset_id: ac.target_adset_id || '',
-    target_adset_name: ac.target_adset_name || '',
+    action_type: (ac.action_type as string) || 'pause',
+    target_adset_id: (ac.target_adset_id as string) || '',
+    target_adset_name: (ac.target_adset_name as string) || '',
     also_notify_slack: ac.also_notify_slack === 'true' || ac.also_notify_slack === true,
-    slack_channel: ac.slack_channel || '',
-    slack_message: ac.slack_message || '',
+    slack_channel: (ac.slack_channel as string) || '',
+    slack_message: (ac.slack_message as string) || '',
   };
 }
 
@@ -877,17 +907,17 @@ export default function AutomationsPage() {
 
   // Test state
   const [testing, setTesting] = useState(false);
-  const [testResults, setTestResults] = useState<any>(null);
+  const [testResults, setTestResults] = useState<TestResult | null>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
 
   // Run Now state
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
-  const [runResults, setRunResults] = useState<any>(null);
+  const [runResults, setRunResults] = useState<TestResult | null>(null);
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [confirmRunRule, setConfirmRunRule] = useState<Rule | null>(null);
 
   // Activity log
-  const [activityLog, setActivityLog] = useState<any[]>([]);
+  const [activityLog, setActivityLog] = useState<HistoryEvent[]>([]);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
   /* ─── API ─── */
@@ -1128,7 +1158,7 @@ export default function AutomationsPage() {
   };
 
   /* ─── Rollback ─── */
-  const handleRollback = async (eventId: string, results: any[]) => {
+  const handleRollback = async (eventId: string, results: TestResultEntry[]) => {
     setRollingBackId(eventId);
 
     try {
@@ -1428,11 +1458,11 @@ export default function AutomationsPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             {!isTest &&
-                              event.results?.some((r: any) =>
+                              event.results?.some((r: TestResultEntry) =>
                                 ['paused', 'activated', 'promoted'].includes(r.action)
                               ) && (
                                 <button
-                                  onClick={() => handleRollback(event.id, event.results)}
+                                  onClick={() => handleRollback(event.id, event.results || [])}
                                   disabled={rollingBackId === event.id}
                                   className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
                                   title="Undo actions from this run"
@@ -1457,7 +1487,7 @@ export default function AutomationsPage() {
                                 <span className="font-medium text-gray-700">{event.matched}</span>{' '}
                                 ad{event.matched !== 1 ? 's' : ''} matched
                               </p>
-                              {event.results?.map((r: any, i: number) => (
+                              {event.results?.map((r: TestResultEntry, i: number) => (
                                 <div
                                   key={i}
                                   className="flex items-center justify-between border-l-2 border-gray-100 pl-3"
@@ -2122,7 +2152,7 @@ export default function AutomationsPage() {
                   <span className="font-medium text-gray-900">{testResults?.matched || 0}</span> ad
                   {testResults?.matched !== 1 ? 's' : ''} would be affected:
                 </p>
-                {testResults?.results?.map((r: any, i: number) => (
+                {testResults?.results?.map((r: TestResultEntry, i: number) => (
                   <div key={i} className="rounded-lg border border-gray-200 p-3">
                     <div className="flex items-center justify-between">
                       <p className="truncate text-sm font-medium text-gray-900">{r.entity_name}</p>
@@ -2223,7 +2253,7 @@ export default function AutomationsPage() {
                   <span className="font-medium text-gray-900">{runResults?.matched || 0}</span> ad
                   {runResults?.matched !== 1 ? 's' : ''} affected:
                 </p>
-                {runResults?.results?.map((r: any, i: number) => (
+                {runResults?.results?.map((r: TestResultEntry, i: number) => (
                   <div key={i} className="rounded-lg border border-gray-200 p-3">
                     <div className="flex items-center justify-between">
                       <p className="truncate text-sm font-medium text-gray-900">{r.entity_name}</p>

@@ -34,42 +34,38 @@ export async function POST(request: NextRequest) {
     }
 
     const meta = new MetaService(session.meta_access_token, session.ad_account_id);
-    let result: string;
+    const label = action.name || action.id;
 
-    switch (action.type) {
-      case 'pause_campaign':
-      case 'pause_ad_set':
+    const actionType = action.type.startsWith('pause')
+      ? 'pause'
+      : action.type.startsWith('resume')
+        ? 'resume'
+        : action.type === 'adjust_budget'
+          ? 'update_budget'
+          : null;
 
-      case 'pause_ad': {
-        await meta.updateStatus(action.id, 'PAUSED');
-        result = `✅ Paused "${action.name || action.id}"`;
-        break;
-      }
-
-      case 'resume_campaign':
-      case 'resume_ad_set':
-
-      case 'resume_ad': {
-        await meta.updateStatus(action.id, 'ACTIVE');
-        result = `✅ Resumed "${action.name || action.id}"`;
-        break;
-      }
-
-      case 'adjust_budget': {
-        if (!action.budget || action.budget <= 0) {
-          return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
-        }
-
-        const wholeBudget = Math.round(action.budget);
-
-        await meta.updateBudget(action.id, wholeBudget * 100);
-        result = `✅ Set daily budget of "${action.name || action.id}" to $${wholeBudget.toFixed(2)}`;
-        break;
-      }
-
-      default:
-        return NextResponse.json({ error: `Unknown action type: ${action.type}` }, { status: 400 });
+    if (!actionType) {
+      return NextResponse.json({ error: `Unknown action type: ${action.type}` }, { status: 400 });
     }
+
+    let dailyBudgetCents: number | undefined;
+
+    if (actionType === 'update_budget') {
+      if (!action.budget || action.budget <= 0) {
+        return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
+      }
+
+      dailyBudgetCents = Math.round(action.budget) * 100;
+    }
+
+    await meta.executeAction(actionType, action.id, dailyBudgetCents);
+
+    const result =
+      actionType === 'pause'
+        ? `✅ Paused "${label}"`
+        : actionType === 'resume'
+          ? `✅ Resumed "${label}"`
+          : `✅ Set daily budget of "${label}" to $${Math.round(action.budget!).toFixed(2)}`;
 
     return NextResponse.json({ success: true, result });
   } catch (error) {

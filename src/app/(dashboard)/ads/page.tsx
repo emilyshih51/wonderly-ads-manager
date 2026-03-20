@@ -1,7 +1,7 @@
 'use client';
 
 import NextImage from 'next/image';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,12 +45,6 @@ interface Ad {
   insights?: AdInsight | null;
 }
 
-interface RankedAd extends Ad {
-  results: number;
-  cpa: number | null;
-  rank: number;
-}
-
 const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
 
 export default function TopPerformingAdsPage() {
@@ -58,7 +52,7 @@ export default function TopPerformingAdsPage() {
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [ads, setAds] = useState<RankedAd[]>([]);
+  const [allAds, setAllAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -75,17 +69,26 @@ export default function TopPerformingAdsPage() {
       const adsData = await adsRes.json();
 
       setCampaigns(campaignsData.data || []);
+      setAllAds((adsData.data || []) as Ad[]);
+    } catch (error) {
+      logger.error('Failed to fetch data', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [localDatePreset]);
 
-      // Process ads: filter, calculate results, rank, and sort
-      let processedAds = (adsData.data || []) as Ad[];
+  // Campaign filtering and ranking applied client-side via useMemo
+  const ads = useMemo(() => {
+    let processedAds = allAds;
 
-      // Filter by campaign if selected
-      if (selectedCampaign !== 'all') {
-        processedAds = processedAds.filter((ad) => ad.campaign_id === selectedCampaign);
-      }
+    // Filter by campaign if selected
+    if (selectedCampaign !== 'all') {
+      processedAds = processedAds.filter((ad) => ad.campaign_id === selectedCampaign);
+    }
 
-      // Map to ranked ads with results and CPA
-      const rankedAds = processedAds
+    // Map to ranked ads with results and CPA
+    return (
+      processedAds
         .map((ad, idx) => {
           const results = getResultCount(
             { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
@@ -122,15 +125,9 @@ export default function TopPerformingAdsPage() {
           rank: idx + 1,
         }))
         // Take top 50
-        .slice(0, 50);
-
-      setAds(rankedAds);
-    } catch (error) {
-      logger.error('Failed to fetch data', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [localDatePreset, selectedCampaign]);
+        .slice(0, 50)
+    );
+  }, [allAds, selectedCampaign]);
 
   useEffect(() => {
     fetchData();

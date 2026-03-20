@@ -35,6 +35,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+
+    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
+      return NextResponse.json({ error: 'name must be a non-empty string' }, { status: 400 });
+    }
+
+    if (!Array.isArray(body.nodes)) {
+      return NextResponse.json({ error: 'nodes must be an array' }, { status: 400 });
+    }
+
+    if (!Array.isArray(body.edges)) {
+      return NextResponse.json({ error: 'edges must be an array' }, { status: 400 });
+    }
+
     const ruleId = `rule_${Date.now()}`;
 
     const newRule: StoredRule = {
@@ -81,7 +94,10 @@ export async function PUT(request: NextRequest) {
 
     const updatedRule: StoredRule = {
       ...existingRule,
-      ...body,
+      name: body.name ?? existingRule.name,
+      is_active: body.is_active ?? existingRule.is_active,
+      nodes: body.nodes ?? existingRule.nodes,
+      edges: body.edges ?? existingRule.edges,
       updated_at: new Date().toISOString(),
     };
 

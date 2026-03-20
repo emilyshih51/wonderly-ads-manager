@@ -13,13 +13,21 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { DEFAULT_MODEL, DEFAULT_MAX_TOKENS } from './constants';
-import type { ChatParams, CompleteParams, MessageParam, IAnthropicService } from './types';
+import type { ChatParams, CompleteParams, MessageParam } from './types';
 
-export { ClaudeModel } from './constants';
-export type { ChatParams, CompleteParams, MessageParam, IAnthropicService };
+export type { ChatParams, CompleteParams, MessageParam };
 
-export class AnthropicService implements IAnthropicService {
+export enum ClaudeModel {
+  Opus4 = 'claude-opus-4-6',
+  Sonnet4 = 'claude-sonnet-4-6',
+  Sonnet = 'claude-sonnet-4-20250514',
+  Haiku4 = 'claude-haiku-4-5-20251001',
+}
+
+const DEFAULT_MODEL = ClaudeModel.Sonnet;
+const DEFAULT_MAX_TOKENS = 4000;
+
+export class AnthropicService {
   private readonly client: Anthropic;
   private readonly model: string;
 

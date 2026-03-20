@@ -118,43 +118,36 @@ async function processInteraction(payload: InteractionPayload, slack: SlackServi
     }
 
     const meta = new MetaService(metaSystemToken, '');
-    let result = '';
     const { action_type: actionType, action_id: objectId, action_name: objectName } = actionValue;
+    const label = objectName || objectId;
 
-    switch (actionType) {
-      case 'pause_campaign':
-      case 'pause_ad_set':
+    const mappedType = actionType.startsWith('pause')
+      ? 'pause'
+      : actionType.startsWith('resume')
+        ? 'resume'
+        : actionType === 'adjust_budget'
+          ? 'update_budget'
+          : null;
 
-      case 'pause_ad': {
-        await meta.updateStatus(objectId, 'PAUSED');
-        result = `✅ Paused "${objectName || objectId}"`;
-        break;
-      }
+    if (!mappedType) throw new Error(`Unknown action type: ${actionType}`);
 
-      case 'resume_campaign':
-      case 'resume_ad_set':
+    let dailyBudgetCents: number | undefined;
 
-      case 'resume_ad': {
-        await meta.updateStatus(objectId, 'ACTIVE');
-        result = `✅ Resumed "${objectName || objectId}"`;
-        break;
-      }
+    if (mappedType === 'update_budget') {
+      const budget = actionValue.action_budget;
 
-      case 'adjust_budget': {
-        const budget = actionValue.action_budget;
-
-        if (!budget || budget <= 0) throw new Error('Invalid budget amount');
-
-        const wholeBudget = Math.round(budget);
-
-        await meta.updateBudget(objectId, wholeBudget * 100);
-        result = `✅ Set daily budget of "${objectName || objectId}" to $${wholeBudget.toFixed(2)}`;
-        break;
-      }
-
-      default:
-        throw new Error(`Unknown action type: ${actionType}`);
+      if (!budget || budget <= 0) throw new Error('Invalid budget amount');
+      dailyBudgetCents = Math.round(budget) * 100;
     }
+
+    await meta.executeAction(mappedType, objectId, dailyBudgetCents);
+
+    const result =
+      mappedType === 'pause'
+        ? `✅ Paused "${label}"`
+        : mappedType === 'resume'
+          ? `✅ Resumed "${label}"`
+          : `✅ Set daily budget of "${label}" to $${Math.round(actionValue.action_budget!).toFixed(2)}`;
 
     const channelId = actionValue.channel_id ?? channel?.id;
 

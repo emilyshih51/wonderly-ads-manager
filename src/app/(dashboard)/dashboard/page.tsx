@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { SelectNative } from '@/components/ui/select-native';
@@ -318,8 +318,11 @@ export default function DashboardPage() {
 
   /* ---------- Compute summary metrics ---------- */
   // Use Meta's own CPM/CTR/CPC values directly when single campaign is selected
-  const activeCampaigns =
-    selectedCampaign === 'all' ? campaigns : campaigns.filter((c) => c.id === selectedCampaign);
+  const activeCampaigns = useMemo(
+    () =>
+      selectedCampaign === 'all' ? campaigns : campaigns.filter((c) => c.id === selectedCampaign),
+    [campaigns, selectedCampaign]
+  );
 
   // For drill-down: the selected campaign's result action type
   const selectedResultActionType =
@@ -327,119 +330,132 @@ export default function DashboardPage() {
       ? (campaigns.find((c) => c.id === selectedCampaign)?.result_action_type ?? null)
       : null;
 
-  const totals = activeCampaigns.reduce(
-    (acc, c) => {
-      if (!c.insights) return acc;
-      acc.spend += parseFloat(c.insights.spend || '0');
-      acc.impressions += parseInt(c.insights.impressions || '0');
-      acc.clicks += parseInt(c.insights.clicks || '0');
-      acc.results += getResults(c.insights.actions, c.result_action_type);
-      const cpr = getCostPerResult(
-        c.insights.cost_per_action_type,
-        c.result_action_type,
-        c.insights.spend,
-        c.insights.actions
-      );
-      const res = getResults(c.insights.actions, c.result_action_type);
+  const { dateRange, metricCards } = useMemo(() => {
+    const t = activeCampaigns.reduce(
+      (acc, c) => {
+        if (!c.insights) return acc;
+        acc.spend += parseFloat(c.insights.spend || '0');
+        acc.impressions += parseInt(c.insights.impressions || '0');
+        acc.clicks += parseInt(c.insights.clicks || '0');
+        acc.results += getResults(c.insights.actions, c.result_action_type);
+        const cpr = getCostPerResult(
+          c.insights.cost_per_action_type,
+          c.result_action_type,
+          c.insights.spend,
+          c.insights.actions
+        );
+        const res = getResults(c.insights.actions, c.result_action_type);
 
-      if (cpr !== null && res > 0) {
-        acc.costPerResultSum += cpr * res;
-        acc.costPerResultCount += res;
+        if (cpr !== null && res > 0) {
+          acc.costPerResultSum += cpr * res;
+          acc.costPerResultCount += res;
+        }
+
+        return acc;
+      },
+      {
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        results: 0,
+        costPerResultSum: 0,
+        costPerResultCount: 0,
       }
+    );
 
-      return acc;
-    },
-    {
-      spend: 0,
-      impressions: 0,
-      clicks: 0,
-      results: 0,
-      costPerResultSum: 0,
-      costPerResultCount: 0,
+    // Single campaign → use Meta's exact CPM/CTR/CPC. Multiple → weighted average.
+    let cpm: string;
+    let ctr: string;
+    let cpc: string;
+
+    if (selectedCampaign !== 'all' && activeCampaigns.length === 1 && activeCampaigns[0].insights) {
+      const i = activeCampaigns[0].insights;
+
+      cpm = formatCurrency(parseFloat(i.cpm || '0'));
+      ctr = formatPercent(parseFloat(i.ctr || '0'));
+      // Use cost_per_inline_link_click to match Meta UI's "CPC (cost per link click)"
+      cpc = i.cost_per_inline_link_click
+        ? formatCurrency(parseFloat(i.cost_per_inline_link_click))
+        : '-';
+    } else {
+      // For "all campaigns", calculate weighted CPC from link clicks
+      const totalLinkClicks = activeCampaigns.reduce((sum, c) => {
+        return sum + parseInt(c.insights?.inline_link_clicks || '0');
+      }, 0);
+
+      cpm = t.impressions > 0 ? formatCurrency((t.spend / t.impressions) * 1000) : '-';
+      ctr = t.impressions > 0 ? formatPercent((t.clicks / t.impressions) * 100) : '-';
+      cpc = totalLinkClicks > 0 ? formatCurrency(t.spend / totalLinkClicks) : '-';
     }
+
+    const cpr = t.costPerResultCount > 0 ? t.costPerResultSum / t.costPerResultCount : null;
+
+    // Debug: check the date range being returned
+    const firstCampaignInsights = activeCampaigns.find((c) => c.insights)?.insights;
+    const dr = firstCampaignInsights
+      ? `${firstCampaignInsights.date_start || '?'} → ${firstCampaignInsights.date_stop || '?'}`
+      : null;
+
+    const cards = [
+      {
+        label: 'Amount Spent',
+        value: formatCurrency(t.spend),
+        icon: DollarSign,
+        color: 'text-emerald-600',
+        bg: 'bg-emerald-50',
+      },
+      { label: 'CPM', value: cpm, icon: Eye, color: 'text-blue-600', bg: 'bg-blue-50' },
+      {
+        label: 'CTR',
+        value: ctr,
+        icon: MousePointer,
+        color: 'text-purple-600',
+        bg: 'bg-purple-50',
+      },
+      {
+        label: 'CPC',
+        value: cpc,
+        icon: TrendingUp,
+        color: 'text-amber-600',
+        bg: 'bg-amber-50',
+      },
+      {
+        label: 'Results',
+        value: formatNumber(t.results),
+        icon: Target,
+        color: 'text-rose-600',
+        bg: 'bg-rose-50',
+      },
+      {
+        label: 'Cost / Result',
+        value: cpr !== null ? formatCurrency(cpr) : '-',
+        icon: BarChart3,
+        color: 'text-indigo-600',
+        bg: 'bg-indigo-50',
+      },
+    ];
+
+    return {
+      totals: t,
+      costPerResult: cpr,
+      displayCpm: cpm,
+      displayCtr: ctr,
+      displayCpc: cpc,
+      dateRange: dr,
+      metricCards: cards,
+    };
+  }, [activeCampaigns, selectedCampaign]);
+
+  const chartData = useMemo(
+    () =>
+      timeSeries.map((row) => ({
+        date: row.date_start?.split('T')[0]?.slice(5) || '',
+        spend: parseFloat(row.spend || '0'),
+        clicks: parseInt(row.clicks || '0'),
+        ctr: parseFloat(row.ctr || '0'),
+      })),
+    [timeSeries]
   );
-
-  // Single campaign → use Meta's exact CPM/CTR/CPC. Multiple → weighted average.
-  let displayCpm: string;
-  let displayCtr: string;
-  let displayCpc: string;
-
-  if (selectedCampaign !== 'all' && activeCampaigns.length === 1 && activeCampaigns[0].insights) {
-    const i = activeCampaigns[0].insights;
-
-    displayCpm = formatCurrency(parseFloat(i.cpm || '0'));
-    displayCtr = formatPercent(parseFloat(i.ctr || '0'));
-    // Use cost_per_inline_link_click to match Meta UI's "CPC (cost per link click)"
-    displayCpc = i.cost_per_inline_link_click
-      ? formatCurrency(parseFloat(i.cost_per_inline_link_click))
-      : '-';
-  } else {
-    // For "all campaigns", calculate weighted CPC from link clicks
-    const totalLinkClicks = activeCampaigns.reduce((sum, c) => {
-      return sum + parseInt(c.insights?.inline_link_clicks || '0');
-    }, 0);
-
-    displayCpm =
-      totals.impressions > 0 ? formatCurrency((totals.spend / totals.impressions) * 1000) : '-';
-    displayCtr =
-      totals.impressions > 0 ? formatPercent((totals.clicks / totals.impressions) * 100) : '-';
-    displayCpc = totalLinkClicks > 0 ? formatCurrency(totals.spend / totalLinkClicks) : '-';
-  }
-
-  const costPerResult =
-    totals.costPerResultCount > 0 ? totals.costPerResultSum / totals.costPerResultCount : null;
-
-  // Debug: check the date range being returned
-  const firstCampaignInsights = activeCampaigns.find((c) => c.insights)?.insights;
-  const dateRange = firstCampaignInsights
-    ? `${firstCampaignInsights.date_start || '?'} → ${firstCampaignInsights.date_stop || '?'}`
-    : null;
-
-  const metricCards = [
-    {
-      label: 'Amount Spent',
-      value: formatCurrency(totals.spend),
-      icon: DollarSign,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-    },
-    { label: 'CPM', value: displayCpm, icon: Eye, color: 'text-blue-600', bg: 'bg-blue-50' },
-    {
-      label: 'CTR',
-      value: displayCtr,
-      icon: MousePointer,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
-    },
-    {
-      label: 'CPC',
-      value: displayCpc,
-      icon: TrendingUp,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-    },
-    {
-      label: 'Results',
-      value: formatNumber(totals.results),
-      icon: Target,
-      color: 'text-rose-600',
-      bg: 'bg-rose-50',
-    },
-    {
-      label: 'Cost / Result',
-      value: costPerResult !== null ? formatCurrency(costPerResult) : '-',
-      icon: BarChart3,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
-    },
-  ];
-
-  const chartData = timeSeries.map((row) => ({
-    date: row.date_start?.split('T')[0]?.slice(5) || '',
-    spend: parseFloat(row.spend || '0'),
-    clicks: parseInt(row.clicks || '0'),
-    ctr: parseFloat(row.ctr || '0'),
-  }));
 
   const campaignOptions = [
     { label: 'All Campaigns', value: 'all' },

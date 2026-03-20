@@ -39,6 +39,13 @@ function isRateLimited(ip: string): boolean {
 
   entry.count++;
 
+  // Evict stale entries to prevent unbounded memory growth
+  if (rateLimitMap.size > 10_000) {
+    for (const [key, val] of rateLimitMap) {
+      if (now - val.windowStart > RATE_LIMIT_WINDOW_MS) rateLimitMap.delete(key);
+    }
+  }
+
   return entry.count > RATE_LIMIT_MAX;
 }
 

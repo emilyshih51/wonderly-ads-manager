@@ -66,10 +66,15 @@ export interface CreateAdParams {
 
 /** Contract for the Meta service. */
 export interface IMetaService {
+  /** Make a generic request to the Meta Graph API. */
+  request<T = unknown>(endpoint: string, options?: MetaRequestOptions): Promise<T>;
   /** Fetch all campaigns for the active ad account. */
   getCampaigns(): Promise<{ data: import('@/types').MetaCampaign[] }>;
   /** Fetch aggregated insights for a single campaign. */
-  getCampaignInsights(campaignId: string, datePreset?: string): Promise<unknown>;
+  getCampaignInsights(
+    campaignId: string,
+    datePreset?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Duplicate a campaign, optionally renaming the copy. */
   duplicateCampaign(campaignId: string, newName?: string): Promise<unknown>;
   /** Return a map of campaign ID → optimization goal for all active campaigns. */
@@ -81,7 +86,10 @@ export interface IMetaService {
   /** Fetch ads, optionally filtered by ad set. */
   getAds(adSetId?: string): Promise<{ data: import('@/types').MetaAd[] }>;
   /** Fetch aggregated insights for a single ad. */
-  getAdInsights(adId: string, datePreset?: string): Promise<unknown>;
+  getAdInsights(
+    adId: string,
+    datePreset?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Upload an image file and return the image hash for use in creatives. */
   uploadAdImage(imageFile: File): Promise<unknown>;
   /** Create a new ad creative from the given parameters. */
@@ -101,23 +109,47 @@ export interface IMetaService {
     dailyBudgetCents?: number
   ): Promise<void>;
   /** Fetch account-level insights aggregated across all campaigns. */
-  getAccountInsights(datePreset?: string, timeIncrement?: string): Promise<unknown>;
+  getAccountInsights(
+    datePreset?: string,
+    timeIncrement?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights broken down by campaign. */
-  getCampaignLevelInsights(datePreset?: string): Promise<unknown>;
+  getCampaignLevelInsights(
+    datePreset?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights broken down by ad set. */
-  getAdSetLevelInsights(datePreset?: string): Promise<unknown>;
+  getAdSetLevelInsights(
+    datePreset?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights broken down by individual ad. */
-  getAdLevelInsights(datePreset?: string): Promise<unknown>;
+  getAdLevelInsights(datePreset?: string): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch day-by-day insights at the specified level. */
-  getDailyInsights(datePreset?: string, level?: InsightLevel): Promise<unknown>;
+  getDailyInsights(
+    datePreset?: string,
+    level?: InsightLevel
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights with audience or placement breakdowns. */
-  getInsightsWithBreakdowns(datePreset?: string, breakdowns?: string): Promise<unknown>;
+  getInsightsWithBreakdowns(
+    datePreset?: string,
+    breakdowns?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights for an explicit date range (YYYY-MM-DD). */
-  getInsightsForDateRange(since: string, until: string, level?: InsightLevel): Promise<unknown>;
+  getInsightsForDateRange(
+    since: string,
+    until: string,
+    level?: InsightLevel
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch insights broken down by hour of day. */
-  getHourlyInsights(datePreset?: string, level?: string): Promise<unknown>;
+  getHourlyInsights(
+    datePreset?: string,
+    level?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch hourly insights for a specific date range. */
-  getHourlyInsightsForDate(dateStart: string, dateEnd: string, level?: string): Promise<unknown>;
+  getHourlyInsightsForDate(
+    dateStart: string,
+    dateEnd: string,
+    level?: string
+  ): Promise<{ data: import('@/types').MetaInsightsRow[] }>;
   /** Fetch the ad account object (spend limits, currency, timezone, etc.). */
   getAdAccount(): Promise<unknown>;
   /** Fetch insights for active entities at a given level, optionally scoped to a campaign. */

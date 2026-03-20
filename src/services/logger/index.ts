@@ -14,30 +14,28 @@
 /* eslint-disable no-console */
 
 import { LOG_LEVEL_WEIGHT, LEVEL_COLOR, ANSI, DEFAULT_MIN_LEVEL, DEV_MIN_LEVEL } from './constants';
-import type { ILogger, LogLevel, LogEntry, LoggerOptions, ErrorReporter } from './types';
+import type { LogLevel, LogEntry, LoggerOptions } from './types';
 
-export type { ILogger, LogLevel, LogEntry, LoggerOptions, ErrorReporter };
+export type { LogLevel, LogEntry, LoggerOptions };
 
 // Safe for Edge Runtime and browser — avoids any Node.js-only globals.
 const isBrowser = typeof window !== 'undefined';
 // Next.js inlines NODE_ENV at build time for client bundles; safe in Edge Runtime too.
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-export class Logger implements ILogger {
+export class Logger {
   private readonly scope: string;
   private readonly prefix: string;
   private readonly minLevel: LogLevel;
-  private readonly onError: ErrorReporter | undefined;
 
   /**
    * @param scope - Human-readable label, e.g. `'Slack'`. Rendered as `[Slack]`.
-   * @param options - Optional level filter and error reporter hook.
+   * @param options - Optional level filter.
    */
   constructor(scope: string, options: LoggerOptions = {}) {
     this.scope = scope;
     this.prefix = `[${scope}]`;
     this.minLevel = options.minLevel ?? (isDevelopment ? DEV_MIN_LEVEL : DEFAULT_MIN_LEVEL);
-    this.onError = options.onError;
   }
 
   /**
@@ -71,7 +69,7 @@ export class Logger implements ILogger {
   }
 
   /**
-   * Log an error. Triggers the `onError` reporter hook when configured.
+   * Log an error.
    *
    * @param message - Human-readable description of the error.
    * @param data - Optional Error instance or additional context object.
@@ -89,10 +87,6 @@ export class Logger implements ILogger {
       this.emitServerDev(level, message, data);
     } else {
       this.emitServerProd(level, message, data);
-    }
-
-    if (level === 'error' && this.onError) {
-      this.onError(this.buildEntry(level, message, data));
     }
   }
 
@@ -150,12 +144,12 @@ export class Logger implements ILogger {
   }
 
   /**
-   * Build a structured LogEntry — shared between prod output and onError.
+   * Build a structured LogEntry for prod JSON output.
    *
    * @param level - Log level.
    * @param message - Message string.
    * @param data - Optional Error instance or plain context object.
-   * @returns A serializable LogEntry ready for JSON output or the error reporter.
+   * @returns A serializable LogEntry ready for JSON output.
    */
   private buildEntry(level: LogLevel, message: string, data?: unknown): LogEntry {
     const entry: LogEntry = {
@@ -185,8 +179,8 @@ export class Logger implements ILogger {
  * Create a scoped logger for a module, service, or route.
  *
  * @param scope - Label for the `[Scope]` prefix (e.g. `'Slack'`, `'Evaluate'`).
- * @param options - Optional level filter and error reporter hook.
- * @returns A scoped `ILogger` instance.
+ * @param options - Optional level filter.
+ * @returns A scoped Logger instance.
  *
  * @example
  * ```ts
@@ -195,6 +189,6 @@ export class Logger implements ILogger {
  * logger.error('Redis connection failed', error);
  * ```
  */
-export function createLogger(scope: string, options?: LoggerOptions): ILogger {
+export function createLogger(scope: string, options?: LoggerOptions): Logger {
   return new Logger(scope, options);
 }

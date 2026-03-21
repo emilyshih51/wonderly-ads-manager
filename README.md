@@ -9,7 +9,8 @@ Meta (Facebook) ad management dashboard with a Slack bot and AI-powered automati
 - **Next.js 16** (App Router, React 19) — hosted on Vercel
 - **Meta Marketing API v21.0** — all ad data and mutations
 - **Claude (Anthropic)** — AI chat and Slack bot analysis
-- **Slack API** — bot for natural-language ad management
+- **Slack API** — bot for natural-language ad management (multi-channel, user/channel allowlists)
+- **React Three Fiber + Three.js** — 3D AI assistant character overlay
 - **Redis** — automation rules persistence for cron jobs
 - **Tailwind CSS 4 + Radix UI** — UI components
 
@@ -58,6 +59,25 @@ feat(ui): Add dark/light theme toggle
 fix(auth): Return 401 when session cookie is missing
 chore(deps): Upgrade next to 16.2.0
 ```
+
+## Features
+
+### 3D AI Assistant
+
+A floating Shiba Inu character rendered with React Three Fiber appears on all dashboard pages. Click to open a chat panel connected to Claude AI. Toggle on/off in Settings → Appearance. The character has idle bob animations and hover/click interactions.
+
+### Slack Bot (Multi-channel)
+
+The Slack bot responds to @mentions with AI-powered ad analysis. Supports multiple ad accounts (`META_AD_ACCOUNT_IDS`) and access control:
+
+- `ALLOWED_SLACK_CHANNEL_IDS` — comma-separated channel IDs to restrict where the bot responds
+- `ALLOWED_SLACK_USER_IDS` — comma-separated user IDs to restrict who can trigger the bot and execute actions
+
+Both are optional. If unset, the bot responds to anyone in any channel it's invited to.
+
+### Automation Rules
+
+Visual flow editor for creating rules that automatically pause, activate, or promote ads based on performance metrics. Runs via Vercel cron every 5 minutes. Each rule can send notifications to a configurable Slack channel.
 
 ## Docs
 

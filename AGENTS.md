@@ -16,19 +16,22 @@ Next.js 16 app for managing Meta (Facebook) ad campaigns. Connects to Meta Marke
 
 ## Key Files
 
-| File                          | Purpose                                                       |
-| ----------------------------- | ------------------------------------------------------------- |
-| `src/types/index.ts`          | All shared domain types — add new types here                  |
-| `src/services/meta/`          | MetaService — all Meta Graph API calls                        |
-| `src/services/slack/`         | SlackService — all Slack Web API calls                        |
-| `src/services/rules-store/`   | RulesStoreService — automation rules (Redis + cookie)         |
-| `src/services/anthropic/`     | AnthropicService — Claude API                                 |
-| `src/services/logger/`        | createLogger() — structured logger                            |
-| `src/lib/automation-utils.ts` | evaluateCondition, getResultCount, getCostPerResult           |
-| `src/lib/redis.ts`            | getRedisClient() — null-safe, returns null if REDIS_URL unset |
-| `src/lib/session.ts`          | getSession(), setSession()                                    |
-| `src/lib/slack-context.ts`    | fetchAdContextData, formatContextForClaude                    |
-| `.env.example`                | All environment variables with descriptions                   |
+| File                            | Purpose                                                       |
+| ------------------------------- | ------------------------------------------------------------- |
+| `src/types/index.ts`            | All shared domain types — add new types here                  |
+| `src/services/meta/`            | MetaService — all Meta Graph API calls                        |
+| `src/services/slack/`           | SlackService — all Slack Web API calls                        |
+| `src/services/rules-store/`     | RulesStoreService — automation rules (Redis + cookie)         |
+| `src/services/anthropic/`       | AnthropicService — Claude API                                 |
+| `src/services/logger/`          | createLogger() — structured logger                            |
+| `src/lib/automation-utils.ts`   | evaluateCondition, getResultCount, getCostPerResult           |
+| `src/lib/redis.ts`              | getRedisClient() — null-safe, returns null if REDIS_URL unset |
+| `src/lib/session.ts`            | getSession(), setSession()                                    |
+| `src/lib/slack-context.ts`      | fetchAdContextData, formatContextForClaude                    |
+| `src/hooks/use-chat-engine.tsx` | Shared chat logic used by /chat page and assistant panel      |
+| `src/components/assistant/`     | 3D AI assistant — R3F character, overlay, panel, tooltip      |
+| `src/stores/assistant-store.ts` | Zustand + persist — assistantEnabled, assistantPanelOpen      |
+| `.env.example`                  | All environment variables with descriptions                   |
 
 ## Service Usage
 

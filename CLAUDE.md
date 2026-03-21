@@ -33,6 +33,7 @@ src/
 ├── components/
 │   ├── ui/                    # Reusable headless UI components (Radix-based)
 │   ├── layout/                # Sidebar, header
+│   ├── assistant/             # 3D AI assistant overlay (React Three Fiber)
 │   └── automations/           # Automation flow node components
 ├── config/
 │   └── env.ts                 # validateEnv() — required env var check, called from next.config.ts
@@ -49,8 +50,11 @@ src/
 │   ├── meta/                  # MetaService — typed Meta Graph API wrapper + OAuth helpers
 │   ├── rules-store/           # RulesStoreService — automation rules (Redis + cookie fallback)
 │   └── slack/                 # SlackService — Slack Web API wrapper + OAuth helper
+├── hooks/
+│   └── use-chat-engine.tsx    # Shared chat logic (messages, input, send) used by /chat and assistant panel
 ├── stores/
-│   └── app-store.ts           # Zustand global state (datePreset, adAccountId)
+│   ├── app-store.ts           # Zustand global state (datePreset, adAccountId)
+│   └── assistant-store.ts     # Zustand + persist — assistantEnabled, assistantPanelOpen (localStorage)
 └── types/
     └── index.ts               # All shared TypeScript types
 ```
@@ -100,7 +104,7 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 ### State Management
 
-- Client state: Zustand store at `src/stores/app-store.ts`.
+- Client state: Zustand stores at `src/stores/app-store.ts` (global) and `src/stores/assistant-store.ts` (3D assistant).
 - Server state: fetched fresh on each request — no client-side caching layer.
 - Sessions: Redis-backed server-side sessions (session ID in cookie, data in Redis). Falls back to cookie-only storage when `REDIS_URL` is unset (dev). Allows server-side revocation on logout.
 - Rules persistence: Redis (for cron) + cookies (for UI). Both are written on every save.
@@ -123,9 +127,11 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 6. **Email allowlist:** `ALLOWED_EMAILS` gates Facebook login. If unset, any Facebook user can log in. Check is enforced in `/api/auth/facebook/callback/route.ts`.
 
-7. **Slack action allowlist:** `ALLOWED_SLACK_USER_IDS` gates button-triggered actions in `/api/slack/interactions`. If unset, any workspace member can pause/resume/adjust budgets.
+7. **Slack action allowlist:** `ALLOWED_SLACK_USER_IDS` gates button-triggered actions in `/api/slack/interactions` and bot @mentions in `/api/slack/events`. If unset, any workspace member can execute actions and query the bot.
 
-8. **Cookie security:** Session cookie is `httpOnly: true`, `secure: true` in production, `sameSite: lax`. Do not change these settings.
+8. **Slack channel allowlist:** `ALLOWED_SLACK_CHANNEL_IDS` gates which channels the bot responds to @mentions in (`/api/slack/events`). If unset, the bot responds in any channel it's invited to.
+
+9. **Cookie security:** Session cookie is `httpOnly: true`, `secure: true` in production, `sameSite: lax`. Do not change these settings.
 
 ---
 

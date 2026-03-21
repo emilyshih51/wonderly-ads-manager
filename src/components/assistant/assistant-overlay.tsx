@@ -50,7 +50,7 @@ export function AssistantOverlay() {
 
   return (
     <>
-      <div className="fixed right-3 bottom-6 z-[10000] h-[160px] w-[160px]">
+      <div className="fixed right-3 bottom-6 z-10000 h-40 w-40 max-sm:-right-3">
         <div
           role="button"
           tabIndex={0}
@@ -61,7 +61,7 @@ export function AssistantOverlay() {
           onKeyDown={(e) => e.key === 'Enter' && handleClick()}
           className={cn(
             'relative h-full w-full cursor-pointer rounded-full transition-transform duration-200 hover:scale-110 active:scale-95',
-            '[filter:drop-shadow(0_0_12px_rgba(96,165,250,0.5))_drop-shadow(0_0_30px_rgba(96,165,250,0.25))]'
+            'filter-[drop-shadow(0_0_12px_rgba(96,165,250,0.5))_drop-shadow(0_0_30px_rgba(96,165,250,0.25))]'
           )}
         >
           <AssistantTooltip visible={hovered && !assistantPanelOpen} />

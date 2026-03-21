@@ -2,6 +2,8 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { AnthropicService } from '@/services/anthropic';
 import { SlackService, createSlackService } from '@/services/slack';
 import { fetchAdContextData, formatContextForClaude } from '@/lib/slack-context';
+import { getRedisClient } from '@/lib/redis';
+import { ChatMemoryService } from '@/services/chat-memory';
 import { SYSTEM_PROMPT } from '@/app/api/chat/route';
 import { createLogger } from '@/services/logger';
 
@@ -172,9 +174,14 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
       return;
     }
 
-    // Fetch thread history and ad data for all accounts in parallel
-    const [threadHistory, ...contextResults] = await Promise.all([
+    // Fetch thread history, cross-thread memory, and ad data in parallel
+    const redis = await getRedisClient();
+    const memory = new ChatMemoryService(redis);
+    const memoryKey = `slack:${channelId}`;
+
+    const [threadHistory, crossThreadMemory, ...contextResults] = await Promise.all([
       slack.getThreadMessages(channelId, threadTs),
+      memory.getHistory(memoryKey),
       ...accountIds.map((id) => fetchAdContextData(id, metaSystemToken)),
     ]);
 
@@ -196,13 +203,29 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     let analysisText = '';
 
+    // Persist user question to cross-thread memory
+    await memory.appendMessage(memoryKey, {
+      role: 'user',
+      content: question,
+      timestamp: Date.now(),
+    });
+
     if (anthropicKey) {
       try {
         const ai = new AnthropicService(anthropicKey, process.env.ANTHROPIC_MODEL);
-        const history = threadHistory.map((msg) => ({
+
+        // Combine cross-thread memory (older) with current thread history (newer)
+        const pastMemory = crossThreadMemory.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        const threadMessages = threadHistory.map((msg) => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.text,
         }));
+
+        // Past memory first, then current thread — thread takes priority for recency
+        const history = [...pastMemory, ...threadMessages];
 
         analysisText = await ai.complete({
           message: question,
@@ -223,6 +246,13 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
     const blocks = SlackService.buildBlocks(cleanText, actions, channelId, threadTs);
 
     await slack.postMessage(channelId, cleanText, blocks, threadTs);
+
+    // Persist bot response to cross-thread memory
+    await memory.appendMessage(memoryKey, {
+      role: 'assistant',
+      content: cleanText,
+      timestamp: Date.now(),
+    });
   } catch (error) {
     logger.error('Error processing mention', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';

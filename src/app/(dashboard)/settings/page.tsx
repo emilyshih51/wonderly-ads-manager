@@ -83,8 +83,8 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                <Type className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-muted)]">
+                <Type className="h-5 w-5 text-[var(--color-muted-foreground)]" />
               </div>
               <div>
                 <CardTitle className="text-base">{t('appearance')}</CardTitle>
@@ -209,14 +209,14 @@ export default function SettingsPage() {
                     </li>
                     <li>
                       2. Go to &ldquo;Socket Mode&rdquo; and enable it, save the app-level token as{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         xapp_*.…
                       </code>
                     </li>
                     <li>3. Go to &ldquo;Event Subscriptions&rdquo; and enable events</li>
                     <li>
                       4. Set the Request URL (see below) and subscribe to{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         app_mention
                       </code>{' '}
                       events
@@ -227,22 +227,22 @@ export default function SettingsPage() {
                     </li>
                     <li>
                       6. Go to &ldquo;OAuth &amp; Permissions&rdquo; and add scopes:{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         chat:write
                       </code>
                       ,{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         app_mentions:read
                       </code>
                     </li>
                     <li>7. Install the app to your workspace and copy the Bot Token</li>
                     <li>
                       8. Set environment variables:{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         SLACK_BOT_TOKEN
                       </code>
                       ,{' '}
-                      <code className="rounded bg-white px-2 py-1 text-xs dark:bg-blue-900">
+                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
                         SLACK_SIGNING_SECRET
                       </code>
                     </li>

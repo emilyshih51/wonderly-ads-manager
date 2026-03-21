@@ -1,20 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  CheckCircle2,
-  Copy,
-  Check,
-  Globe,
-  Type,
-  MessageSquare,
-  Zap,
-  LogOut,
-  AlertTriangle,
-} from 'lucide-react';
+import { CheckCircle2, Copy, Check, LogOut } from 'lucide-react';
 import { MetaLogo } from '@/components/ui/meta-logo';
 import { useSlackStatus } from '@/lib/queries/slack/use-slack';
 import { useTranslations } from 'next-intl';
@@ -82,289 +71,180 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[var(--color-foreground)]">{t('title')}</h1>
-        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
-      </div>
+    <div className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-10">
+      <h1 className="text-xl font-semibold text-[var(--color-foreground)]">{t('title')}</h1>
+      <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
 
-      <div className="space-y-6">
-        {/* Appearance */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-border)]/40">
-                <Type className="h-5 w-5 text-[var(--color-muted-foreground)]" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{t('appearance')}</CardTitle>
-                <CardDescription>{t('languageDesc')}</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Language */}
-            <div>
-              <p className="mb-2 text-sm font-medium text-[var(--color-foreground)]">
-                <Globe className="mr-1.5 inline h-4 w-4" />
-                {t('language')}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {locales.map((locale) => (
-                  <button
-                    key={locale}
-                    onClick={() => handleLocaleChange(locale)}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      locale === currentLocale
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
-                        : 'border-[var(--color-border)] text-[var(--color-foreground)] hover:border-[var(--color-primary)]/50'
-                    }`}
-                  >
-                    {LOCALE_NAMES[locale]}
-                  </button>
-                ))}
-              </div>
-            </div>
+      <div className="mt-8 divide-y divide-[var(--color-border)]">
+        {/* Language */}
+        <div className="py-5">
+          <div className="mb-1 text-sm font-medium text-[var(--color-foreground)]">
+            {t('language')}
+          </div>
+          <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">{t('languageDesc')}</p>
+          <div className="flex flex-wrap gap-2">
+            {locales.map((locale) => (
+              <button
+                key={locale}
+                onClick={() => handleLocaleChange(locale)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  locale === currentLocale
+                    ? 'bg-[var(--color-foreground)] text-[var(--color-background)]'
+                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                }`}
+              >
+                {LOCALE_NAMES[locale]}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            {/* Font */}
-            <div>
-              <p className="mb-2 text-sm font-medium text-[var(--color-foreground)]">{t('font')}</p>
-              <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">{t('fontDesc')}</p>
-              <div className="flex flex-wrap gap-2">
-                {fonts.map((font) => (
-                  <button
-                    key={font}
-                    onClick={() => handleFontChange(font)}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      font === currentFont
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
-                        : 'border-[var(--color-border)] text-[var(--color-foreground)] hover:border-[var(--color-primary)]/50'
-                    }`}
-                  >
-                    {FONT_NAMES[font]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Font */}
+        <div className="py-5">
+          <div className="mb-1 text-sm font-medium text-[var(--color-foreground)]">{t('font')}</div>
+          <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">{t('fontDesc')}</p>
+          <div className="flex flex-wrap gap-2">
+            {fonts.map((font) => (
+              <button
+                key={font}
+                onClick={() => handleFontChange(font)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  font === currentFont
+                    ? 'bg-[var(--color-foreground)] text-[var(--color-background)]'
+                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                }`}
+              >
+                {FONT_NAMES[font]}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* Slack Bot Integration */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-border)]/40">
-                  <svg className="h-5 w-5" viewBox="0 0 54 54" fill="none">
-                    <path
-                      d="M19.712.133a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386h5.376V5.52A5.381 5.381 0 0 0 19.712.133m0 14.365H5.376A5.381 5.381 0 0 0 0 19.884a5.381 5.381 0 0 0 5.376 5.387h14.336a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386"
-                      fill="#36C5F0"
-                    />
-                    <path
-                      d="M53.76 19.884a5.381 5.381 0 0 0-5.376-5.386 5.381 5.381 0 0 0-5.376 5.386v5.387h5.376a5.381 5.381 0 0 0 5.376-5.387m-14.336 0V5.52A5.381 5.381 0 0 0 34.048.133a5.381 5.381 0 0 0-5.376 5.387v14.364a5.381 5.381 0 0 0 5.376 5.387 5.381 5.381 0 0 0 5.376-5.387"
-                      fill="#2EB67D"
-                    />
-                    <path
-                      d="M34.048 54a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386h-5.376v5.386A5.381 5.381 0 0 0 34.048 54m0-14.365h14.336a5.381 5.381 0 0 0 5.376-5.386 5.381 5.381 0 0 0-5.376-5.387H34.048a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386"
-                      fill="#ECB22E"
-                    />
-                    <path
-                      d="M0 34.249a5.381 5.381 0 0 0 5.376 5.386 5.381 5.381 0 0 0 5.376-5.386v-5.387H5.376A5.381 5.381 0 0 0 0 34.249m14.336 0v14.364A5.381 5.381 0 0 0 19.712 54a5.381 5.381 0 0 0 5.376-5.387V34.249a5.381 5.381 0 0 0-5.376-5.387 5.381 5.381 0 0 0-5.376 5.387"
-                      fill="#E01E5A"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <CardTitle className="text-base">{t('slackBot')}</CardTitle>
-                  <CardDescription>{t('slackBotDesc')}</CardDescription>
-                </div>
-              </div>
-              {slackLoading ? (
-                <div className="h-5 w-20 animate-pulse rounded-full bg-[var(--color-muted)]" />
-              ) : slackBotConfigured ? (
-                <Badge variant="active">
-                  <CheckCircle2 className="mr-1 h-3 w-3" /> {t('configured')}
-                </Badge>
-              ) : (
-                <Badge variant="secondary">{t('notConfigured')}</Badge>
-              )}
+        {/* Slack Bot */}
+        <div className="py-5">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-[var(--color-foreground)]">
+              {t('slackBot')}
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
             {slackLoading ? (
-              <div className="space-y-3">
-                <div className="h-4 w-64 animate-pulse rounded bg-[var(--color-muted)]" />
-                <div className="h-4 w-48 animate-pulse rounded bg-[var(--color-muted)]" />
-              </div>
+              <div className="h-5 w-16 animate-pulse rounded-full bg-[var(--color-muted)]" />
             ) : slackBotConfigured ? (
-              <div className="space-y-4">
-                <p className="text-sm text-[var(--color-muted-foreground)]">
-                  {t('slackConfigured')}
-                </p>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-[var(--color-border)] p-3">
-                    <MessageSquare className="mb-2 h-4 w-4 text-[#4A154B] dark:text-[#E01E5A]" />
-                    <p className="text-xs font-medium text-[var(--color-foreground)]">Mention</p>
-                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5">
-                        @ads-manager
-                      </code>{' '}
-                      in any channel
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-[var(--color-border)] p-3">
-                    <Zap className="mb-2 h-4 w-4 text-amber-500" />
-                    <p className="text-xs font-medium text-[var(--color-foreground)]">Ask</p>
-                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                      Spend, results, CTR, CPA, or any metric
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-[var(--color-border)] p-3">
-                    <CheckCircle2 className="mb-2 h-4 w-4 text-emerald-500" />
-                    <p className="text-xs font-medium text-[var(--color-foreground)]">Act</p>
-                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                      Pause, resume, or adjust budgets inline
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <Badge variant="active">
+                <CheckCircle2 className="mr-1 h-3 w-3" /> {t('configured')}
+              </Badge>
             ) : (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
-                  <h4 className="mb-3 text-sm font-medium text-blue-900 dark:text-blue-300">
-                    {t('setupInstructions')}
-                  </h4>
-                  <ol className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
+              <Badge variant="secondary">{t('notConfigured')}</Badge>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{t('slackBotDesc')}</p>
+
+          {!slackLoading && (
+            <div className="mt-4">
+              {slackBotConfigured ? (
+                <div className="space-y-2 text-xs text-[var(--color-muted-foreground)]">
+                  <p>
+                    Mention{' '}
+                    <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 font-mono text-[var(--color-foreground)]">
+                      @ads-manager
+                    </code>{' '}
+                    in any Slack channel to ask about campaign performance.
+                  </p>
+                  <p>
+                    The bot answers questions about spend, results, CTR, and CPA. Action buttons
+                    appear inline for pause, resume, and budget changes.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <ol className="list-inside list-decimal space-y-1.5 text-xs text-[var(--color-muted-foreground)]">
                     <li>
-                      1. Create a Slack app at{' '}
+                      Create a Slack app at{' '}
                       <a
                         href="https://api.slack.com/apps"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline dark:text-blue-400"
+                        className="text-[var(--color-primary)] hover:underline"
                       >
                         api.slack.com/apps
                       </a>
                     </li>
+                    <li>Enable Socket Mode and save the app-level token</li>
+                    <li>Enable Event Subscriptions with the URL below</li>
                     <li>
-                      2. Enable Socket Mode and save the app-level token as{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
-                        xapp_*
-                      </code>
-                    </li>
-                    <li>3. Enable Event Subscriptions</li>
-                    <li>
-                      4. Set the Request URL (below) and subscribe to{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                      Subscribe to{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono">
                         app_mention
-                      </code>
+                      </code>{' '}
+                      events
                     </li>
-                    <li>5. Enable Interactivity with the Interactions URL (below)</li>
+                    <li>Enable Interactivity with the URL below</li>
                     <li>
-                      6. Add OAuth scopes:{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                      Add OAuth scopes:{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono">
                         chat:write
                       </code>{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono">
                         app_mentions:read
                       </code>
                     </li>
-                    <li>7. Install to your workspace and copy the Bot Token</li>
+                    <li>Install to your workspace</li>
                     <li>
-                      8. Set env vars:{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                      Set{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono">
                         SLACK_BOT_TOKEN
                       </code>{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                      and{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono">
                         SLACK_SIGNING_SECRET
                       </code>
                     </li>
                   </ol>
-                </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
-                      {t('eventRequestUrl')}
-                    </label>
-                    <div className="mt-1 flex gap-2">
-                      <code className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
-                        {eventUrl}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(eventUrl, 'event-url')}
-                      >
-                        {copiedUrl === 'event-url' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
-                      {t('interactivityRequestUrl')}
-                    </label>
-                    <div className="mt-1 flex gap-2">
-                      <code className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
-                        {interactionUrl}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(interactionUrl, 'interaction-url')}
-                      >
-                        {copiedUrl === 'interaction-url' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
+                  <div className="space-y-2">
+                    <CopyField
+                      label={t('eventRequestUrl')}
+                      value={eventUrl}
+                      id="event-url"
+                      copiedUrl={copiedUrl}
+                      onCopy={copyToClipboard}
+                    />
+                    <CopyField
+                      label={t('interactivityRequestUrl')}
+                      value={interactionUrl}
+                      id="interaction-url"
+                      copiedUrl={copiedUrl}
+                      onCopy={copyToClipboard}
+                    />
                   </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Connected Account */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-border)]/40 p-2">
-                <MetaLogo className="h-full w-full" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{t('metaAccount')}</CardTitle>
-                <CardDescription>{t('metaAccountDesc')}</CardDescription>
-              </div>
+              )}
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-[var(--color-muted-foreground)]">{t('metaAccountInfo')}</p>
-          </CardContent>
-        </Card>
+          )}
+        </div>
+
+        {/* Meta Account */}
+        <div className="py-5">
+          <div className="flex items-center gap-2">
+            <MetaLogo className="h-4 w-4" />
+            <div className="text-sm font-medium text-[var(--color-foreground)]">
+              {t('metaAccount')}
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+            {t('metaAccountInfo')}
+          </p>
+        </div>
 
         {/* Danger Zone */}
-        <div className="rounded-xl bg-red-500/10 p-4 md:p-6">
-          <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">Danger Zone</h3>
-          </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="py-5">
+          <div className="flex flex-col gap-4 rounded-lg border border-red-600/20 bg-red-600/5 p-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-medium text-[var(--color-foreground)]">{t('signOut')}</p>
-              <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+              <p className="text-sm font-medium text-red-700 dark:text-red-400">{t('signOut')}</p>
+              <p className="mt-0.5 text-xs text-red-700/60 dark:text-red-400/60">
                 Disconnect your Meta account and end this session.
               </p>
             </div>
-            <form action="/api/auth/logout" method="POST">
+            <form action="/api/auth/logout" method="POST" className="shrink-0">
               <Button variant="destructive" size="sm" type="submit" className="w-full md:w-auto">
                 <LogOut className="mr-1.5 h-3.5 w-3.5" />
                 {t('signOut')}
@@ -372,6 +252,34 @@ export default function SettingsPage() {
             </form>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CopyField({
+  label,
+  value,
+  id,
+  copiedUrl,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  id: string;
+  copiedUrl: string | null;
+  onCopy: (text: string, id: string) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">{label}</label>
+      <div className="flex gap-1.5">
+        <code className="min-w-0 flex-1 truncate rounded-md bg-[var(--color-muted)] px-2.5 py-1.5 text-xs text-[var(--color-foreground)]">
+          {value}
+        </code>
+        <Button size="sm" variant="ghost" onClick={() => onCopy(value, id)} className="shrink-0">
+          {copiedUrl === id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
       </div>
     </div>
   );

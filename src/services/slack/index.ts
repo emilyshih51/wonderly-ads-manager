@@ -272,9 +272,7 @@ export class SlackService {
       prefix = '',
     } = notification;
 
-    const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
-    const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
-    const adManagerLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${filterSet}&selected_ad_ids=${entityId}&nav_source=ads_manager`;
+    const adManagerLink = SlackService.buildAdManagerLink(adAccountId, entityName, entityId);
 
     const actionEmoji = actionType === 'promote' ? '🚀' : actionType === 'activate' ? '▶️' : '⏸️';
     const actionVerb =
@@ -314,9 +312,11 @@ export class SlackService {
     }
 
     if (duplicatedAdId) {
-      const dupEncodedName = encodeURIComponent(`"[\\\"${entityName} [Winner Copy]\\\"]"`);
-      const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
-      const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
+      const dupLink = SlackService.buildAdManagerLink(
+        adAccountId,
+        `${entityName} [Winner Copy]`,
+        duplicatedAdId
+      );
 
       bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
     }
@@ -559,6 +559,32 @@ export class SlackService {
     }
 
     return blocks;
+  }
+
+  /**
+   * Builds a Facebook Ads Manager deep link filtered to a specific ad.
+   *
+   * @param adAccountId - Meta ad account ID (without `act_` prefix)
+   * @param entityName - Ad name used for the search filter
+   * @param entityId - Ad ID to pre-select
+   */
+  private static buildAdManagerLink(
+    adAccountId: string,
+    entityName: string,
+    entityId: string
+  ): string {
+    const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
+    const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
+
+    const url = new URL('https://adsmanager.facebook.com/adsmanager/manage/ads');
+
+    url.searchParams.set('act', adAccountId);
+    url.searchParams.set('filter_set', filterSet);
+    url.searchParams.set('selected_ad_ids', entityId);
+    url.searchParams.set('date_source', 'today');
+    url.searchParams.set('nav_source', 'ads_manager');
+
+    return url.toString();
   }
 
   private static splitText(text: string, maxLen: number): string[] {

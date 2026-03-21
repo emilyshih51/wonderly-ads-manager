@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,8 +26,6 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  ToggleLeft,
-  ToggleRight,
   Loader2,
   Settings2,
   Check,
@@ -108,34 +107,34 @@ interface PreviewAd {
 /* ─────────── Constants ─────────── */
 
 const OPERATOR_OPTIONS = [
-  { label: 'is greater than', value: '>' },
-  { label: 'is less than', value: '<' },
-  { label: 'is greater than or equal to', value: '>=' },
-  { label: 'is less than or equal to', value: '<=' },
-  { label: 'is equal to', value: '==' },
+  { labelKey: 'operators.gt', value: '>' },
+  { labelKey: 'operators.lt', value: '<' },
+  { labelKey: 'operators.gte', value: '>=' },
+  { labelKey: 'operators.lte', value: '<=' },
+  { labelKey: 'operators.eq', value: '==' },
 ];
 
 const DATE_PRESET_OPTIONS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Yesterday', value: 'yesterday' },
-  { label: 'Last 3 days', value: 'last_3d' },
-  { label: 'Last 7 days', value: 'last_7d' },
-  { label: 'Last 14 days', value: 'last_14d' },
-  { label: 'Last 30 days', value: 'last_30d' },
+  { labelKey: 'datePresets.today', value: 'today' },
+  { labelKey: 'datePresets.yesterday', value: 'yesterday' },
+  { labelKey: 'datePresets.last3d', value: 'last_3d' },
+  { labelKey: 'datePresets.last7d', value: 'last_7d' },
+  { labelKey: 'datePresets.last14d', value: 'last_14d' },
+  { labelKey: 'datePresets.last30d', value: 'last_30d' },
 ];
 
 const SCHEDULE_OPTIONS = [
-  { label: 'Every 15 minutes', value: '15min' },
-  { label: 'Every hour', value: 'hourly' },
-  { label: 'Every 6 hours', value: '6hours' },
-  { label: 'Daily', value: 'daily' },
+  { labelKey: 'schedules.15min', value: '15min' },
+  { labelKey: 'schedules.hourly', value: 'hourly' },
+  { labelKey: 'schedules.6hours', value: '6hours' },
+  { labelKey: 'schedules.daily', value: 'daily' },
 ];
 
-const SCHEDULE_LABELS: Record<string, string> = {
-  '15min': 'Every 15 min',
-  hourly: 'Every hour',
-  '6hours': 'Every 6 hours',
-  daily: 'Daily',
+const SCHEDULE_LABEL_KEYS: Record<string, string> = {
+  '15min': 'scheduleLabels.15min',
+  hourly: 'scheduleLabels.hourly',
+  '6hours': 'scheduleLabels.6hours',
+  daily: 'scheduleLabels.daily',
 };
 
 const DEFAULT_CONFIG: RuleConfig = {
@@ -159,8 +158,8 @@ const DEFAULT_CONFIG: RuleConfig = {
 
 interface Template {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   icon: string;
   category: 'protect' | 'optimize';
   config: RuleConfig;
@@ -169,8 +168,8 @@ interface Template {
 const TEMPLATES: Template[] = [
   {
     id: 'pause-zero-results',
-    name: 'Pause ad: spend ≥ $30, 0 results',
-    description: 'Pause any ad spending $30+ with zero conversions',
+    nameKey: 'templates.pauseZeroResults',
+    descriptionKey: 'templates.pauseZeroResultsDesc',
     icon: '🛡️',
     category: 'protect',
     config: {
@@ -186,8 +185,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'pause-high-cpa',
-    name: 'Pause ad: spend ≥ $30, CPA ≥ $25',
-    description: 'Pause any ad spending $30+ with CPA at or above $25',
+    nameKey: 'templates.pauseHighCpa',
+    descriptionKey: 'templates.pauseHighCpaDesc',
     icon: '💰',
     category: 'protect',
     config: {
@@ -203,8 +202,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'promote-low-cpa-3',
-    name: 'Promote ad: CPA ≤ $15, results ≥ 3',
-    description: 'Pause + duplicate to Winners ad set when CPA is low',
+    nameKey: 'templates.promoteLowCpa3',
+    descriptionKey: 'templates.promoteLowCpa3Desc',
     icon: '🚀',
     category: 'optimize',
     config: {
@@ -220,8 +219,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'promote-low-cpa-5',
-    name: 'Promote ad: CPA ≤ $20, results ≥ 5',
-    description: 'Pause + duplicate to Winners ad set with more results',
+    nameKey: 'templates.promoteLowCpa5',
+    descriptionKey: 'templates.promoteLowCpa5Desc',
     icon: '🚀',
     category: 'optimize',
     config: {
@@ -309,7 +308,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6">
+    <Card className="relative overflow-hidden p-6">
       {/* Background accent */}
       <div className="absolute top-0 right-0 -mt-20 -mr-20 h-40 w-40 rounded-full bg-[var(--color-primary)]/5" />
 
@@ -357,7 +356,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -434,7 +433,7 @@ export default function AutomationsPage() {
 
   const applyTemplate = (template: Template) => {
     setSelectedRule(null);
-    setRuleName(template.name);
+    setRuleName(t(template.nameKey));
     setConfig({ ...template.config });
     setOpenStep(1);
     setPreviewLoaded(false);
@@ -711,16 +710,13 @@ export default function AutomationsPage() {
                 <Skeleton className="mb-4 h-3 w-24" />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                    >
+                    <Card key={i} className="flex items-start gap-3 p-4">
                       <Skeleton className="mt-0.5 h-5 w-5 rounded" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-4 w-32" />
                         <Skeleton className="h-3 w-full" />
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -729,10 +725,7 @@ export default function AutomationsPage() {
               <div>
                 <Skeleton className="mb-4 h-3 w-32" />
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="mb-2 flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                  >
+                  <Card key={i} className="mb-2 flex items-center gap-4 p-4">
                     <Skeleton className="h-7 w-7 rounded-full" />
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
@@ -746,7 +739,7 @@ export default function AutomationsPage() {
                       <Skeleton className="h-7 w-7 rounded-md" />
                       <Skeleton className="h-7 w-7 rounded-md" />
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             </div>
@@ -765,15 +758,15 @@ export default function AutomationsPage() {
                     <button
                       key={tmpl.id}
                       onClick={() => applyTemplate(tmpl)}
-                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:shadow-md"
+                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left shadow-sm transition-all hover:shadow-md"
                     >
                       <span className="mt-0.5 text-lg">{tmpl.icon}</span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-[var(--color-foreground)]">
-                          {tmpl.name}
+                          {t(tmpl.nameKey)}
                         </p>
                         <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                          {tmpl.description}
+                          {t(tmpl.descriptionKey)}
                         </p>
                         <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
                           Use template <ArrowRight className="h-3 w-3" />
@@ -790,13 +783,13 @@ export default function AutomationsPage() {
                   Your Rules {rules.length > 0 && `(${rules.length})`}
                 </h2>
                 {rules.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-12 text-center">
+                  <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
                     <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
                     <p className="text-sm text-[var(--color-muted-foreground)]">No rules yet</p>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                       Pick a template or create a new rule
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   <div className="space-y-2">
                     {rules.map((rule) => {
@@ -809,21 +802,15 @@ export default function AutomationsPage() {
                         .join(' AND ');
 
                       return (
-                        <div
+                        <Card
                           key={rule.id}
-                          className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:flex-row sm:items-center sm:gap-4"
+                          className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
                         >
-                          <button
-                            onClick={() => handleToggle(rule)}
-                            className="flex-shrink-0"
-                            title={rule.is_active ? 'Pause rule' : 'Enable rule'}
-                          >
-                            {rule.is_active ? (
-                              <ToggleRight className="h-7 w-7 text-emerald-500" />
-                            ) : (
-                              <ToggleLeft className="h-7 w-7 text-[var(--color-muted-foreground)]" />
-                            )}
-                          </button>
+                          <Switch
+                            checked={rule.is_active}
+                            onCheckedChange={() => handleToggle(rule)}
+                            aria-label={rule.is_active ? 'Pause rule' : 'Enable rule'}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p
@@ -846,7 +833,9 @@ export default function AutomationsPage() {
                                 <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
                               )}
                               {cfg.campaign_name && <span>·</span>}
-                              <span>{SCHEDULE_LABELS[cfg.schedule] || 'Hourly'}</span>
+                              <span>
+                                {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
+                              </span>
                               <span>·</span>
                               <span className="capitalize">{cfg.action_type}</span>
                               {cfg.slack_channel && (
@@ -898,7 +887,7 @@ export default function AutomationsPage() {
                               <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
                             </Button>
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
@@ -911,13 +900,13 @@ export default function AutomationsPage() {
                   Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
                 </h2>
                 {activityLog.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-8 text-center">
+                  <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
                     <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
                     <p className="text-sm text-[var(--color-muted-foreground)]">No runs yet</p>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                       Test or activate a rule to see results here
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   <div className="space-y-2">
                     {activityLog.map((event) => {
@@ -932,10 +921,7 @@ export default function AutomationsPage() {
                       const isTest = event.type === 'test';
 
                       return (
-                        <div
-                          key={event.id}
-                          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                        >
+                        <Card key={event.id} className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span
@@ -1025,7 +1011,7 @@ export default function AutomationsPage() {
                               </div>
                             )}
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
@@ -1041,7 +1027,7 @@ export default function AutomationsPage() {
         <div className="flex-1 overflow-y-auto bg-[var(--color-background)]">
           <div className="mx-auto max-w-2xl space-y-4 px-8 py-6">
             {/* Rule Name */}
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+            <Card className="p-5">
               <label className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
                 Rule Name
               </label>
@@ -1051,10 +1037,10 @@ export default function AutomationsPage() {
                 className="mt-2 h-10 text-base font-medium"
                 placeholder="e.g., Pause ad: spend ≥ $30, 0 results"
               />
-            </div>
+            </Card>
 
             {/* ─── STEP 1: Apply rule to ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={1}
                 title="Apply rule to"
@@ -1122,7 +1108,10 @@ export default function AutomationsPage() {
                     <SelectNative
                       value={config.schedule}
                       onChange={(e) => updateConfig({ schedule: e.target.value })}
-                      options={SCHEDULE_OPTIONS}
+                      options={SCHEDULE_OPTIONS.map((o) => ({
+                        label: t(o.labelKey),
+                        value: o.value,
+                      }))}
                       className="mt-2"
                     />
                   </div>
@@ -1135,7 +1124,10 @@ export default function AutomationsPage() {
                     <SelectNative
                       value={config.date_preset}
                       onChange={(e) => updateConfig({ date_preset: e.target.value })}
-                      options={DATE_PRESET_OPTIONS}
+                      options={DATE_PRESET_OPTIONS.map((o) => ({
+                        label: t(o.labelKey),
+                        value: o.value,
+                      }))}
                       className="mt-2"
                     />
                     <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
@@ -1153,10 +1145,10 @@ export default function AutomationsPage() {
                   </Button>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── STEP 2: Conditions ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={2}
                 title="Conditions"
@@ -1204,7 +1196,10 @@ export default function AutomationsPage() {
                               operator: e.target.value,
                             })
                           }
-                          options={OPERATOR_OPTIONS}
+                          options={OPERATOR_OPTIONS.map((o) => ({
+                            label: t(o.labelKey),
+                            value: o.value,
+                          }))}
                           className="w-[180px]"
                         />
                         <Input
@@ -1333,10 +1328,10 @@ export default function AutomationsPage() {
                   </Button>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── STEP 3: Action ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={3}
                 title="Action"
@@ -1434,15 +1429,10 @@ export default function AutomationsPage() {
                   {/* Slack notification */}
                   <div className="border-t border-[var(--color-border)] pt-4">
                     <label className="flex cursor-pointer items-center gap-2.5">
-                      <input
-                        type="checkbox"
+                      <Switch
+                        size="sm"
                         checked={config.also_notify_slack}
-                        onChange={(e) =>
-                          updateConfig({
-                            also_notify_slack: e.target.checked,
-                          })
-                        }
-                        className="h-4 w-4 rounded border-[var(--color-border)] text-blue-600"
+                        onCheckedChange={(checked) => updateConfig({ also_notify_slack: checked })}
                       />
                       <span className="text-sm font-medium text-[var(--color-foreground)]">
                         Send Slack notification
@@ -1569,11 +1559,11 @@ export default function AutomationsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── Summary + Actions ─── */}
             {isStep1Complete && isStep2Complete && isStep3Complete && (
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+              <Card className="p-5">
                 <h3 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
                   Summary
                 </h3>
@@ -1615,9 +1605,11 @@ export default function AutomationsPage() {
                   </p>
                   <p>
                     <span className="text-[var(--color-muted-foreground)]">Frequency:</span>{' '}
-                    {SCHEDULE_LABELS[config.schedule]} ·{' '}
-                    {DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.label ||
-                      config.date_preset}
+                    {t(SCHEDULE_LABEL_KEYS[config.schedule] || 'scheduleLabels.hourly')} ·{' '}
+                    {t(
+                      DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.labelKey ||
+                        'datePresets.last7d'
+                    )}
                   </p>
                 </div>
                 <div className="mt-4 flex items-center gap-2 border-t border-[var(--color-border)] pt-4">
@@ -1635,7 +1627,7 @@ export default function AutomationsPage() {
                     {saveRule.isPending ? 'Saving...' : 'Save Rule'}
                   </Button>
                 </div>
-              </div>
+              </Card>
             )}
           </div>
         </div>

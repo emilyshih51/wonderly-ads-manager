@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { requireSession } from '@/lib/session';
+import { getRedisClient } from '@/lib/redis';
 import { AnthropicService } from '@/services/anthropic';
+import { ChatMemoryService } from '@/services/chat-memory';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Chat');
@@ -116,11 +118,12 @@ export async function POST(request: NextRequest) {
   const result = await requireSession();
 
   if (result instanceof NextResponse) return result;
+  const session = result;
 
   logger.info('POST /api/chat');
 
   try {
-    const { message, context, history } = await request.json();
+    const { message, context } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'No message provided' }, { status: 400 });
@@ -132,10 +135,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Anthropic API key not configured' }, { status: 503 });
     }
 
+    // Load conversation history from Redis (falls back to empty array)
+    const redis = await getRedisClient();
+    const memory = new ChatMemoryService(redis);
+    const storedHistory = await memory.getHistory(session.id);
+    const history = storedHistory.map((m) => ({ role: m.role, content: m.content }));
+
+    // Persist the user message immediately
+    await memory.appendMessage(session.id, {
+      role: 'user',
+      content: message,
+      timestamp: Date.now(),
+    });
+
     const ai = new AnthropicService(apiKey);
     const stream = await ai.chat({ message, systemPrompt: SYSTEM_PROMPT, context, history });
 
-    return new NextResponse(stream, {
+    // Wrap the stream to accumulate the assistant's full response
+    let fullContent = '';
+    const { readable, writable } = new TransformStream<string, string>({
+      transform(chunk, controller) {
+        // Extract text from SSE chunks for accumulation
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+            try {
+              const parsed = JSON.parse(line.slice(6)) as { text?: string };
+
+              if (parsed.text) fullContent += parsed.text;
+            } catch {
+              // Ignore malformed chunks
+            }
+          }
+        }
+
+        controller.enqueue(chunk);
+      },
+    });
+
+    // Pipe the original stream through the transform
+    void stream.pipeTo(writable);
+
+    // Persist the assistant response after the stream finishes
+    after(async () => {
+      if (fullContent) {
+        await memory.appendMessage(session.id, {
+          role: 'assistant',
+          content: fullContent,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    return new NextResponse(readable, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',

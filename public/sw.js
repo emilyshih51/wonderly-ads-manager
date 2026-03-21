@@ -36,11 +36,14 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           const clone = response.clone();
+
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+
           return response;
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match('/dashboard')))
     );
+
     return;
   }
 
@@ -58,11 +61,14 @@ self.addEventListener('fetch', (event) => {
           cached ||
           fetch(request).then((response) => {
             const clone = response.clone();
+
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+
             return response;
           })
       )
     );
+
     return;
   }
 });

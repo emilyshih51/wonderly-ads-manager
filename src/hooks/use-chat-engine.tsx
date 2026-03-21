@@ -126,6 +126,7 @@ function findConversionAction(
   if (resultActionType) {
     return actions.find((a) => a.action_type === resultActionType);
   }
+
   return actions.find(
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
@@ -137,13 +138,16 @@ function findConversionAction(
 function getResults(row: InsightRow, resultActionType?: string): number {
   if (!row.actions) return 0;
   const found = findConversionAction(row.actions, resultActionType);
+
   return found ? parseInt(found.value) : 0;
 }
 
 function getResultType(row: InsightRow, resultActionType?: string): string {
   if (!row.actions) return 'N/A';
   const found = findConversionAction(row.actions, resultActionType);
+
   if (!found) return 'N/A';
+
   return found.action_type
     .replace('offsite_conversion.fb_pixel_', '')
     .replace('offsite_conversion.', '')
@@ -153,12 +157,16 @@ function getResultType(row: InsightRow, resultActionType?: string): string {
 function getCostPerResult(row: InsightRow, resultActionType?: string): string {
   if (row.cost_per_action_type) {
     const found = findConversionAction(row.cost_per_action_type, resultActionType);
+
     if (found) return parseFloat(found.value).toFixed(2);
   }
+
   const results = getResults(row, resultActionType);
+
   if (results > 0) {
     return (parseFloat(row.spend) / results).toFixed(2);
   }
+
   return 'N/A';
 }
 
@@ -166,6 +174,7 @@ function pctChange(current: number, previous: number): string {
   if (previous === 0 && current === 0) return '0%';
   if (previous === 0) return '+∞';
   const pct = (((current - previous) / previous) * 100).toFixed(1);
+
   return (current >= previous ? '+' : '') + pct + '%';
 }
 
@@ -245,11 +254,13 @@ function buildCampaignComparison(
       );
     } else if (t) {
       const r = rat(cid);
+
       sections.push(
         `Campaign "${name}": TODAY Spend $${parseFloat(t.spend).toFixed(2)}, Results ${getResults(t, r)}, Clicks ${t.clicks}, CTR ${t.ctr}%, CPC $${t.cost_per_inline_link_click || t.cpc} | YESTERDAY: No data`
       );
     } else if (y) {
       const r = rat(cid);
+
       sections.push(
         `Campaign "${name}": TODAY: No data yet | YESTERDAY Spend $${parseFloat(y.spend).toFixed(2)}, Results ${getResults(y, r)}, Clicks ${y.clicks}, CTR ${y.ctr}%`
       );
@@ -341,6 +352,7 @@ function buildAdComparison(
 
     for (const row of history.adDaily) {
       const key = row.ad_id || 'unknown';
+
       if (!adHistMap.has(key)) adHistMap.set(key, { name: row.ad_name || key, rows: [] });
       adHistMap.get(key)!.rows.push(row);
     }
@@ -359,6 +371,7 @@ function buildAdComparison(
       const sorted = [...rows].sort((a, b) =>
         (a.date_start || '').localeCompare(b.date_start || '')
       );
+
       for (const row of sorted) {
         sections.push(
           `  ${row.date_start}: Spend $${parseFloat(row.spend).toFixed(2)}, Results ${getResults(row, rType)}, Clicks ${row.clicks}`
@@ -379,9 +392,11 @@ function buildHourlyAnalysis(
 
   const formatHour = (h: string) => {
     const hourNum = parseInt(h?.split(':')[0] || '0');
+
     if (hourNum === 0) return '12am';
     if (hourNum < 12) return `${hourNum}am`;
     if (hourNum === 12) return '12pm';
+
     return `${hourNum - 12}pm`;
   };
 
@@ -405,14 +420,14 @@ function buildHourlyAnalysis(
     for (const cid of allCampaignIds) {
       const r = rat(cid);
       const todayRows = todayHourly.filter((row) => (row.campaign_id || 'unknown') === cid);
-      const yesterdayRows = yesterdayHourly.filter(
-        (row) => (row.campaign_id || 'unknown') === cid
-      );
+      const yesterdayRows = yesterdayHourly.filter((row) => (row.campaign_id || 'unknown') === cid);
       const campaignName = todayRows[0]?.campaign_name || yesterdayRows[0]?.campaign_name || cid;
 
       const todayByHour: Record<string, InsightRow> = {};
+
       for (const row of todayRows) todayByHour[getHourKey(row)] = row;
       const yesterdayByHour: Record<string, InsightRow> = {};
+
       for (const row of yesterdayRows) yesterdayByHour[getHourKey(row)] = row;
 
       const allHours = [
@@ -492,6 +507,7 @@ function buildBreakdowns(breakdowns: ChatData['breakdowns']): string[] {
 
   if (breakdowns.ageGender.length > 0) {
     sections.push('\n=== AGE & GENDER BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.ageGender) {
       sections.push(
         `${row.age || '?'} ${row.gender || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -501,6 +517,7 @@ function buildBreakdowns(breakdowns: ChatData['breakdowns']): string[] {
 
   if (breakdowns.device.length > 0) {
     sections.push('\n=== DEVICE BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.device) {
       sections.push(
         `${row.device_platform || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -510,6 +527,7 @@ function buildBreakdowns(breakdowns: ChatData['breakdowns']): string[] {
 
   if (breakdowns.publisher.length > 0) {
     sections.push('\n=== PUBLISHER PLATFORM BREAKDOWN (TODAY) ===');
+
     for (const row of breakdowns.publisher) {
       sections.push(
         `${row.publisher_platform || '?'}: Spend $${parseFloat(row.spend).toFixed(2)}, Clicks ${row.clicks}, CTR ${row.ctr}%, Results ${getResults(row)}`
@@ -579,6 +597,7 @@ function buildHistoricalTrends(
 
     for (const row of history.campaignDaily) {
       const key = row.campaign_id || 'unknown';
+
       if (!byCampaign[key]) byCampaign[key] = [];
       byCampaign[key].push(row);
     }
@@ -607,6 +626,7 @@ function buildHistoricalTrends(
 
     for (const row of history.adsetDaily) {
       const key = row.adset_id || 'unknown';
+
       if (!byAdset[key]) byAdset[key] = [];
       byAdset[key].push(row);
     }
@@ -675,7 +695,9 @@ export function buildRichContext(data: ChatData): string {
   const adIds = new Set([...today.ads.map((a) => a.ad_id), ...yesterday.ads.map((a) => a.ad_id)]);
 
   sections.push(...buildAccountOverview(today, yesterday, date));
-  sections.push(...buildCampaignComparison(todayCampaignMap, yesterdayCampaignMap, campaignIds, rat));
+  sections.push(
+    ...buildCampaignComparison(todayCampaignMap, yesterdayCampaignMap, campaignIds, rat)
+  );
   sections.push(...buildAdSetComparison(todayAdSetMap, yesterdayAdSetMap, adsetIds, rat));
   sections.push(...buildAdComparison(todayAdMap, yesterdayAdMap, adIds, rat, history));
   sections.push(...buildHourlyAnalysis(today, yesterday, rat));
@@ -775,12 +797,14 @@ export function parseActionsFromReply(raw: string): { content: string; actions: 
     .replace(ACTION_RE, (_, json) => {
       try {
         const payload = JSON.parse(json) as ActionPayload;
+
         if (payload.type && payload.id) {
           actions.push({ payload, status: 'pending' });
         }
       } catch {
         /* ignore malformed */
       }
+
       return '';
     })
     .trim();
@@ -799,6 +823,7 @@ export function actionLabel(a: ActionPayload, t: (key: string) => string): strin
     resume_ad: t('actionResumeAd'),
     adjust_budget: t('actionAdjustBudget'),
   };
+
   return labels[a.type] || a.type;
 }
 
@@ -809,6 +834,7 @@ export function actionIcon(
   if (type.startsWith('pause')) return Pause;
   if (type.startsWith('resume')) return Play;
   if (type === 'adjust_budget') return DollarSign;
+
   return ChevronRight;
 }
 
@@ -817,6 +843,7 @@ export function actionColor(type: string): { border: string; bg: string } {
   if (type.startsWith('pause')) return { border: '#f97316', bg: '#f97316' };
   if (type.startsWith('resume')) return { border: '#22c55e', bg: '#22c55e' };
   if (type === 'adjust_budget') return { border: '#3b82f6', bg: '#3b82f6' };
+
   return { border: '', bg: '' };
 }
 
@@ -840,10 +867,17 @@ export function useChatEngine() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const resetChat = useCallback(() => {
+  const resetChat = useCallback(async () => {
     setMessages([]);
     setInput('');
     inputRef.current?.focus();
+
+    // Clear server-side chat memory
+    try {
+      await fetch('/api/chat/history', { method: 'DELETE' });
+    } catch {
+      logger.warn('Failed to clear chat history from server');
+    }
   }, []);
 
   const copyMessage = useCallback((id: string, content: string) => {
@@ -866,8 +900,10 @@ export function useChatEngine() {
 
     try {
       const res = await fetch('/api/chat/data');
+
       if (!res.ok) throw new Error('Failed to load data');
       const data = await res.json();
+
       setChatData(data);
     } catch (err) {
       logger.error('Failed to load chat data', err);
@@ -879,6 +915,25 @@ export function useChatEngine() {
 
   useEffect(() => {
     fetchData();
+
+    // Restore previous chat history from server
+    fetch('/api/chat/history')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.messages?.length) {
+          setMessages(
+            data.messages.map(
+              (m: { role: 'user' | 'assistant'; content: string; timestamp: number }) => ({
+                id: `${m.role}-${m.timestamp}`,
+                role: m.role,
+                content: m.content,
+                timestamp: new Date(m.timestamp),
+              })
+            )
+          );
+        }
+      })
+      .catch((err) => logger.warn('Failed to restore chat history', err));
   }, [fetchData]);
 
   const dataStats = chatData
@@ -906,7 +961,9 @@ export function useChatEngine() {
         prev.map((m) => {
           if (m.id !== msgId || !m.actions) return m;
           const newActions = [...m.actions];
+
           newActions[actionIdx] = { ...newActions[actionIdx], status: 'executing' };
+
           return { ...m, actions: newActions };
         })
       );
@@ -928,11 +985,13 @@ export function useChatEngine() {
           prev.map((m) => {
             if (m.id !== msgId || !m.actions) return m;
             const newActions = [...m.actions];
+
             newActions[actionIdx] = {
               ...newActions[actionIdx],
               status: data.success ? 'done' : 'error',
               result: data.result || data.error || 'Unknown error',
             };
+
             return { ...m, actions: newActions };
           })
         );
@@ -943,11 +1002,13 @@ export function useChatEngine() {
           prev.map((m) => {
             if (m.id !== msgId || !m.actions) return m;
             const newActions = [...m.actions];
+
             newActions[actionIdx] = {
               ...newActions[actionIdx],
               status: 'error',
               result: 'Network error',
             };
+
             return { ...m, actions: newActions };
           })
         );
@@ -961,7 +1022,9 @@ export function useChatEngine() {
       prev.map((m) => {
         if (m.id !== msgId || !m.actions) return m;
         const newActions = [...m.actions];
+
         newActions[actionIdx] = { ...newActions[actionIdx], status: 'dismissed' };
+
         return { ...m, actions: newActions };
       })
     );
@@ -999,13 +1062,13 @@ export function useChatEngine() {
           body: JSON.stringify({
             message: text.trim(),
             context,
-            history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
           }),
         });
 
         if (!res.ok) throw new Error('Failed to send message');
 
         const reader = res.body?.getReader();
+
         if (!reader) throw new Error('No response body');
 
         let fullContent = '';
@@ -1014,6 +1077,7 @@ export function useChatEngine() {
         try {
           while (true) {
             const { done, value } = await reader.read();
+
             if (done) break;
 
             const chunk = decoder.decode(value, { stream: true });
@@ -1022,17 +1086,17 @@ export function useChatEngine() {
             for (const line of lines) {
               if (line.startsWith('data: ')) {
                 const data = line.slice(6).trim();
+
                 if (data === '[DONE]') break;
 
                 try {
                   const parsed = JSON.parse(data);
+
                   if (parsed.text) {
                     fullContent += parsed.text;
                     setMessages((prev) =>
                       prev.map((m) =>
-                        m.id === loadingMsg.id
-                          ? { ...m, content: fullContent, isLoading: true }
-                          : m
+                        m.id === loadingMsg.id ? { ...m, content: fullContent, isLoading: true } : m
                       )
                     );
                   }
@@ -1072,7 +1136,7 @@ export function useChatEngine() {
         setIsLoading(false);
       }
     },
-    [chatData, isLoading, messages]
+    [chatData, isLoading]
   );
 
   const handleKeyDown = useCallback(
@@ -1147,6 +1211,7 @@ export function useChatEngine() {
         );
 
       const numMatch = line.match(/^(\d+)\.\s/);
+
       if (numMatch)
         return (
           <li

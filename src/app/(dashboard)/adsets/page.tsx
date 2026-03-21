@@ -27,6 +27,7 @@ import {
   Rocket,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import { useTranslations } from 'next-intl';
 
 const logger = createLogger('AdSets');
 
@@ -91,6 +92,7 @@ const INITIAL_STATE: LaunchState = {
 };
 
 export default function LaunchPage() {
+  const t = useTranslations('adsets');
   const [state, setState] = useState<LaunchState>(INITIAL_STATE);
   const { data: campaigns = [] } = useCampaignList();
   const { data: adSets = [], isError: adSetsError } = useAdSets({});
@@ -518,7 +520,7 @@ export default function LaunchPage() {
 
   return (
     <div>
-      <Header title="Launch Ads" description="Create and launch new ads in seconds">
+      <Header title={t('title')} description={t('description')}>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -574,7 +576,7 @@ export default function LaunchPage() {
           {/* SECTION 1: SOURCE (Duplicate from) */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
+              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
                 <Copy className="h-4 w-4 text-blue-600" />
                 Select Source to Duplicate
               </h2>
@@ -595,11 +597,15 @@ export default function LaunchPage() {
                   className={`rounded-lg border-2 p-4 text-left transition-all ${
                     state.sourceType === 'existing'
                       ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-gray-900">Add to Ad Set</p>
-                  <p className="mt-1 text-xs text-gray-500">Upload new ads to an existing ad set</p>
+                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                    Add to Ad Set
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Upload new ads to an existing ad set
+                  </p>
                 </button>
 
                 {/* Duplicate Ad Set */}
@@ -617,11 +623,15 @@ export default function LaunchPage() {
                   className={`rounded-lg border-2 p-4 text-left transition-all ${
                     state.sourceType === 'adset'
                       ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-gray-900">Duplicate Ad Set</p>
-                  <p className="mt-1 text-xs text-gray-500">Clone and enhance an existing ad set</p>
+                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                    Duplicate Ad Set
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Clone and enhance an existing ad set
+                  </p>
                 </button>
 
                 {/* Duplicate Campaign */}
@@ -639,11 +649,15 @@ export default function LaunchPage() {
                   className={`rounded-lg border-2 p-4 text-left transition-all ${
                     state.sourceType === 'campaign'
                       ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
                   }`}
                 >
-                  <p className="text-sm font-semibold text-gray-900">Duplicate Campaign</p>
-                  <p className="mt-1 text-xs text-gray-500">Start from a campaign template</p>
+                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                    Duplicate Campaign
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Start from a campaign template
+                  </p>
                 </button>
               </div>
 
@@ -651,7 +665,7 @@ export default function LaunchPage() {
                 <div className="space-y-4 border-t pt-4">
                   {/* Search input */}
                   <div className="relative">
-                    <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
                     <Input
                       placeholder={`Search ${state.sourceType}s...`}
                       value={searchQuery}
@@ -662,7 +676,7 @@ export default function LaunchPage() {
 
                   {/* Source options */}
                   {sourceOptions.length === 0 ? (
-                    <p className="py-4 text-center text-sm text-gray-500">
+                    <p className="py-4 text-center text-sm text-[var(--color-muted-foreground)]">
                       No {state.sourceType}s found
                     </p>
                   ) : (
@@ -689,12 +703,16 @@ export default function LaunchPage() {
                           className={`w-full rounded-lg border p-3 text-left transition-colors ${
                             state.sourceId === option.id
                               ? 'border-blue-400 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              : 'border-[var(--color-border)] hover:border-[var(--color-border)] hover:bg-[var(--color-muted)]'
                           }`}
                         >
-                          <p className="text-sm font-medium text-gray-900">{option.name}</p>
+                          <p className="text-sm font-medium text-[var(--color-foreground)]">
+                            {option.name}
+                          </p>
                           {option.campaignName && (
-                            <p className="mt-0.5 text-xs text-gray-500">{option.campaignName}</p>
+                            <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                              {option.campaignName}
+                            </p>
                           )}
                         </button>
                       ))}
@@ -712,8 +730,8 @@ export default function LaunchPage() {
                   {/* New name input (not needed for "Add to Existing") */}
                   {state.sourceId && state.sourceType !== 'existing' && (
                     <div>
-                      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
-                        <Tag className="h-4 w-4 text-gray-400" />
+                      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
+                        <Tag className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                         New Name
                       </label>
                       <Input
@@ -732,8 +750,8 @@ export default function LaunchPage() {
                   {/* Target campaign (for ad set duplication) */}
                   {state.sourceType === 'adset' && state.sourceId && (
                     <div>
-                      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
-                        <FileText className="h-4 w-4 text-gray-400" />
+                      <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
+                        <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                         Target Campaign (optional)
                       </label>
                       <select
@@ -744,7 +762,7 @@ export default function LaunchPage() {
                             targetCampaign: e.target.value,
                           }))
                         }
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       >
                         <option value="">Same as source</option>
                         {campaigns.map((c) => (
@@ -763,7 +781,7 @@ export default function LaunchPage() {
           {/* SECTION 2: AD SETUP */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
+              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
                 <Type className="h-4 w-4 text-blue-600" />
                 Ad Setup
               </h2>
@@ -781,7 +799,7 @@ export default function LaunchPage() {
                   )}
                   <button
                     onClick={saveDefaults}
-                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-700"
+                    className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                   >
                     {hasDefaults ? 'Update Defaults' : 'Save as Default'}
                   </button>
@@ -789,8 +807,8 @@ export default function LaunchPage() {
 
                 {/* Primary Texts */}
                 <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <Type className="h-4 w-4 text-gray-400" />
+                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
+                    <Type className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                     Primary Text
                     <span className="text-xs text-red-500">*</span>
                   </label>
@@ -810,19 +828,19 @@ export default function LaunchPage() {
                           }));
                         }}
                         placeholder={`Primary Text ${idx + 1}${idx === 0 ? ' (required)' : ' (optional)'}`}
-                        className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
                     Enter at least one primary text. The first filled text will be used.
                   </p>
                 </div>
 
                 {/* Headlines */}
                 <div>
-                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <FileText className="h-4 w-4 text-gray-400" />
+                  <label className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
+                    <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                     Headline
                     <span className="text-xs text-red-500">*</span>
                   </label>
@@ -844,7 +862,7 @@ export default function LaunchPage() {
                       />
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
                     Enter at least one headline. The first filled headline will be used.
                   </p>
                 </div>
@@ -852,7 +870,7 @@ export default function LaunchPage() {
                 <div className="grid grid-cols-3 gap-4">
                   {/* Call to Action */}
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
                       Call to Action
                     </label>
                     <SelectNative
@@ -872,7 +890,7 @@ export default function LaunchPage() {
 
                   {/* Facebook Page ID */}
                   <div>
-                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                       Facebook Page ID <span className="text-red-500">*</span>
                     </label>
                     <Input
@@ -889,11 +907,11 @@ export default function LaunchPage() {
 
                   {/* Daily Budget (optional) */}
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
                       Daily Budget (optional)
                     </label>
                     <div className="relative">
-                      <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-gray-400">
+                      <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
                         $
                       </span>
                       <Input
@@ -909,14 +927,16 @@ export default function LaunchPage() {
                         className="pl-7"
                       />
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">Leave blank to keep source budget</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      Leave blank to keep source budget
+                    </p>
                   </div>
                 </div>
 
                 {/* Web Link */}
                 <div>
-                  <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <Globe className="h-4 w-4 text-gray-400" />
+                  <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
+                    <Globe className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                     Web Link
                   </label>
                   <Input
@@ -932,11 +952,11 @@ export default function LaunchPage() {
                 </div>
 
                 {/* URL Parameters */}
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="mb-2 text-xs font-semibold tracking-wide text-gray-600 uppercase">
+                <div className="rounded-lg bg-[var(--color-muted)] p-4">
+                  <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                     URL Parameters
                   </p>
-                  <p className="mb-3 text-xs text-gray-500">
+                  <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">
                     Meta dynamic parameters like {'{{campaign.id}}'} are replaced at impression
                     time.
                   </p>
@@ -950,18 +970,22 @@ export default function LaunchPage() {
                       }))
                     }
                     placeholder="utm_source=facebook&utm_medium={{campaign.id}}&..."
-                    className="w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-xs focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-xs text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                   {state.websiteUrl && (
-                    <div className="mt-2 rounded border border-gray-200 bg-white p-2">
-                      <p className="text-xs break-all text-gray-600">{buildFinalUrl()}</p>
+                    <div className="mt-2 rounded border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+                      <p className="text-xs break-all text-[var(--color-muted-foreground)]">
+                        {buildFinalUrl()}
+                      </p>
                     </div>
                   )}
                 </div>
 
                 {/* Display Link */}
                 <div>
-                  <label className="mb-1.5 block text-xs text-gray-600">Display Link</label>
+                  <label className="mb-1.5 block text-xs text-[var(--color-muted-foreground)]">
+                    Display Link
+                  </label>
                   <Input
                     value={state.displayLink}
                     onChange={(e) =>
@@ -980,19 +1004,19 @@ export default function LaunchPage() {
           {/* SECTION 3: MEDIA */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
+              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
                 <ImageIcon className="h-4 w-4 text-blue-600" />
                 Upload Media
               </h2>
 
               {state.images.length === 0 ? (
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 p-8 transition-colors hover:border-gray-400 hover:bg-gray-50">
-                  <Upload className="h-8 w-8 text-gray-400" />
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-[var(--color-border)] p-8 transition-colors hover:border-[var(--color-border)] hover:bg-[var(--color-muted)]">
+                  <Upload className="h-8 w-8 text-[var(--color-muted-foreground)]" />
                   <div className="text-center">
-                    <p className="text-sm font-medium text-gray-700">
+                    <p className="text-sm font-medium text-[var(--color-foreground)]">
                       Drop images here or click to upload
                     </p>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                       Each image becomes one ad variation
                     </p>
                   </div>
@@ -1008,7 +1032,7 @@ export default function LaunchPage() {
               ) : (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-[var(--color-muted-foreground)]">
                       {state.images.length} file
                       {state.images.length !== 1 ? 's' : ''} uploaded
                       {uploadedCount > 0 && ` • ${uploadedCount} processed`}
@@ -1038,10 +1062,10 @@ export default function LaunchPage() {
                               ? 'border-red-300 bg-red-50'
                               : img.status === 'uploading'
                                 ? 'border-blue-300 bg-blue-50'
-                                : 'border-gray-300'
+                                : 'border-[var(--color-border)]'
                         }`}
                       >
-                        <div className="relative aspect-square bg-gray-100">
+                        <div className="relative aspect-square bg-[var(--color-muted)]">
                           {img.mediaType === 'video' ? (
                             <video src={img.preview} className="h-full w-full object-cover" muted />
                           ) : (
@@ -1094,12 +1118,16 @@ export default function LaunchPage() {
           {/* SECTION 4: SETTINGS */}
           <Card>
             <CardContent className="p-6">
-              <h2 className="mb-4 text-base font-semibold text-gray-900">Settings</h2>
+              <h2 className="mb-4 text-base font-semibold text-[var(--color-foreground)]">
+                Settings
+              </h2>
 
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Launch as Active</p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="text-sm font-medium text-[var(--color-foreground)]">
+                    Launch as Active
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
                     Ads launch as PAUSED by default. Toggle to launch as ACTIVE.
                   </p>
                 </div>
@@ -1111,11 +1139,11 @@ export default function LaunchPage() {
                     }))
                   }
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    state.launchActive ? 'bg-green-500' : 'bg-gray-300'
+                    state.launchActive ? 'bg-green-500' : 'bg-[var(--color-muted-foreground)]'
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    className={`inline-block h-4 w-4 transform rounded-full bg-[var(--color-card)] transition-transform ${
                       state.launchActive ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
@@ -1124,11 +1152,11 @@ export default function LaunchPage() {
 
               {/* Slack Notification Message */}
               <div className="mt-4">
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
                   Slack Notification Message
                 </label>
                 <textarea
-                  className="w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   rows={3}
                   value={state.slackMessage}
                   onChange={(e) =>
@@ -1139,7 +1167,7 @@ export default function LaunchPage() {
                   }
                   placeholder="🚀 *[Wonderly]* {adset_name} launched with {budget}"
                 />
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                   Variables: {'{adset_name}'} {'{budget}'} {'{ad_count}'} {'{status}'}
                 </p>
               </div>
@@ -1147,9 +1175,9 @@ export default function LaunchPage() {
           </Card>
 
           {/* LAUNCH BUTTON */}
-          <div className="sticky bottom-0 -mx-8 border-t border-gray-200 bg-white px-8 py-4">
+          <div className="sticky bottom-0 -mx-8 border-t border-[var(--color-border)] bg-[var(--color-card)] px-8 py-4">
             <div className="mx-auto flex max-w-4xl items-center justify-between">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-[var(--color-muted-foreground)]">
                 {canLaunch ? (
                   <span className="font-medium text-green-700">Ready to launch</span>
                 ) : (

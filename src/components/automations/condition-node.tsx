@@ -14,7 +14,7 @@ interface ConditionNodeProps {
 export function ConditionNode({ data, selected }: ConditionNodeProps) {
   return (
     <div
-      className={`min-w-[220px] rounded-xl border-2 bg-white px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-purple-300'}`}
+      className={`min-w-[220px] rounded-xl border-2 bg-[var(--color-card)] px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-purple-300'}`}
     >
       <Handle
         type="target"
@@ -29,9 +29,11 @@ export function ConditionNode({ data, selected }: ConditionNodeProps) {
           Condition
         </span>
       </div>
-      <p className="text-sm font-medium text-gray-900">{data.label || 'Set condition...'}</p>
+      <p className="text-sm font-medium text-[var(--color-foreground)]">
+        {data.label || 'Set condition...'}
+      </p>
       {data.config?.metric ? (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
           If {String(data.config.metric)} {String(data.config.operator)} $
           {String(data.config.threshold)}
         </p>

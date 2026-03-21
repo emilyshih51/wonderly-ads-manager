@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 
 @theme inline {
-  --font-sans: var(--font-inter);
+  /* Font variables are resolved here so Tailwind's font-sans utility works.
+     The actual active font is set via --font-active on :root (overridden SSR in layout.tsx). */
+  --font-sans: var(--font-active, var(--font-noto-sans));
 
   /* Light mode tokens (default) */
   --color-background: #ffffff;
@@ -42,6 +44,23 @@
 body {
   background: var(--color-background);
   color: var(--color-foreground);
+}
+
+/* Subtle theme-switch transitions on all elements */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Preserve animation-driven classes that should not be clobbered */
+.animate-spin,
+.animate-pulse,
+[data-state='open'],
+[data-state='closed'] {
+  transition: none;
 }
 
 /* React Flow overrides */

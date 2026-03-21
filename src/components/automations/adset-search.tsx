@@ -80,14 +80,14 @@ export function AdSetSearch({
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
         <input
           type="text"
           value={open ? query : displayName || query}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={handleFocus}
           placeholder={placeholder || 'Search ad sets...'}
-          className="h-10 w-full rounded-lg border border-gray-200 pr-8 pl-9 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] pr-8 pl-9 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
         {value && (
           <button
@@ -95,20 +95,22 @@ export function AdSetSearch({
               onChange('', '');
               setQuery('');
             }}
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 hover:bg-gray-100"
+            className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 hover:bg-[var(--color-muted)]"
           >
-            <X className="h-3.5 w-3.5 text-gray-400" />
+            <X className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
           </button>
         )}
       </div>
       {open && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg">
           {loading ? (
             <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+              <Loader2 className="h-4 w-4 animate-spin text-[var(--color-muted-foreground)]" />
             </div>
           ) : results.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-500">No ad sets found</div>
+            <div className="px-4 py-3 text-sm text-[var(--color-muted-foreground)]">
+              No ad sets found
+            </div>
           ) : (
             results.map((a) => (
               <button
@@ -118,13 +120,13 @@ export function AdSetSearch({
                   setQuery(a.name);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between border-b border-gray-50 px-4 py-2.5 text-left last:border-0 hover:bg-gray-50 ${
-                  a.id === value ? 'bg-blue-50' : ''
+                className={`flex w-full items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5 text-left last:border-0 hover:bg-[var(--color-muted)] ${
+                  a.id === value ? 'bg-blue-500/10' : ''
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-gray-900">{a.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">
+                  <p className="truncate text-sm text-[var(--color-foreground)]">{a.name}</p>
+                  <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
                     {a.status}
                     {a.campaign_name ? ` · ${a.campaign_name}` : ''}
                   </p>

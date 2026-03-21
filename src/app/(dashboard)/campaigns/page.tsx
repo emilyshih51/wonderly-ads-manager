@@ -24,10 +24,14 @@ import { formatCurrency, formatPercent, formatNumber, cn } from '@/lib/utils';
 import { getResultCount, getCostPerResult } from '@/lib/automation-utils';
 import { Copy, ExternalLink, RefreshCw } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import { useTranslations } from 'next-intl';
 
 const logger = createLogger('Campaigns');
 
 export default function CampaignsPage() {
+  const t = useTranslations('campaigns');
+  const tMetrics = useTranslations('metrics');
+  const tCommon = useTranslations('common');
   const router = useRouter();
   const { datePreset, setFilterCampaignId } = useAppStore();
   const { data: campaigns = [], isLoading, isFetching, refetch } = useCampaigns(datePreset);
@@ -62,10 +66,10 @@ export default function CampaignsPage() {
 
   return (
     <div>
-      <Header title="Campaigns" description="Manage and duplicate your ad campaigns">
+      <Header title={t('title')} description={t('description')}>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
-          Refresh
+          {tCommon('refresh')}
         </Button>
       </Header>
 
@@ -80,28 +84,28 @@ export default function CampaignsPage() {
                   <thead>
                     <tr className="border-b border-[var(--color-border)] bg-[var(--color-muted)]">
                       <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Name
+                        {tCommon('name')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Status
+                        {tCommon('status')}
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Objective
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Spend
+                        {tMetrics('spend')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Results
+                        {tMetrics('results')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        CTR
+                        {tMetrics('ctr')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        CPC
+                        {tMetrics('cpc')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Cost/Result
+                        {tMetrics('costPerResult')}
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
                         Actions
@@ -115,7 +119,7 @@ export default function CampaignsPage() {
                           colSpan={9}
                           className="py-12 text-center text-[var(--color-muted-foreground)]"
                         >
-                          No campaigns found
+                          {t('noCampaignsFound')}
                         </td>
                       </tr>
                     ) : (
@@ -172,7 +176,7 @@ export default function CampaignsPage() {
                                 size="sm"
                                 onClick={() => handleViewAds(campaign)}
                               >
-                                <ExternalLink className="mr-1 h-4 w-4" /> Ads
+                                <ExternalLink className="mr-1 h-4 w-4" /> {t('viewAds')}
                               </Button>
                               <Button
                                 variant="ghost"
@@ -183,7 +187,7 @@ export default function CampaignsPage() {
                                   setDuplicateDialogOpen(true);
                                 }}
                               >
-                                <Copy className="mr-1 h-4 w-4" /> Duplicate
+                                <Copy className="mr-1 h-4 w-4" /> {t('duplicate')}
                               </Button>
                             </div>
                           </td>
@@ -202,7 +206,7 @@ export default function CampaignsPage() {
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Duplicate Campaign</DialogTitle>
+            <DialogTitle>{t('duplicateCampaign')}</DialogTitle>
             <DialogDescription>
               Create a copy of &ldquo;{selectedCampaign?.name}&rdquo; with all the same settings.
               The copy will be created in PAUSED status.
@@ -211,7 +215,7 @@ export default function CampaignsPage() {
           <div className="mt-4 space-y-4">
             <div>
               <label className="text-sm font-medium text-[var(--color-foreground)]">
-                New campaign name
+                {t('newCampaignName')}
               </label>
               <Input
                 value={newName}
@@ -221,10 +225,10 @@ export default function CampaignsPage() {
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>
-                Cancel
+                {tCommon('cancel')}
               </Button>
               <Button onClick={handleDuplicate} disabled={duplicateMutation.isPending}>
-                {duplicateMutation.isPending ? 'Duplicating...' : 'Duplicate Campaign'}
+                {duplicateMutation.isPending ? t('duplicating') : t('duplicateCampaign')}
               </Button>
             </div>
           </div>

@@ -82,7 +82,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-3xl p-4 sm:p-8">
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-[var(--color-foreground)]">{t('title')}</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#4A154B]/10">
                   <svg className="h-5 w-5" viewBox="0 0 54 54" fill="none">
                     <path
@@ -202,7 +202,7 @@ export default function SettingsPage() {
                   {t('slackConfigured')}
                 </p>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-lg border border-[var(--color-border)] p-3">
                     <MessageSquare className="mb-2 h-4 w-4 text-[#4A154B] dark:text-[#E01E5A]" />
                     <p className="text-xs font-medium text-[var(--color-foreground)]">Mention</p>
@@ -353,11 +353,11 @@ export default function SettingsPage() {
 
         {/* Danger Zone */}
         <div className="rounded-xl border border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20">
-          <div className="flex items-center gap-2 border-b border-red-200 px-4 py-3 sm:px-6 dark:border-red-900/50">
+          <div className="flex items-center gap-2 border-b border-red-200 px-4 py-3 md:px-6 dark:border-red-900/50">
             <AlertTriangle className="h-4 w-4 text-red-500" />
             <h3 className="text-sm font-medium text-red-600 dark:text-red-400">Danger Zone</h3>
           </div>
-          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between md:p-6">
             <div>
               <p className="text-sm font-medium text-[var(--color-foreground)]">{t('signOut')}</p>
               <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
@@ -365,7 +365,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <form action="/api/auth/logout" method="POST">
-              <Button variant="destructive" size="sm" type="submit" className="w-full sm:w-auto">
+              <Button variant="destructive" size="sm" type="submit" className="w-full md:w-auto">
                 <LogOut className="mr-1.5 h-3.5 w-3.5" />
                 {t('signOut')}
               </Button>

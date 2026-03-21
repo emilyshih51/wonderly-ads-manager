@@ -691,337 +691,343 @@ export default function AutomationsPage() {
       {viewMode === 'list' && (
         <div className="flex-1 overflow-y-auto">
           {rulesLoading ? (
-            <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 md:px-8">
-              {/* Copilot skeleton */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-8 w-8 rounded-lg" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-48" />
-                      <Skeleton className="h-3 w-72" />
-                    </div>
-                  </div>
-                  <Skeleton className="mt-4 h-10 w-full rounded-lg" />
-                </CardContent>
-              </Card>
-
-              {/* Templates skeleton */}
-              <div>
-                <Skeleton className="mb-4 h-3 w-24" />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Card key={i} className="flex items-start gap-3 p-4">
-                      <Skeleton className="mt-0.5 h-5 w-5 rounded" />
+            <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 md:px-8">
+              <div className="space-y-8">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded-lg" />
                       <div className="flex-1 space-y-2">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-3 w-72" />
+                      </div>
+                    </div>
+                    <Skeleton className="mt-4 h-10 w-full rounded-lg" />
+                  </CardContent>
+                </Card>
+                <div>
+                  <Skeleton className="mb-4 h-3 w-24" />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Card key={i} className="flex items-start gap-3 p-4">
+                        <Skeleton className="mt-0.5 h-5 w-5 rounded" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-full" />
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Skeleton className="mb-4 h-3 w-32" />
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i} className="mb-2 flex items-center gap-4 p-4">
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-4 w-12 rounded" />
+                        </div>
+                        <Skeleton className="h-3 w-56" />
+                      </div>
+                      <div className="flex gap-1">
+                        <Skeleton className="h-7 w-16 rounded-md" />
+                        <Skeleton className="h-7 w-7 rounded-md" />
+                        <Skeleton className="h-7 w-7 rounded-md" />
                       </div>
                     </Card>
                   ))}
                 </div>
               </div>
-
-              {/* Rules skeleton */}
-              <div>
-                <Skeleton className="mb-4 h-3 w-32" />
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Card key={i} className="mb-2 flex items-center gap-4 p-4">
-                    <Skeleton className="h-7 w-7 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-4 w-36" />
-                        <Skeleton className="h-4 w-12 rounded" />
-                      </div>
-                      <Skeleton className="h-3 w-56" />
-                    </div>
-                    <div className="flex gap-1">
-                      <Skeleton className="h-7 w-16 rounded-md" />
-                      <Skeleton className="h-7 w-7 rounded-md" />
-                      <Skeleton className="h-7 w-7 rounded-md" />
-                    </div>
-                  </Card>
-                ))}
-              </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 md:px-8">
-              {/* Copilot */}
-              <CopilotCard onSubmit={useCopilot} />
+            <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 md:px-8">
+              <div className="space-y-8">
+                {/* Copilot */}
+                <CopilotCard onSubmit={useCopilot} />
 
-              {/* Templates */}
-              <div>
-                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  {t('templates')}
-                </h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {TEMPLATES.map((tmpl) => (
-                    <button
-                      key={tmpl.id}
-                      onClick={() => applyTemplate(tmpl)}
-                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left shadow-sm transition-all hover:shadow-md"
-                    >
-                      <span className="mt-0.5 text-lg">{tmpl.icon}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-[var(--color-foreground)]">
-                          {t(tmpl.nameKey)}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                          {t(tmpl.descriptionKey)}
-                        </p>
-                        <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
-                          {t('useTemplate')} <ArrowRight className="h-3 w-3" />
-                        </span>
-                      </div>
-                    </button>
-                  ))}
+                {/* Templates */}
+                <div>
+                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                    Starter templates
+                  </h2>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {TEMPLATES.map((tmpl) => (
+                      <button
+                        key={tmpl.id}
+                        onClick={() => applyTemplate(tmpl)}
+                        className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left shadow-sm transition-all hover:border-[var(--color-primary)]/40 hover:shadow-md"
+                      >
+                        <span className="mt-0.5 text-lg">{tmpl.icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-[var(--color-foreground)]">
+                            {t(tmpl.nameKey)}
+                          </p>
+                          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                            {t(tmpl.descriptionKey)}
+                          </p>
+                          <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
+                            {t('useTemplate')} <ArrowRight className="h-3 w-3" />
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Active Rules */}
-              <div>
-                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  {t('yourRules')} {rules.length > 0 && `(${rules.length})`}
-                </h2>
-                {rules.length === 0 ? (
-                  <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
-                    <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                    <p className="text-sm text-[var(--color-muted-foreground)]">
-                      {t('noRulesYet')}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      {t('pickTemplate')}
-                    </p>
-                  </Card>
-                ) : (
-                  <div className="space-y-2">
-                    {rules.map((rule) => {
-                      const cfg = getRuleSummary(rule);
-                      const condSummary = cfg.conditions
-                        .map((c) => {
-                          const labelKey = METRIC_OPTIONS.find(
-                            (m) => m.value === c.metric
-                          )?.labelKey;
+                {/* Active Rules */}
+                <div>
+                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                    {t('yourRules')} {rules.length > 0 && `(${rules.length})`}
+                  </h2>
+                  {rules.length === 0 ? (
+                    <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
+                      <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                      <p className="text-sm text-[var(--color-muted-foreground)]">
+                        {t('noRulesYet')}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        {t('pickTemplate')}
+                      </p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {rules.map((rule) => {
+                        const cfg = getRuleSummary(rule);
+                        const condSummary = cfg.conditions
+                          .map((c) => {
+                            const labelKey = METRIC_OPTIONS.find(
+                              (m) => m.value === c.metric
+                            )?.labelKey;
 
-                          return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
-                        })
-                        .join(' AND ');
+                            return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
+                          })
+                          .join(' AND ');
 
-                      return (
-                        <Card
-                          key={rule.id}
-                          className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
-                        >
-                          <Switch
-                            checked={rule.is_active}
-                            onCheckedChange={() => handleToggle(rule)}
-                            aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p
-                                className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
-                              >
-                                {rule.name}
-                              </p>
-                              <span
-                                className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                  rule.is_active
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
-                                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                                }`}
-                              >
-                                {rule.is_active ? t('ruleActive') : t('ruleOff')}
-                              </span>
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
-                              {cfg.campaign_name && (
-                                <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
-                              )}
-                              {cfg.campaign_name && <span>·</span>}
-                              <span>
-                                {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
-                              </span>
-                              <span>·</span>
-                              <span className="capitalize">{cfg.action_type}</span>
-                              {cfg.slack_channel && (
-                                <>
-                                  <span>·</span>
-                                  <span>{cfg.slack_channel}</span>
-                                </>
-                              )}
-                            </div>
-                            {condSummary && (
-                              <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
-                                {t('if')}: {condSummary}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 sm:shrink-0">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => setConfirmRunRule(rule)}
-                              disabled={runningRuleId === rule.id}
-                            >
-                              {runningRuleId === rule.id ? (
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              ) : (
-                                <Play className="mr-1 h-3 w-3" />
-                              )}
-                              <span className="hidden sm:inline">
-                                {runningRuleId === rule.id ? t('running') : t('runNow')}
-                              </span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => editRule(rule)}
-                              title={t('editRule')}
-                            >
-                              <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleDelete(rule.id)}
-                              title={t('deleteRule')}
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
-                            </Button>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Activity Log */}
-              <div>
-                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  {t('activityLog')} {activityLog.length > 0 && `(${activityLog.length})`}
-                </h2>
-                {activityLog.length === 0 ? (
-                  <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
-                    <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                    <p className="text-sm text-[var(--color-muted-foreground)]">{t('noRunsYet')}</p>
-                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      {t('testOrActivate')}
-                    </p>
-                  </Card>
-                ) : (
-                  <div className="space-y-2">
-                    {activityLog.map((event) => {
-                      const date = new Date(event.timestamp);
-                      const timeStr = date.toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true,
-                      });
-                      const isTest = event.type === 'test';
-
-                      return (
-                        <Card key={event.id} className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                  isTest
-                                    ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-emerald-50 text-emerald-700'
-                                }`}
-                              >
-                                {isTest ? t('test') : t('live')}
-                              </span>
-                              <p className="text-sm font-medium text-[var(--color-foreground)]">
-                                {event.rule_name}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {!isTest &&
-                                event.results?.some((r) =>
-                                  r.action
-                                    ? ['paused', 'activated', 'promoted'].includes(r.action)
-                                    : false
-                                ) && (
-                                  <button
-                                    onClick={() => handleRollback(event.id, event.results || [])}
-                                    disabled={rollingBackId === event.id}
-                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
-                                    title={t('undoActions')}
-                                  >
-                                    {rollingBackId === event.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <RotateCcw className="h-3 w-3" />
-                                    )}
-                                    {t('undo')}
-                                  </button>
-                                )}
-                              <p className="text-xs text-[var(--color-muted-foreground)]">
-                                {timeStr}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                            {event.matched === 0 ? (
-                              <p>{t('noAdsMatched')}</p>
-                            ) : (
-                              <div className="space-y-1.5">
-                                <p>
-                                  <span className="font-medium text-[var(--color-foreground)]">
-                                    {event.matched}
-                                  </span>{' '}
-                                  {t('adsMatched', { count: event.matched })}
+                        return (
+                          <Card
+                            key={rule.id}
+                            className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
+                          >
+                            <Switch
+                              checked={rule.is_active}
+                              onCheckedChange={() => handleToggle(rule)}
+                              aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p
+                                  className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
+                                >
+                                  {rule.name}
                                 </p>
-                                {event.results?.map((r, i) => (
-                                  <div
-                                    key={i}
-                                    className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
-                                  >
-                                    <span className="truncate text-[var(--color-foreground)]">
-                                      {r.entity_name}
-                                    </span>
-                                    <div className="ml-2 flex flex-shrink-0 items-center gap-2">
-                                      <span className="text-[var(--color-muted-foreground)]">
-                                        ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'}{' '}
-                                        · {r.metrics?.results ?? 0} {tMetrics('results')}
-                                      </span>
-                                      <span
-                                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                          r.action?.includes('pause') ||
-                                          r.action?.includes('would_pause')
-                                            ? 'bg-red-50 text-red-600'
-                                            : r.action?.includes('promote') ||
-                                                r.action?.includes('would_promote')
-                                              ? 'bg-emerald-50 text-emerald-600'
-                                              : 'bg-blue-50 text-blue-600'
-                                        }`}
-                                      >
-                                        {r.action?.replace('would_', '')}
-                                      </span>
-                                      {r.slack_sent && (
-                                        <span className="text-[10px] text-emerald-500">
-                                          {t('slackSent')}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
+                                <span
+                                  className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                    rule.is_active
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                                  }`}
+                                >
+                                  {rule.is_active ? t('ruleActive') : t('ruleOff')}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                                {cfg.campaign_name && (
+                                  <span className="max-w-[200px] truncate">
+                                    {cfg.campaign_name}
+                                  </span>
+                                )}
+                                {cfg.campaign_name && <span>·</span>}
+                                <span>
+                                  {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
+                                </span>
+                                <span>·</span>
+                                <span className="capitalize">{cfg.action_type}</span>
+                                {cfg.slack_channel && (
+                                  <>
+                                    <span>·</span>
+                                    <span>{cfg.slack_channel}</span>
+                                  </>
+                                )}
+                              </div>
+                              {condSummary && (
+                                <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
+                                  {t('if')}: {condSummary}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 sm:shrink-0">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => setConfirmRunRule(rule)}
+                                disabled={runningRuleId === rule.id}
+                              >
+                                {runningRuleId === rule.id ? (
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Play className="mr-1 h-3 w-3" />
+                                )}
+                                <span className="hidden sm:inline">
+                                  {runningRuleId === rule.id ? t('running') : t('runNow')}
+                                </span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => editRule(rule)}
+                                title={t('editRule')}
+                              >
+                                <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleDelete(rule.id)}
+                                title={t('deleteRule')}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Activity Log */}
+                <div>
+                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                    {t('activityLog')} {activityLog.length > 0 && `(${activityLog.length})`}
+                  </h2>
+                  {activityLog.length === 0 ? (
+                    <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
+                      <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                      <p className="text-sm text-[var(--color-muted-foreground)]">
+                        {t('noRunsYet')}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        {t('testOrActivate')}
+                      </p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {activityLog.map((event) => {
+                        const date = new Date(event.timestamp);
+                        const timeStr = date.toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        });
+                        const isTest = event.type === 'test';
+
+                        return (
+                          <Card key={event.id} className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                    isTest
+                                      ? 'bg-amber-50 text-amber-700'
+                                      : 'bg-emerald-50 text-emerald-700'
+                                  }`}
+                                >
+                                  {isTest ? t('test') : t('live')}
+                                </span>
+                                <p className="text-sm font-medium text-[var(--color-foreground)]">
+                                  {event.rule_name}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!isTest &&
+                                  event.results?.some((r) =>
+                                    r.action
+                                      ? ['paused', 'activated', 'promoted'].includes(r.action)
+                                      : false
+                                  ) && (
+                                    <button
+                                      onClick={() => handleRollback(event.id, event.results || [])}
+                                      disabled={rollingBackId === event.id}
+                                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
+                                      title={t('undoActions')}
+                                    >
+                                      {rollingBackId === event.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <RotateCcw className="h-3 w-3" />
+                                      )}
+                                      {t('undo')}
+                                    </button>
+                                  )}
+                                <p className="text-xs text-[var(--color-muted-foreground)]">
+                                  {timeStr}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                              {event.matched === 0 ? (
+                                <p>{t('noAdsMatched')}</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  <p>
+                                    <span className="font-medium text-[var(--color-foreground)]">
+                                      {event.matched}
+                                    </span>{' '}
+                                    {t('adsMatched', { count: event.matched })}
+                                  </p>
+                                  {event.results?.map((r, i) => (
+                                    <div
+                                      key={i}
+                                      className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
+                                    >
+                                      <span className="truncate text-[var(--color-foreground)]">
+                                        {r.entity_name}
+                                      </span>
+                                      <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                                        <span className="text-[var(--color-muted-foreground)]">
+                                          $
+                                          {r.metrics?.spend?.toFixed?.(2) ||
+                                            r.metrics?.spend ||
+                                            '0'}{' '}
+                                          · {r.metrics?.results ?? 0} {tMetrics('results')}
+                                        </span>
+                                        <span
+                                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                            r.action?.includes('pause') ||
+                                            r.action?.includes('would_pause')
+                                              ? 'bg-red-50 text-red-600'
+                                              : r.action?.includes('promote') ||
+                                                  r.action?.includes('would_promote')
+                                                ? 'bg-emerald-50 text-emerald-600'
+                                                : 'bg-blue-50 text-blue-600'
+                                          }`}
+                                        >
+                                          {r.action?.replace('would_', '')}
+                                        </span>
+                                        {r.slack_sent && (
+                                          <span className="text-[10px] text-emerald-500">
+                                            {t('slackSent')}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

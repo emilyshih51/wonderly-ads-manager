@@ -67,9 +67,9 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           /* Empty state */
-          <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-8 md:py-12">
+          <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8 md:py-12">
             <div className="mb-10 text-center">
-              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 md:h-16 md:w-16">
+              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/20 md:h-16 md:w-16">
                 <Sparkles className="h-7 w-7 text-white md:h-8 md:w-8" />
               </div>
               <h2 className="mb-2 text-xl font-bold text-[var(--color-foreground)] md:text-2xl">
@@ -110,7 +110,7 @@ export default function ChatPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {SUGGESTED_PROMPTS.map((prompt, idx) => {
                 const Icon = prompt.icon;
                 const hex = COLOR_HEX[prompt.color] || COLOR_HEX.blue;
@@ -120,10 +120,10 @@ export default function ChatPage() {
                     key={idx}
                     onClick={() => sendMessage(prompt.prompt)}
                     disabled={isLoading || dataLoading}
-                    className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3.5 text-left transition-all hover:bg-[var(--color-muted)] disabled:opacity-50 sm:p-4"
+                    className="group flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:border-[var(--color-primary)]/30 hover:bg-[var(--color-muted)] hover:shadow-sm disabled:opacity-50"
                   >
                     <div
-                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9"
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
                       style={{ backgroundColor: `${hex}18`, color: hex }}
                     >
                       <Icon className="h-4 w-4" />
@@ -143,7 +143,7 @@ export default function ChatPage() {
           </div>
         ) : (
           /* Messages */
-          <div className="mx-auto max-w-3xl space-y-5 px-4 py-4 sm:px-6 sm:py-6 md:px-8">
+          <div className="mx-auto max-w-4xl space-y-5 px-4 py-4 sm:px-6 sm:py-6 md:px-8">
             {messages.map((msg) => (
               <div key={msg.id}>
                 <div className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
@@ -245,7 +245,7 @@ export default function ChatPage() {
 
       {/* Input bar */}
       <div className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8 md:py-4">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-4xl">
           <div className="relative flex-1">
             <textarea
               ref={inputRef}

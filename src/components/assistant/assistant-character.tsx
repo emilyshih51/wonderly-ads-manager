@@ -1,68 +1,32 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
-/** Logical animation states the character can be in. */
+/** Logical animation states (used by the overlay wrapper for CSS animations). */
 export type AnimationState = 'idle' | 'wave' | 'talk' | 'think' | 'celebrate';
 
-/**
- * Maps logical states to preferred Shiba Inu clip names.
- * Falls back to 'Idle' if the clip isn't found.
- * Model: Quaternius Shiba Inu (CC0) — clips: Idle, Idle_2, Idle_2_HeadLow, Walk, Eating, Gallop, Attack, Death.
- */
-const CLIP_NAME: Record<AnimationState, string> = {
-  idle: 'Idle',
-  think: 'Idle_2_HeadLow',
-  wave: 'Idle_2',
-  celebrate: 'Gallop',
-  talk: 'Eating',
-};
-
-interface CharacterModelProps {
-  animationState: AnimationState;
-}
-
-function CharacterModel({ animationState }: CharacterModelProps) {
-  const group = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF('/models/assistant.glb');
-  const { actions, names } = useAnimations(animations, group);
-
-  useEffect(() => {
-    if (names.length === 0) return;
-
-    // Prefer exact clip name, fall back to first clip
-    const targetName = names.includes(CLIP_NAME[animationState])
-      ? CLIP_NAME[animationState]
-      : (names[0] ?? '');
-    if (!targetName) return;
-
-    const next = actions[targetName];
-    if (!next) return;
-
-    // Crossfade from whatever is currently playing
-    const current = Object.values(actions).find((a) => a?.isRunning());
-    if (current && current !== next) {
-      next.reset().play();
-      current.crossFadeTo(next, 0.3, true);
-    } else if (!next.isRunning()) {
-      next.reset().play();
-    }
-  }, [animationState, actions, names]);
+function CharacterModel() {
+  const bob = useRef<THREE.Group>(null);
+  const { scene } = useGLTF('/models/assistant.glb');
 
   // Gentle floating bob
   useFrame((state) => {
-    if (group.current) {
-      group.current.position.y = Math.sin(state.clock.elapsedTime * 1.5) * 0.05;
+    if (bob.current) {
+      bob.current.position.y = Math.sin(state.clock.elapsedTime * 1.5) * 0.06;
     }
   });
 
-  return <primitive ref={group} object={scene} scale={1.8} position={[0, -0.6, 0]} />;
+  return (
+    <group ref={bob}>
+      {/* Model is ~2.4 units tall centered near origin — scale to fit camera fov=50 z=3 */}
+      <primitive object={scene} scale={1.2} position={[0, -1.4, 0]} />
+    </group>
+  );
 }
 
-// Preload the model so it's ready before the overlay mounts
 useGLTF.preload('/models/assistant.glb');
 
 interface AssistantCharacterProps {
@@ -70,21 +34,26 @@ interface AssistantCharacterProps {
 }
 
 /**
- * Renders a 3D GLB character in a transparent R3F canvas.
- * Must be dynamically imported with `ssr: false` — Three.js requires a browser environment.
+ * Renders the Shiba 3D model in a transparent R3F canvas.
+ * Must be dynamically imported with `ssr: false`.
  *
- * @param animationState - The current logical animation state for the character.
+ * @param animationState - Drives CSS animations on the overlay wrapper.
  */
-export function AssistantCharacter({ animationState }: AssistantCharacterProps) {
+export function AssistantCharacter({ animationState: _ }: AssistantCharacterProps) {
   return (
     <Canvas
       gl={{ alpha: true }}
-      camera={{ position: [0, 0.5, 3.5], fov: 45 }}
+      camera={{ position: [0, 0, 3.5], fov: 60 }}
       style={{ background: 'transparent', width: '100%', height: '100%' }}
     >
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[2, 4, 2]} intensity={1} />
-      <CharacterModel animationState={animationState} />
+      <ambientLight intensity={0.6} />
+      {/* Key light — warm from front-left */}
+      <directionalLight position={[-2, 3, 4]} intensity={1.4} color="#fff5e0" />
+      {/* Fill light — cool from right */}
+      <directionalLight position={[3, 1, 1]} intensity={0.5} color="#c8d8ff" />
+      {/* Rim light — blue from behind */}
+      <directionalLight position={[0, 3, -5]} intensity={1.0} color="#5599ff" />
+      <CharacterModel />
     </Canvas>
   );
 }

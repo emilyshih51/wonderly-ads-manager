@@ -1,11 +1,12 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { AssistantTooltip } from './assistant-tooltip';
 import { AssistantPanel } from './assistant-panel';
 import type { AnimationState } from './assistant-character';
+import { cn } from '@/lib/utils';
 
 // Lazy-load Three.js — never runs on server
 const AssistantCharacter = dynamic(
@@ -14,36 +15,58 @@ const AssistantCharacter = dynamic(
 );
 
 /**
- * Fixed-position overlay that renders the 3D assistant character and chat panel.
- * Reads `assistantEnabled` from the store and renders nothing when disabled.
+ * Fixed-position overlay with the 3D Shiba and chat panel.
+ * Hover → wiggle, click → bounce + open panel.
  */
 export function AssistantOverlay() {
   const { assistantEnabled, assistantPanelOpen, toggleAssistantPanel } = useAssistantStore();
   const [hovered, setHovered] = useState(false);
-  const [animState] = useState<AnimationState>('idle');
+  const [animState, setAnimState] = useState<AnimationState>('idle');
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleIdle = useCallback((delay: number) => {
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => setAnimState('idle'), delay);
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    setHovered(true);
+
+    if (animState === 'idle') {
+      setAnimState('wave');
+      scheduleIdle(1000);
+    }
+  }, [animState, scheduleIdle]);
+
+  const handleMouseLeave = useCallback(() => setHovered(false), []);
+
+  const handleClick = useCallback(() => {
+    toggleAssistantPanel();
+    setAnimState('celebrate');
+    scheduleIdle(600);
+  }, [toggleAssistantPanel, scheduleIdle]);
 
   if (!assistantEnabled) return null;
 
   return (
     <>
-      {/* Character button */}
-      <div className="fixed right-6 bottom-6 z-[10000]" style={{ width: 110, height: 110 }}>
+      <div className="fixed right-6 bottom-6 z-[10000] h-[110px] w-[110px]">
         <div
-          className="relative h-full w-full cursor-pointer"
-          onClick={toggleAssistantPanel}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
           role="button"
           tabIndex={0}
           aria-label="Open assistant chat"
-          onKeyDown={(e) => e.key === 'Enter' && toggleAssistantPanel()}
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+          className={cn(
+            'relative h-full w-full cursor-pointer transition-transform duration-200 hover:scale-110 active:scale-95'
+          )}
         >
           <AssistantTooltip visible={hovered && !assistantPanelOpen} />
           <AssistantCharacter animationState={animState} />
         </div>
       </div>
-
-      {/* Chat panel */}
       <AssistantPanel />
     </>
   );

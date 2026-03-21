@@ -691,7 +691,7 @@ export default function AutomationsPage() {
       {viewMode === 'list' && (
         <div className="flex-1 overflow-y-auto">
           {rulesLoading ? (
-            <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 md:px-8">
+            <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
               <div className="space-y-8">
                 <Card>
                   <CardContent className="p-6">
@@ -742,7 +742,7 @@ export default function AutomationsPage() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 md:px-8">
+            <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
               <div className="space-y-8">
                 {/* Copilot */}
                 <CopilotCard onSubmit={useCopilot} />

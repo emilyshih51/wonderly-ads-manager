@@ -82,7 +82,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-3xl p-8">
+    <div className="max-w-3xl p-4 sm:p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-[var(--color-foreground)]">{t('title')}</h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
@@ -152,9 +152,9 @@ export default function SettingsPage() {
         {/* Slack Bot Integration */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#4A154B]/10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#4A154B]/10">
                   <svg className="h-5 w-5" viewBox="0 0 54 54" fill="none">
                     <path
                       d="M19.712.133a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386h5.376V5.52A5.381 5.381 0 0 0 19.712.133m0 14.365H5.376A5.381 5.381 0 0 0 0 19.884a5.381 5.381 0 0 0 5.376 5.387h14.336a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386"
@@ -352,12 +352,12 @@ export default function SettingsPage() {
         </Card>
 
         {/* Danger Zone */}
-        <div className="rounded-xl border border-red-200 dark:border-red-900/50">
-          <div className="flex items-center gap-2 border-b border-red-200 px-6 py-3 dark:border-red-900/50">
+        <div className="rounded-xl border border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20">
+          <div className="flex items-center gap-2 border-b border-red-200 px-4 py-3 sm:px-6 dark:border-red-900/50">
             <AlertTriangle className="h-4 w-4 text-red-500" />
             <h3 className="text-sm font-medium text-red-600 dark:text-red-400">Danger Zone</h3>
           </div>
-          <div className="flex items-center justify-between p-6">
+          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
               <p className="text-sm font-medium text-[var(--color-foreground)]">{t('signOut')}</p>
               <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
@@ -365,7 +365,7 @@ export default function SettingsPage() {
               </p>
             </div>
             <form action="/api/auth/logout" method="POST">
-              <Button variant="destructive" size="sm" type="submit">
+              <Button variant="destructive" size="sm" type="submit" className="w-full sm:w-auto">
                 <LogOut className="mr-1.5 h-3.5 w-3.5" />
                 {t('signOut')}
               </Button>

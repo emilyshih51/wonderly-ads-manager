@@ -1,6 +1,6 @@
 'use client';
 
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/providers';
 import { useCallback } from 'react';
 import { useSyncExternalStore } from 'react';
 import { Moon, Sun } from 'lucide-react';

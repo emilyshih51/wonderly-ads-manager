@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { BarChart2, Bot, Zap, Globe, ChevronDown, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/providers';
 import { useSyncExternalStore } from 'react';
 import { setLocale } from '@/i18n/actions';
 import { locales, type Locale, LOCALE_COOKIE } from '@/i18n/config';

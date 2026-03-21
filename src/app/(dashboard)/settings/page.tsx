@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, Copy, Check, LogOut } from 'lucide-react';
@@ -44,6 +45,7 @@ export default function SettingsPage() {
     return m ? (decodeURIComponent(m[1]) as FontChoice) : defaultFont;
   });
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const eventUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/slack/events`;
   const interactionUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/slack/interactions`;
@@ -58,7 +60,7 @@ export default function SettingsPage() {
     setCurrentLocale(locale);
     startTransition(async () => {
       await setLocale(locale);
-      window.location.reload();
+      router.refresh();
     });
   };
 
@@ -66,7 +68,7 @@ export default function SettingsPage() {
     setCurrentFont(font);
     startTransition(async () => {
       await setFont(font);
-      window.location.reload();
+      router.refresh();
     });
   };
 

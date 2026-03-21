@@ -108,7 +108,8 @@
     "costResult": "Cost/Result",
     "dragToReorder": "Drag to reorder charts",
     "addChart": "Add chart",
-    "resetLayout": "Reset"
+    "resetLayout": "Reset",
+    "clickToEditBudget": "Click to edit budget"
   },
   "campaigns": {
     "title": "Campaigns",
@@ -118,7 +119,9 @@
     "duplicate": "Duplicate",
     "duplicating": "Duplicating…",
     "viewAds": "View Ads",
-    "noCampaignsFound": "No campaigns found for this period."
+    "noCampaignsFound": "No campaigns found for this period.",
+    "duplicateDesc": "Create a copy of \"{name}\" with all the same settings. The copy will be created in PAUSED status.",
+    "activePaused": "{active} active, {paused} paused"
   },
   "ads": {
     "title": "Top Performing Ads",

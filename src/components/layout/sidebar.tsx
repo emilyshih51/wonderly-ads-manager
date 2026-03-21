@@ -379,7 +379,7 @@ export function Sidebar() {
       <div className="hidden h-16 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-5 md:flex">
         <MetaLogo className="h-8 w-8 shrink-0" />
         <span className="text-sm font-semibold whitespace-nowrap text-[var(--color-sidebar-foreground)]">
-          Ads Manager
+          {t('adsManager')}
         </span>
       </div>
 
@@ -557,7 +557,7 @@ export function Sidebar() {
       <div className="shrink-0 space-y-1.5 border-t border-white/[0.06] px-3 py-4">
         {/* Language switcher */}
         <div>
-          <MaybeTooltip collapsed={collapsed} label="Language">
+          <MaybeTooltip collapsed={collapsed} label={t('language')}>
             <button
               ref={langDropdown.triggerRef}
               onClick={langDropdown.toggle}
@@ -623,7 +623,7 @@ export function Sidebar() {
         </MaybeTooltip>
 
         {/* Collapse toggle — hidden on mobile */}
-        <MaybeTooltip collapsed={collapsed} label={collapsed ? 'Expand' : ''}>
+        <MaybeTooltip collapsed={collapsed} label={collapsed ? t('expand') : ''}>
           <button
             onClick={toggleSidebar}
             className={cn(
@@ -636,7 +636,7 @@ export function Sidebar() {
             ) : (
               <>
                 <ChevronsLeft className="h-4.5 w-4.5 shrink-0" />
-                <span className="font-medium">Collapse</span>
+                <span className="font-medium">{t('collapse')}</span>
               </>
             )}
           </button>
@@ -668,13 +668,13 @@ export function Sidebar() {
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
           className="rounded-md p-1.5 text-[var(--color-sidebar-foreground)] hover:bg-white/10"
-          aria-label="Toggle menu"
+          aria-label={t('toggleMenu')}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
         <MetaLogo className="h-6 w-6 shrink-0" />
         <span className="text-sm font-semibold text-[var(--color-sidebar-foreground)]">
-          Ads Manager
+          {t('adsManager')}
         </span>
       </div>
 

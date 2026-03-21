@@ -31,6 +31,7 @@ const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.
 export default function TopPerformingAdsPage() {
   const t = useTranslations('ads');
   const tCommon = useTranslations('common');
+  const tMetrics = useTranslations('metrics');
   const { setDatePreset, filterCampaignId, filterAdSetId, setFilterCampaignId, setFilterAdSetId } =
     useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
@@ -91,7 +92,7 @@ export default function TopPerformingAdsPage() {
 
   // Resolve filter chip label
   const filterLabel = filterCampaignId
-    ? (campaigns.find((c) => c.id === filterCampaignId)?.name ?? 'Campaign filter')
+    ? (campaigns.find((c) => c.id === filterCampaignId)?.name ?? tCommon('campaign'))
     : null;
 
   const clearFilter = () => {
@@ -113,7 +114,7 @@ export default function TopPerformingAdsPage() {
                   : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               )}
               onClick={() => setViewMode('gallery')}
-              aria-label="Gallery view"
+              aria-label={tCommon('galleryView')}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
@@ -125,7 +126,7 @@ export default function TopPerformingAdsPage() {
                   : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               )}
               onClick={() => setViewMode('table')}
-              aria-label="Table view"
+              aria-label={tCommon('tableView')}
             >
               <LayoutList className="h-4 w-4" />
             </button>
@@ -142,13 +143,15 @@ export default function TopPerformingAdsPage() {
         {/* Cross-table filter chip */}
         {filterLabel && (
           <div className="mb-4 flex items-center gap-2">
-            <span className="text-sm text-[var(--color-muted-foreground)]">Filtered by:</span>
+            <span className="text-sm text-[var(--color-muted-foreground)]">
+              {tCommon('filteredBy')}
+            </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)] px-3 py-1 text-sm font-medium text-[var(--color-primary-foreground)]">
               {filterLabel}
               <button
                 onClick={clearFilter}
                 className="ml-1 rounded-full p-0.5 hover:bg-white/20"
-                aria-label="Clear filter"
+                aria-label={tCommon('clearFilter')}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -161,13 +164,13 @@ export default function TopPerformingAdsPage() {
           <div className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4">
             <div className="min-w-[200px] flex-1">
               <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
-                Campaign
+                {tCommon('campaign')}
               </label>
               <SelectNative
                 value={selectedCampaign}
                 onChange={(e) => setSelectedCampaign(e.target.value)}
                 options={[
-                  { label: 'All Campaigns', value: 'all' },
+                  { label: tCommon('allCampaigns'), value: 'all' },
                   ...campaigns.map((c) => ({ label: c.name, value: c.id })),
                 ]}
               />
@@ -175,7 +178,7 @@ export default function TopPerformingAdsPage() {
 
             <div className="min-w-[200px] flex-1">
               <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
-                Date Range
+                {tCommon('dateRange')}
               </label>
               <SelectNative
                 value={localDatePreset}
@@ -210,34 +213,34 @@ export default function TopPerformingAdsPage() {
                     #
                   </th>
                   <th className="w-12 px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Image
+                    {tCommon('image')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Ad Name
+                    {tMetrics('adName')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Campaign
+                    {tCommon('campaign')}
                   </th>
                   <th className="w-20 px-6 py-3 text-left text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Status
+                    {tCommon('status')}
                   </th>
                   <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Results
+                    {tMetrics('results')}
                   </th>
                   <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    CPA
+                    {tMetrics('cpa')}
                   </th>
                   <th className="w-20 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Spend
+                    {tMetrics('spend')}
                   </th>
                   <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    CTR %
+                    {tMetrics('ctrPercent')}
                   </th>
                   <th className="w-16 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Clicks
+                    {tMetrics('clicks')}
                   </th>
                   <th className="w-24 px-6 py-3 text-right text-xs font-semibold text-[var(--color-muted-foreground)]">
-                    Impressions
+                    {tMetrics('impressions')}
                   </th>
                 </tr>
               </thead>
@@ -325,9 +328,9 @@ export default function TopPerformingAdsPage() {
         {/* Summary */}
         {!isLoading && ads.length > 0 && (
           <div className="mt-6 text-sm text-[var(--color-muted-foreground)]">
-            Showing{' '}
-            <span className="font-semibold text-[var(--color-foreground)]">{ads.length}</span> top
-            performing ads
+            {tCommon('showing')}{' '}
+            <span className="font-semibold text-[var(--color-foreground)]">{ads.length}</span>{' '}
+            {tCommon('topPerformingAds')}
           </div>
         )}
       </div>

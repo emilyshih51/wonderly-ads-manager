@@ -2,6 +2,7 @@
 
 import { type Table } from '@tanstack/react-table';
 import { Search, X } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -21,8 +22,11 @@ interface DataTableToolbarProps<TData> {
 export function DataTableToolbar<TData>({
   table,
   searchKey,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
 }: DataTableToolbarProps<TData>) {
+  const tCommon = useTranslations('common');
+  const resolvedPlaceholder = searchPlaceholder ?? tCommon('searchPlaceholder');
+
   if (!searchKey) return null;
 
   const column = table.getColumn(searchKey);
@@ -33,7 +37,7 @@ export function DataTableToolbar<TData>({
       <div className="relative max-w-xs flex-1">
         <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
         <Input
-          placeholder={searchPlaceholder}
+          placeholder={resolvedPlaceholder}
           value={filterValue}
           onChange={(e) => column?.setFilterValue(e.target.value)}
           className="pl-9"

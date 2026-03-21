@@ -15,7 +15,7 @@ interface TriggerNodeProps {
 export function TriggerNode({ data, selected }: TriggerNodeProps) {
   return (
     <div
-      className={`min-w-[220px] rounded-xl border-2 bg-white px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-amber-300'}`}
+      className={`min-w-[220px] rounded-xl border-2 bg-[var(--color-card)] px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-amber-300'}`}
     >
       <div className="mb-2 flex items-center gap-2">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100">
@@ -25,9 +25,11 @@ export function TriggerNode({ data, selected }: TriggerNodeProps) {
           Trigger
         </span>
       </div>
-      <p className="text-sm font-medium text-gray-900">{data.label || 'Select trigger...'}</p>
+      <p className="text-sm font-medium text-[var(--color-foreground)]">
+        {data.label || 'Select trigger...'}
+      </p>
       {data.config?.entity_type ? (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
           {String(data.config.entity_type)} •{' '}
           {data.config.schedule === 'hourly' ? 'Every hour' : 'Every 15 min'}
         </p>

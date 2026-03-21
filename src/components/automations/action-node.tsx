@@ -14,7 +14,7 @@ interface ActionNodeProps {
 export function ActionNode({ data, selected }: ActionNodeProps) {
   return (
     <div
-      className={`min-w-[220px] rounded-xl border-2 bg-white px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-emerald-300'}`}
+      className={`min-w-[220px] rounded-xl border-2 bg-[var(--color-card)] px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-emerald-300'}`}
     >
       <Handle
         type="target"
@@ -29,9 +29,11 @@ export function ActionNode({ data, selected }: ActionNodeProps) {
           Action
         </span>
       </div>
-      <p className="text-sm font-medium text-gray-900">{data.label || 'Select action...'}</p>
+      <p className="text-sm font-medium text-[var(--color-foreground)]">
+        {data.label || 'Select action...'}
+      </p>
       {data.config?.action_type ? (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
           {data.config.action_type === 'pause'
             ? 'Pause ad/ad set'
             : data.config.action_type === 'activate'

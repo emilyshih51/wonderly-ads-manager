@@ -24,9 +24,13 @@ import {
   X,
 } from 'lucide-react';
 
+import { useTranslations } from 'next-intl';
+
 const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
 
 export default function TopPerformingAdsPage() {
+  const t = useTranslations('ads');
+  const tCommon = useTranslations('common');
   const { setDatePreset, filterCampaignId, filterAdSetId, setFilterCampaignId, setFilterAdSetId } =
     useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
@@ -97,7 +101,7 @@ export default function TopPerformingAdsPage() {
 
   return (
     <div>
-      <Header title="Top Performing Ads" description="Your best performing ads ranked by results">
+      <Header title={t('title')} description={t('description')}>
         <div className="flex items-center gap-2">
           {/* View toggle */}
           <div className="flex items-center rounded-lg border border-[var(--color-border)] p-0.5">
@@ -129,7 +133,7 @@ export default function TopPerformingAdsPage() {
 
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
-            Refresh
+            {tCommon('refresh')}
           </Button>
         </div>
       </Header>
@@ -190,10 +194,7 @@ export default function TopPerformingAdsPage() {
             <CardContent className="py-16 text-center">
               <Trophy className="mx-auto mb-3 h-12 w-12 text-[var(--color-muted-foreground)]" />
               <p className="text-lg font-medium text-[var(--color-foreground)]">
-                No ads with results found for this period
-              </p>
-              <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-                Try adjusting your filters or date range
+                {t('noAdsFound')}
               </p>
             </CardContent>
           </Card>

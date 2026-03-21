@@ -34,6 +34,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
+import { useTranslations } from 'next-intl';
 
 const logger = createLogger('Dashboard');
 
@@ -148,6 +149,9 @@ function sumCampaigns(campaigns: CampaignRow[]) {
 /* ---------- Component ---------- */
 
 export default function DashboardPage() {
+  const t = useTranslations('dashboard');
+  const tMetrics = useTranslations('metrics');
+  const tCommon = useTranslations('common');
   const { datePreset } = useAppStore();
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
@@ -218,7 +222,7 @@ export default function DashboardPage() {
       ? (campaigns.find((c) => c.id === selectedCampaign)?.result_action_type ?? null)
       : null;
 
-  const { metricCards, chartData } = useMemo(() => {
+  const { metricCards } = useMemo(() => {
     const t = sumCampaigns(activeCampaigns);
     const prior = sumCampaigns(priorCampaigns);
 
@@ -253,7 +257,7 @@ export default function DashboardPage() {
 
     const cards = [
       {
-        label: 'Amount Spent',
+        label: tMetrics('amountSpent'),
         value: formatCurrency(t.spend),
         icon: DollarSign,
         color: 'text-emerald-600',
@@ -263,7 +267,7 @@ export default function DashboardPage() {
         isPositiveTrend: false, // higher spend = bad
       },
       {
-        label: 'CPM',
+        label: tMetrics('cpm'),
         value: cpm,
         icon: Eye,
         color: 'text-blue-600',
@@ -273,7 +277,7 @@ export default function DashboardPage() {
         isPositiveTrend: false,
       },
       {
-        label: 'CTR',
+        label: tMetrics('ctr'),
         value: ctr,
         icon: MousePointer,
         color: 'text-purple-600',
@@ -283,7 +287,7 @@ export default function DashboardPage() {
         isPositiveTrend: true,
       },
       {
-        label: 'CPC',
+        label: tMetrics('cpc'),
         value: cpc,
         icon: TrendingUp,
         color: 'text-amber-600',
@@ -293,7 +297,7 @@ export default function DashboardPage() {
         isPositiveTrend: false,
       },
       {
-        label: 'Results',
+        label: tMetrics('results'),
         value: formatNumber(t.results),
         icon: Target,
         color: 'text-rose-600',
@@ -303,7 +307,7 @@ export default function DashboardPage() {
         isPositiveTrend: true,
       },
       {
-        label: 'Cost / Result',
+        label: tMetrics('costPerResult'),
         value: cpr !== null ? formatCurrency(cpr) : '-',
         icon: BarChart3,
         color: 'text-indigo-600',
@@ -317,13 +321,9 @@ export default function DashboardPage() {
       },
     ];
 
-    const cd = timeSeries.map((row) => ({
-      date: row.date_start?.split('T')[0]?.slice(5) || '',
-      spend: parseFloat(row.spend || '0'),
-      results: parseInt((row as unknown as Record<string, string>)['actions'] ? '0' : '0'),
-    }));
-
-    return { metricCards: cards, chartData: cd };
+    return { metricCards: cards };
+    // tMetrics and tCommon are stable refs from next-intl — safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCampaigns, priorCampaigns, selectedCampaign, timeSeries]);
 
   const spendChartData = useMemo(
@@ -335,19 +335,17 @@ export default function DashboardPage() {
     [timeSeries]
   );
 
-  const clicksChartData = useMemo(
+  const resultsChartData = useMemo(
     () =>
       timeSeries.map((row) => ({
         date: row.date_start?.split('T')[0]?.slice(5) || '',
-        clicks: parseInt(row.clicks || '0'),
+        results: getResults(row.actions, selectedResultActionType),
       })),
-    [timeSeries]
+    [timeSeries, selectedResultActionType]
   );
 
-  void chartData;
-
   const campaignOptions = [
-    { label: 'All Campaigns', value: 'all' },
+    { label: tCommon('allCampaigns'), value: 'all' },
     ...campaigns.map((c) => ({ label: c.name, value: c.id })),
   ];
 
@@ -357,7 +355,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <Header title="Dashboard" description="Overview of your ad account performance">
+      <Header title={t('title')} description={t('description')}>
         <div className="flex items-center gap-3">
           {campaignsFetching && (
             <RefreshCw className="h-4 w-4 animate-spin text-[var(--color-muted-foreground)]" />
@@ -374,7 +372,7 @@ export default function DashboardPage() {
       <div className="space-y-8 p-8">
         {selectedCampaign !== 'all' && (
           <Button variant="ghost" size="sm" onClick={() => setSelectedCampaign('all')}>
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back to all campaigns
+            <ArrowLeft className="mr-1 h-4 w-4" /> {t('backToAllCampaigns')}
           </Button>
         )}
 
@@ -401,7 +399,7 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="p-6">
               <h3 className="mb-1 text-sm font-semibold text-[var(--color-foreground)]">
-                Spend Over Time
+                {t('spendOverTime')}
               </h3>
               <p className="mb-4 text-xs text-[var(--color-muted-foreground)]">
                 {datePreset.replace('_', ' ')}
@@ -419,15 +417,15 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="p-6">
               <h3 className="mb-1 text-sm font-semibold text-[var(--color-foreground)]">
-                Clicks Over Time
+                {t('resultsOverTime')}
               </h3>
               <p className="mb-4 text-xs text-[var(--color-muted-foreground)]">
                 {datePreset.replace('_', ' ')}
               </p>
               <BarChart
-                data={clicksChartData}
+                data={resultsChartData}
                 xKey="date"
-                series={[{ key: 'clicks', label: 'Clicks', color: '#6366f1' }]}
+                series={[{ key: 'results', label: tMetrics('results'), color: '#6366f1' }]}
                 format="number"
                 height={280}
               />
@@ -439,35 +437,35 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="p-6">
             <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
-              Campaign Performance
+              {t('campaignPerformance')}
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
                     <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      Campaign
+                      {t('campaign')}
                     </th>
                     <th className="px-2 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      Status
+                      {tCommon('status')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      Spend
+                      {tMetrics('spend')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      Results
+                      {tMetrics('results')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      CPM
+                      {tMetrics('cpm')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      CTR
+                      {tMetrics('ctr')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      CPC
+                      {tMetrics('cpc')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      Cost/Result
+                      {t('costResult')}
                     </th>
                   </tr>
                 </thead>
@@ -478,7 +476,7 @@ export default function DashboardPage() {
                         colSpan={8}
                         className="py-8 text-center text-[var(--color-muted-foreground)]"
                       >
-                        Loading…
+                        {tCommon('loading')}
                       </td>
                     </tr>
                   ) : activeCampaigns.length === 0 ? (
@@ -487,7 +485,7 @@ export default function DashboardPage() {
                         colSpan={8}
                         className="py-8 text-center text-[var(--color-muted-foreground)]"
                       >
-                        No campaigns found
+                        {t('noCampaignsFound')}
                       </td>
                     </tr>
                   ) : (
@@ -546,32 +544,34 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="p-6">
               <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
-                Ad Sets — {campaigns.find((c) => c.id === selectedCampaign)?.name}
+                {t('adSetsFor', {
+                  name: campaigns.find((c) => c.id === selectedCampaign)?.name ?? '',
+                })}
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--color-border)]">
                       <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Ad Set
+                        {t('adSet')}
                       </th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Status
+                        {tCommon('status')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Budget
+                        {tMetrics('budget')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Spend
+                        {tMetrics('spend')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        Results
+                        {tMetrics('results')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        CTR
+                        {tMetrics('ctr')}
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        CPC
+                        {tMetrics('cpc')}
                       </th>
                     </tr>
                   </thead>
@@ -582,7 +582,7 @@ export default function DashboardPage() {
                           colSpan={7}
                           className="py-8 text-center text-[var(--color-muted-foreground)]"
                         >
-                          Loading ad sets…
+                          {t('loadingAdSets')}
                         </td>
                       </tr>
                     ) : drillAdSets.length === 0 ? (
@@ -591,7 +591,7 @@ export default function DashboardPage() {
                           colSpan={7}
                           className="py-8 text-center text-[var(--color-muted-foreground)]"
                         >
-                          No ad sets found
+                          {t('noAdSetsFound')}
                         </td>
                       </tr>
                     ) : (
@@ -691,7 +691,7 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="p-6">
               <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
-                Ad Performance
+                {t('adPerformance')}
               </h3>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {drillAds.map((ad) => {
@@ -724,20 +724,24 @@ export default function DashboardPage() {
                         <div className="mt-2 grid grid-cols-3 gap-1 text-xs">
                           <div>
                             <span className="block text-[var(--color-muted-foreground)]">
-                              Spend
+                              {tMetrics('spend')}
                             </span>
                             <span className="font-medium text-[var(--color-foreground)]">
                               {formatCurrency(i?.spend)}
                             </span>
                           </div>
                           <div>
-                            <span className="block text-[var(--color-muted-foreground)]">CTR</span>
+                            <span className="block text-[var(--color-muted-foreground)]">
+                              {tMetrics('ctr')}
+                            </span>
                             <span className="font-medium text-[var(--color-foreground)]">
                               {formatPercent(i?.ctr)}
                             </span>
                           </div>
                           <div>
-                            <span className="block text-[var(--color-muted-foreground)]">CPC</span>
+                            <span className="block text-[var(--color-muted-foreground)]">
+                              {tMetrics('cpc')}
+                            </span>
                             <span className="font-medium text-[var(--color-foreground)]">
                               {formatCurrency(i?.cost_per_inline_link_click)}
                             </span>

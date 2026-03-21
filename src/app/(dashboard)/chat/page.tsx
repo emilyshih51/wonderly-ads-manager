@@ -26,6 +26,8 @@ import {
 import DOMPurify from 'dompurify';
 import { createLogger } from '@/services/logger';
 
+import { useTranslations } from 'next-intl';
+
 const logger = createLogger('Chat');
 
 /* ───── types ───── */
@@ -852,11 +854,12 @@ function actionColor(type: string): string {
   if (type.startsWith('resume')) return 'border-green-200 bg-green-50';
   if (type === 'adjust_budget') return 'border-blue-200 bg-blue-50';
 
-  return 'border-gray-200 bg-gray-50';
+  return 'border-[var(--color-border)] bg-[var(--color-muted)]';
 }
 
 /* ───── main component ───── */
 export default function ChatPage() {
+  const t = useTranslations('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1119,7 +1122,7 @@ export default function ChatPage() {
         return (
           <h5
             key={i}
-            className="mt-4 mb-1 text-xs font-semibold tracking-wider text-gray-500 uppercase"
+            className="mt-4 mb-1 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase"
           >
             {line.slice(5)}
           </h5>
@@ -1144,7 +1147,7 @@ export default function ChatPage() {
         );
       // Horizontal rule
       if (line.trim() === '---' || line.trim() === '***')
-        return <hr key={i} className="my-3 border-gray-200" />;
+        return <hr key={i} className="my-3 border-[var(--color-border)]" />;
       // Bold + italic
       let html = line
         .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
@@ -1154,10 +1157,10 @@ export default function ChatPage() {
       // Inline code
       html = html.replace(
         /`([^`]+)`/g,
-        '<code class="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono">$1</code>'
+        '<code class="bg-[var(--color-muted)] px-1 py-0.5 rounded text-xs font-mono">$1</code>'
       );
       // Metric highlights: detect patterns like "$24.72" or "↓22%" or "+15.3%"
-      html = html.replace(/(\$[\d,.]+)/g, '<span class="font-semibold text-gray-900">$1</span>');
+      html = html.replace(/(\$[\d,.]+)/g, '<span class="font-semibold">$1</span>');
       html = html.replace(
         /(↑[\d.]+%|↑\d+)/g,
         '<span class="font-semibold text-green-600">$1</span>'
@@ -1225,9 +1228,9 @@ export default function ChatPage() {
         key={idx}
         className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${colors} transition-all`}
       >
-        <Icon className="h-4 w-4 flex-shrink-0 text-gray-600" />
+        <Icon className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-gray-900">
+          <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
             {label}: {name}
             {budgetStr}
           </p>
@@ -1249,7 +1252,7 @@ export default function ChatPage() {
             </button>
             <button
               onClick={() => dismissAction(msgId, idx)}
-              className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1275,12 +1278,10 @@ export default function ChatPage() {
   return (
     <div className="flex h-screen flex-col">
       {/* Custom header without date picker — AI Chat always loads all available data */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-8 py-5">
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-8 py-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI Chat</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Deep performance analysis powered by Claude — includes last 30 days of data
-          </p>
+          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">{t('title')}</h1>
+          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
         </div>
       </div>
 
@@ -1292,8 +1293,10 @@ export default function ChatPage() {
               <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600">
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
-              <h2 className="mb-2 text-2xl font-bold text-gray-900">Ask anything about your ads</h2>
-              <p className="mx-auto max-w-lg text-gray-500">
+              <h2 className="mb-2 text-2xl font-bold text-[var(--color-foreground)]">
+                Ask anything about your ads
+              </h2>
+              <p className="mx-auto max-w-lg text-[var(--color-muted-foreground)]">
                 Powered by Claude with access to your live Meta Ads data — including today vs
                 yesterday comparisons, hourly data, and audience breakdowns.
               </p>
@@ -1311,7 +1314,7 @@ export default function ChatPage() {
                 </div>
               )}
               {!dataLoading && dataStats && (
-                <div className="mt-4 flex items-center justify-center gap-4 text-xs text-gray-400">
+                <div className="mt-4 flex items-center justify-center gap-4 text-xs text-[var(--color-muted-foreground)]">
                   <span>{dataStats.campaigns} campaigns</span>
                   <span>·</span>
                   <span>{dataStats.adSets} ad sets</span>
@@ -1349,7 +1352,7 @@ export default function ChatPage() {
                     key={idx}
                     onClick={() => sendMessage(prompt.prompt)}
                     disabled={isLoading || dataLoading}
-                    className="group flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left transition-all hover:border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                    className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-50"
                   >
                     <div
                       className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${colorClasses}`}
@@ -1357,8 +1360,12 @@ export default function ChatPage() {
                       <Icon className="h-4.5 w-4.5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{prompt.label}</p>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{prompt.prompt}</p>
+                      <p className="text-sm font-medium text-[var(--color-foreground)]">
+                        {prompt.label}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-[var(--color-muted-foreground)]">
+                        {prompt.prompt}
+                      </p>
                     </div>
                   </button>
                 );
@@ -1382,27 +1389,27 @@ export default function ChatPage() {
                   className={`max-w-[85%] ${
                     msg.role === 'user'
                       ? 'rounded-2xl rounded-tr-md bg-blue-600 px-4 py-3 text-white'
-                      : 'rounded-2xl rounded-tl-md border border-gray-200 bg-white px-5 py-4'
+                      : 'rounded-2xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-4'
                   }`}
                 >
                   {msg.isLoading ? (
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-[var(--color-muted-foreground)]">
                         Diagnosing performance hour-by-hour…
                       </span>
                     </div>
                   ) : (
                     <>
                       <div
-                        className={`space-y-1 text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-gray-800'}`}
+                        className={`space-y-1 text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-[var(--color-foreground)]'}`}
                       >
                         {formatContent(msg.content)}
                       </div>
                       {/* Action approval cards */}
                       {msg.actions && msg.actions.length > 0 && (
-                        <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
-                          <p className="flex items-center gap-1 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                        <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
+                          <p className="flex items-center gap-1 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
                             <Zap className="h-3 w-3" /> Suggested Actions
                           </p>
                           {msg.actions.map((action, idx) => renderActionCard(action, msg.id, idx))}
@@ -1412,8 +1419,8 @@ export default function ChatPage() {
                   )}
                 </div>
                 {msg.role === 'user' && (
-                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                    <User className="h-4 w-4 text-gray-600" />
+                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-muted)]">
+                    <User className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                   </div>
                 )}
               </div>
@@ -1424,7 +1431,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-gray-200 bg-white px-8 py-4">
+      <div className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-8 py-4">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-end gap-3">
             <Button
@@ -1443,7 +1450,7 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask: Why are conversions low today? / What should I scale? / Give me a health check..."
-                className="max-h-[120px] min-h-[44px] w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-3 pr-12 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="max-h-[120px] min-h-[44px] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 pr-12 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 rows={1}
                 disabled={isLoading}
               />
@@ -1457,7 +1464,7 @@ export default function ChatPage() {
               </Button>
             </div>
           </div>
-          <p className="mt-2 text-center text-xs text-gray-400">
+          <p className="mt-2 text-center text-xs text-[var(--color-muted-foreground)]">
             Powered by Claude · Comparing today vs yesterday + hourly data + audience breakdowns
           </p>
         </div>

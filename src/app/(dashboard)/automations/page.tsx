@@ -54,6 +54,8 @@ import {
 import type { RuleConfig, Condition } from '@/lib/automation-config';
 import type { AutomationNode, AutomationEdge } from '@/types';
 
+import { useTranslations } from 'next-intl';
+
 const logger = createLogger('Automations');
 
 /* ─────────── Types ─────────── */
@@ -253,23 +255,27 @@ function StepHeader({
   return (
     <button
       onClick={onToggle}
-      className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-gray-50"
+      className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-[var(--color-muted)]"
     >
       <div
         className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-          isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+          isComplete
+            ? 'bg-emerald-100 text-emerald-700'
+            : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
         }`}
       >
         {isComplete ? <Check className="h-4 w-4" /> : number}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900">{title}</p>
-        {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
+        <p className="text-sm font-semibold text-[var(--color-foreground)]">{title}</p>
+        {subtitle && (
+          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">{subtitle}</p>
+        )}
       </div>
       {isOpen ? (
-        <ChevronUp className="h-4 w-4 flex-shrink-0 text-gray-400" />
+        <ChevronUp className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
       ) : (
-        <ChevronDown className="h-4 w-4 flex-shrink-0 text-gray-400" />
+        <ChevronDown className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
       )}
     </button>
   );
@@ -308,13 +314,13 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
       <div className="relative z-10">
         <div className="mb-4 flex items-center gap-2">
           <Wand2 className="h-5 w-5 text-blue-600" />
-          <h3 className="text-sm font-semibold text-gray-900">Copilot</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Copilot</h3>
           <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
             AI beta
           </span>
         </div>
 
-        <p className="mb-3 text-xs text-gray-600">
+        <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">
           Describe what you want to automate in plain English
         </p>
 
@@ -325,7 +331,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
             onKeyDown={handleKeyDown}
             placeholder="Pause ads with CPA over $25 in Brad campaign... or promote ads with CPA under $16 and results above 3"
             disabled={isSubmitting}
-            className="h-24 w-full resize-none rounded-lg border border-blue-200 bg-white p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-24 w-full resize-none rounded-lg border border-blue-200 bg-[var(--color-card)] p-3 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <div className="flex justify-end">
@@ -354,6 +360,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
 }
 
 export default function AutomationsPage() {
+  const t = useTranslations('automations');
   const { data: rules = [] } = useRules();
   const { data: activityLog = [] } = useAutomationHistory();
   const saveRule = useSaveRule();
@@ -628,7 +635,7 @@ export default function AutomationsPage() {
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-8 py-5">
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-8 py-5">
         <div className="flex items-center gap-3">
           {viewMode === 'editor' && (
             <Button
@@ -641,13 +648,11 @@ export default function AutomationsPage() {
             </Button>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {viewMode === 'list' ? 'Automations' : selectedRule ? 'Edit Rule' : 'New Rule'}
+            <h1 className="text-2xl font-bold text-[var(--color-foreground)]">
+              {viewMode === 'list' ? t('title') : selectedRule ? t('saveRule') : t('newRule')}
             </h1>
-            <p className="mt-0.5 text-sm text-gray-500">
-              {viewMode === 'list'
-                ? 'Rules that automatically manage your ads'
-                : 'Configure your automation step by step'}
+            <p className="mt-0.5 text-sm text-[var(--color-muted-foreground)]">
+              {viewMode === 'list' ? t('description') : t('conditions')}
             </p>
           </div>
         </div>
@@ -681,7 +686,7 @@ export default function AutomationsPage() {
 
             {/* Templates */}
             <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
                 Templates
               </h2>
               <div className="grid grid-cols-1 gap-2">
@@ -689,12 +694,14 @@ export default function AutomationsPage() {
                   <button
                     key={t.id}
                     onClick={() => applyTemplate(t)}
-                    className="group flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left transition-all hover:border-gray-300 hover:shadow-sm"
+                    className="group flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:border-[var(--color-border)] hover:shadow-sm"
                   >
                     <span className="text-xl">{t.icon}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">{t.description}</p>
+                      <p className="text-sm font-medium text-[var(--color-foreground)]">{t.name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                        {t.description}
+                      </p>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-medium text-blue-600 opacity-0 transition-opacity group-hover:opacity-100">
                       Use <ArrowRight className="h-3.5 w-3.5" />
@@ -706,14 +713,16 @@ export default function AutomationsPage() {
 
             {/* Active Rules */}
             <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
                 Your Rules {rules.length > 0 && `(${rules.length})`}
               </h2>
               {rules.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 py-12 text-center">
-                  <Zap className="mx-auto mb-3 h-8 w-8 text-gray-300" />
-                  <p className="text-sm text-gray-500">No rules yet</p>
-                  <p className="mt-1 text-xs text-gray-400">Pick a template or create a new rule</p>
+                <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-12 text-center">
+                  <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                  <p className="text-sm text-[var(--color-muted-foreground)]">No rules yet</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Pick a template or create a new rule
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -729,7 +738,7 @@ export default function AutomationsPage() {
                     return (
                       <div
                         key={rule.id}
-                        className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-4"
+                        className="flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
                       >
                         <button
                           onClick={() => handleToggle(rule)}
@@ -739,13 +748,13 @@ export default function AutomationsPage() {
                           {rule.is_active ? (
                             <ToggleRight className="h-7 w-7 text-emerald-500" />
                           ) : (
-                            <ToggleLeft className="h-7 w-7 text-gray-300" />
+                            <ToggleLeft className="h-7 w-7 text-[var(--color-muted-foreground)]" />
                           )}
                         </button>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p
-                              className={`text-sm font-medium ${rule.is_active ? 'text-gray-900' : 'text-gray-400'}`}
+                              className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
                             >
                               {rule.name}
                             </p>
@@ -753,13 +762,13 @@ export default function AutomationsPage() {
                               className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
                                 rule.is_active
                                   ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-gray-100 text-gray-400'
+                                  : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                               }`}
                             >
                               {rule.is_active ? 'Active' : 'Off'}
                             </span>
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-400">
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
                             {cfg.campaign_name && (
                               <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
                             )}
@@ -775,7 +784,7 @@ export default function AutomationsPage() {
                             )}
                           </div>
                           {condSummary && (
-                            <p className="mt-0.5 truncate text-xs text-gray-400">
+                            <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
                               If: {condSummary}
                             </p>
                           )}
@@ -804,7 +813,7 @@ export default function AutomationsPage() {
                             className="h-8 w-8"
                             onClick={() => editRule(rule)}
                           >
-                            <Settings2 className="h-3.5 w-3.5 text-gray-400" />
+                            <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -812,7 +821,7 @@ export default function AutomationsPage() {
                             className="h-8 w-8"
                             onClick={() => handleDelete(rule.id)}
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-gray-300 hover:text-red-400" />
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
                           </Button>
                         </div>
                       </div>
@@ -824,14 +833,14 @@ export default function AutomationsPage() {
 
             {/* Activity Log */}
             <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-gray-400 uppercase">
+              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
                 Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
               </h2>
               {activityLog.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 py-8 text-center">
-                  <Activity className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-                  <p className="text-sm text-gray-500">No runs yet</p>
-                  <p className="mt-1 text-xs text-gray-400">
+                <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-8 text-center">
+                  <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                  <p className="text-sm text-[var(--color-muted-foreground)]">No runs yet</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                     Test or activate a rule to see results here
                   </p>
                 </div>
@@ -851,7 +860,7 @@ export default function AutomationsPage() {
                     return (
                       <div
                         key={event.id}
-                        className="rounded-xl border border-gray-200 bg-white p-4"
+                        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -864,7 +873,9 @@ export default function AutomationsPage() {
                             >
                               {isTest ? 'Test' : 'Live'}
                             </span>
-                            <p className="text-sm font-medium text-gray-900">{event.rule_name}</p>
+                            <p className="text-sm font-medium text-[var(--color-foreground)]">
+                              {event.rule_name}
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             {!isTest &&
@@ -876,7 +887,7 @@ export default function AutomationsPage() {
                                 <button
                                   onClick={() => handleRollback(event.id, event.results || [])}
                                   disabled={rollingBackId === event.id}
-                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
                                   title="Undo actions from this run"
                                 >
                                   {rollingBackId === event.id ? (
@@ -887,26 +898,32 @@ export default function AutomationsPage() {
                                   Undo
                                 </button>
                               )}
-                            <p className="text-xs text-gray-400">{timeStr}</p>
+                            <p className="text-xs text-[var(--color-muted-foreground)]">
+                              {timeStr}
+                            </p>
                           </div>
                         </div>
-                        <div className="mt-2 text-xs text-gray-500">
+                        <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
                           {event.matched === 0 ? (
                             <p>No ads matched the conditions</p>
                           ) : (
                             <div className="space-y-1.5">
                               <p>
-                                <span className="font-medium text-gray-700">{event.matched}</span>{' '}
+                                <span className="font-medium text-[var(--color-foreground)]">
+                                  {event.matched}
+                                </span>{' '}
                                 ad{event.matched !== 1 ? 's' : ''} matched
                               </p>
                               {event.results?.map((r, i) => (
                                 <div
                                   key={i}
-                                  className="flex items-center justify-between border-l-2 border-gray-100 pl-3"
+                                  className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
                                 >
-                                  <span className="truncate text-gray-700">{r.entity_name}</span>
+                                  <span className="truncate text-[var(--color-foreground)]">
+                                    {r.entity_name}
+                                  </span>
                                   <div className="ml-2 flex flex-shrink-0 items-center gap-2">
-                                    <span className="text-gray-400">
+                                    <span className="text-[var(--color-muted-foreground)]">
                                       ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'} ·{' '}
                                       {r.metrics?.results ?? 0} results
                                     </span>
@@ -946,11 +963,11 @@ export default function AutomationsPage() {
 
       {/* ─── EDITOR VIEW (Step-by-step form) ─── */}
       {viewMode === 'editor' && (
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="flex-1 overflow-y-auto bg-[var(--color-background)]">
           <div className="mx-auto max-w-2xl space-y-4 px-8 py-6">
             {/* Rule Name */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <label className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+              <label className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
                 Rule Name
               </label>
               <Input
@@ -962,7 +979,7 @@ export default function AutomationsPage() {
             </div>
 
             {/* ─── STEP 1: Apply rule to ─── */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
               <StepHeader
                 number={1}
                 title="Apply rule to"
@@ -976,10 +993,10 @@ export default function AutomationsPage() {
                 isComplete={isStep1Complete}
               />
               {openStep === 1 && (
-                <div className="space-y-4 border-t border-gray-100 px-5 pt-4 pb-5">
+                <div className="space-y-4 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
                   {/* Entity type */}
                   <div>
-                    <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       Entity Level
                     </label>
                     <div className="mt-2 flex gap-2">
@@ -989,8 +1006,8 @@ export default function AutomationsPage() {
                           onClick={() => updateConfig({ entity_type: type })}
                           className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                             config.entity_type === type
-                              ? 'border-gray-900 bg-gray-900 text-white'
-                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                              ? 'border-[var(--color-foreground)] bg-[var(--color-foreground)] text-[var(--color-background)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border)]'
                           }`}
                         >
                           {type === 'ad' ? 'Ads' : type === 'adset' ? 'Ad Sets' : 'Campaigns'}
@@ -1001,7 +1018,7 @@ export default function AutomationsPage() {
 
                   {/* Campaign selector */}
                   <div>
-                    <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       Campaign
                     </label>
                     <div className="mt-2">
@@ -1017,14 +1034,14 @@ export default function AutomationsPage() {
                         placeholder="Search by campaign name..."
                       />
                     </div>
-                    <p className="mt-1.5 text-xs text-gray-400">
+                    <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
                       Leave empty to apply to all campaigns
                     </p>
                   </div>
 
                   {/* Schedule */}
                   <div>
-                    <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       Check Frequency
                     </label>
                     <SelectNative
@@ -1037,7 +1054,7 @@ export default function AutomationsPage() {
 
                   {/* Performance period */}
                   <div>
-                    <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       Performance Period
                     </label>
                     <SelectNative
@@ -1046,7 +1063,7 @@ export default function AutomationsPage() {
                       options={DATE_PRESET_OPTIONS}
                       className="mt-2"
                     />
-                    <p className="mt-1.5 text-xs text-gray-400">
+                    <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
                       Time range used when evaluating conditions
                     </p>
                   </div>
@@ -1064,7 +1081,7 @@ export default function AutomationsPage() {
             </div>
 
             {/* ─── STEP 2: Conditions ─── */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
               <StepHeader
                 number={2}
                 title="Conditions"
@@ -1083,13 +1100,15 @@ export default function AutomationsPage() {
                 isComplete={isStep2Complete}
               />
               {openStep === 2 && (
-                <div className="space-y-3 border-t border-gray-100 px-5 pt-4 pb-5">
-                  <p className="text-xs text-gray-500">All conditions must be met (AND logic)</p>
+                <div className="space-y-3 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    All conditions must be met (AND logic)
+                  </p>
 
                   {config.conditions.map((cond, i) => (
                     <div key={cond.id} className="flex items-start gap-2">
                       {i > 0 && (
-                        <span className="mt-2 rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-400">
+                        <span className="mt-2 rounded bg-[var(--color-muted)] px-2 py-1 text-xs font-semibold text-[var(--color-muted-foreground)]">
                           AND
                         </span>
                       )}
@@ -1127,10 +1146,10 @@ export default function AutomationsPage() {
                       </div>
                       <button
                         onClick={() => removeCondition(cond.id)}
-                        className={`mt-2 rounded p-1 hover:bg-gray-100 ${config.conditions.length <= 1 ? 'cursor-not-allowed opacity-30' : ''}`}
+                        className={`mt-2 rounded p-1 hover:bg-[var(--color-muted)] ${config.conditions.length <= 1 ? 'cursor-not-allowed opacity-30' : ''}`}
                         disabled={config.conditions.length <= 1}
                       >
-                        <X className="h-4 w-4 text-gray-400" />
+                        <X className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                       </button>
                     </div>
                   ))}
@@ -1143,7 +1162,7 @@ export default function AutomationsPage() {
                   </button>
 
                   {/* Preview Matching Ads */}
-                  <div className="mt-4 border-t border-gray-100 pt-4">
+                  <div className="mt-4 border-t border-[var(--color-border)] pt-4">
                     <div className="flex items-center justify-between">
                       <Button
                         variant="outline"
@@ -1162,41 +1181,47 @@ export default function AutomationsPage() {
                         )}
                       </Button>
                       {previewLoaded && (
-                        <span className="text-sm text-gray-600">
-                          <span className="font-semibold text-gray-900">{previewAds.length}</span>{' '}
+                        <span className="text-sm text-[var(--color-muted-foreground)]">
+                          <span className="font-semibold text-[var(--color-foreground)]">
+                            {previewAds.length}
+                          </span>{' '}
                           of {previewTotal} ads match
                         </span>
                       )}
                     </div>
 
                     {previewLoaded && previewAds.length > 0 && (
-                      <div className="mt-3 overflow-hidden rounded-lg border border-gray-200">
+                      <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-50">
+                          <thead className="bg-[var(--color-muted)]">
                             <tr>
-                              <th className="px-3 py-2 text-left font-medium text-gray-500">
+                              <th className="px-3 py-2 text-left font-medium text-[var(--color-muted-foreground)]">
                                 Ad Name
                               </th>
-                              <th className="px-3 py-2 text-right font-medium text-gray-500">
+                              <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
                                 Spend
                               </th>
-                              <th className="px-3 py-2 text-right font-medium text-gray-500">
+                              <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
                                 Results
                               </th>
-                              <th className="px-3 py-2 text-right font-medium text-gray-500">
+                              <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
                                 CPA
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-100">
+                          <tbody className="divide-y divide-[var(--color-border)]">
                             {previewAds.slice(0, 10).map((ad) => (
-                              <tr key={ad.ad_id} className="hover:bg-gray-50">
-                                <td className="max-w-[200px] truncate px-3 py-2 text-gray-900">
+                              <tr key={ad.ad_id} className="hover:bg-[var(--color-muted)]">
+                                <td className="max-w-[200px] truncate px-3 py-2 text-[var(--color-foreground)]">
                                   {ad.ad_name}
                                 </td>
-                                <td className="px-3 py-2 text-right text-gray-600">${ad.spend}</td>
-                                <td className="px-3 py-2 text-right text-gray-600">{ad.results}</td>
-                                <td className="px-3 py-2 text-right text-gray-600">
+                                <td className="px-3 py-2 text-right text-[var(--color-muted-foreground)]">
+                                  ${ad.spend}
+                                </td>
+                                <td className="px-3 py-2 text-right text-[var(--color-muted-foreground)]">
+                                  {ad.results}
+                                </td>
+                                <td className="px-3 py-2 text-right text-[var(--color-muted-foreground)]">
                                   {ad.cpa === 'N/A' ? '—' : `$${ad.cpa}`}
                                 </td>
                               </tr>
@@ -1204,7 +1229,7 @@ export default function AutomationsPage() {
                           </tbody>
                         </table>
                         {previewAds.length > 10 && (
-                          <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-400">
+                          <div className="border-t border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-xs text-[var(--color-muted-foreground)]">
                             + {previewAds.length - 10} more ads
                           </div>
                         )}
@@ -1212,11 +1237,11 @@ export default function AutomationsPage() {
                     )}
 
                     {previewLoaded && previewAds.length === 0 && (
-                      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-                        <p className="text-sm text-gray-500">
+                      <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
+                        <p className="text-sm text-[var(--color-muted-foreground)]">
                           No ads currently match these conditions
                         </p>
-                        <p className="mt-1 text-xs text-gray-400">
+                        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                           Check your campaign selection and thresholds
                         </p>
                       </div>
@@ -1236,7 +1261,7 @@ export default function AutomationsPage() {
             </div>
 
             {/* ─── STEP 3: Action ─── */}
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
               <StepHeader
                 number={3}
                 title="Action"
@@ -1250,10 +1275,10 @@ export default function AutomationsPage() {
                 isComplete={isStep3Complete}
               />
               {openStep === 3 && (
-                <div className="space-y-4 border-t border-gray-100 px-5 pt-4 pb-5">
+                <div className="space-y-4 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
                   {/* Action type */}
                   <div>
-                    <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       Action Type
                     </label>
                     <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1288,15 +1313,15 @@ export default function AutomationsPage() {
                           onClick={() => updateConfig({ action_type: action.value })}
                           className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
                             config.action_type === action.value
-                              ? 'border-gray-900 bg-gray-900 text-white'
-                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                              ? 'border-[var(--color-foreground)] bg-[var(--color-foreground)] text-[var(--color-background)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border)]'
                           }`}
                         >
                           {action.icon}
                           <div>
                             <p className="text-sm font-medium">{action.label}</p>
                             <p
-                              className={`text-[10px] ${config.action_type === action.value ? 'text-gray-300' : 'text-gray-400'}`}
+                              className={`text-[10px] ${config.action_type === action.value ? 'opacity-70' : 'text-[var(--color-muted-foreground)]'}`}
                             >
                               {action.desc}
                             </p>
@@ -1309,9 +1334,9 @@ export default function AutomationsPage() {
                   {/* Promote target */}
                   {config.action_type === 'promote' && (
                     <div>
-                      <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                      <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                         Target Ad Set{' '}
-                        <span className="font-normal text-gray-400 normal-case">
+                        <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
                           (duplicate winning ads here)
                         </span>
                       </label>
@@ -1332,7 +1357,7 @@ export default function AutomationsPage() {
                   )}
 
                   {/* Slack notification */}
-                  <div className="border-t border-gray-100 pt-4">
+                  <div className="border-t border-[var(--color-border)] pt-4">
                     <label className="flex cursor-pointer items-center gap-2.5">
                       <input
                         type="checkbox"
@@ -1342,9 +1367,9 @@ export default function AutomationsPage() {
                             also_notify_slack: e.target.checked,
                           })
                         }
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                        className="h-4 w-4 rounded border-[var(--color-border)] text-blue-600"
                       />
-                      <span className="text-sm font-medium text-gray-700">
+                      <span className="text-sm font-medium text-[var(--color-foreground)]">
                         Send Slack notification
                       </span>
                     </label>
@@ -1352,7 +1377,7 @@ export default function AutomationsPage() {
                     {config.also_notify_slack && (
                       <div className="mt-3 ml-6 space-y-3">
                         <div>
-                          <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                          <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                             Channel
                           </label>
                           <Input
@@ -1367,9 +1392,9 @@ export default function AutomationsPage() {
                           />
                         </div>
                         <div>
-                          <label className="text-xs font-medium tracking-wider text-gray-500 uppercase">
+                          <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                             Custom Message{' '}
-                            <span className="font-normal text-gray-400 normal-case">
+                            <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
                               (optional)
                             </span>
                           </label>
@@ -1380,7 +1405,7 @@ export default function AutomationsPage() {
                                 slack_message: e.target.value,
                               })
                             }
-                            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             rows={3}
                             placeholder="Leave empty for default message"
                           />
@@ -1421,10 +1446,10 @@ export default function AutomationsPage() {
                           {/* Live preview with matched ad data */}
                           {(config.slack_message || previewAds.length > 0) && (
                             <div className="mt-3">
-                              <p className="mb-1.5 text-[10px] font-medium tracking-wider text-gray-500 uppercase">
+                              <p className="mb-1.5 text-[10px] font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                                 Message Preview
                               </p>
-                              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm whitespace-pre-wrap text-gray-700">
+                              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3 text-sm whitespace-pre-wrap text-[var(--color-foreground)]">
                                 {(() => {
                                   const sampleAd = previewAds[0];
                                   const actionVerb =
@@ -1457,7 +1482,7 @@ export default function AutomationsPage() {
                                 })()}
                               </div>
                               {previewAds.length > 0 && (
-                                <p className="mt-1 text-[10px] text-gray-400">
+                                <p className="mt-1 text-[10px] text-[var(--color-muted-foreground)]">
                                   Previewing with: {previewAds[0].ad_name}
                                 </p>
                               )}
@@ -1473,11 +1498,13 @@ export default function AutomationsPage() {
 
             {/* ─── Summary + Actions ─── */}
             {isStep1Complete && isStep2Complete && isStep3Complete && (
-              <div className="rounded-xl border border-gray-200 bg-white p-5">
-                <h3 className="mb-3 text-sm font-semibold text-gray-900">Summary</h3>
-                <div className="space-y-2 text-sm text-gray-600">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+                <h3 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
+                  Summary
+                </h3>
+                <div className="space-y-2 text-sm text-[var(--color-muted-foreground)]">
                   <p>
-                    <span className="text-gray-400">Apply to:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">Apply to:</span>{' '}
                     {config.entity_type === 'ad'
                       ? 'All ads'
                       : config.entity_type === 'adset'
@@ -1486,11 +1513,13 @@ export default function AutomationsPage() {
                     {config.campaign_name && ` in "${config.campaign_name}"`}
                   </p>
                   <p>
-                    <span className="text-gray-400">When:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">When:</span>{' '}
                     {config.conditions.map((c, i) => (
                       <span key={c.id}>
-                        {i > 0 && <span className="text-gray-400"> AND </span>}
-                        <span className="font-medium text-gray-800">
+                        {i > 0 && (
+                          <span className="text-[var(--color-muted-foreground)]"> AND </span>
+                        )}
+                        <span className="font-medium text-[var(--color-foreground)]">
                           {METRIC_OPTIONS.find((m) => m.value === c.metric)?.label} {c.operator}{' '}
                           {c.threshold}
                         </span>
@@ -1498,8 +1527,8 @@ export default function AutomationsPage() {
                     ))}
                   </p>
                   <p>
-                    <span className="text-gray-400">Then:</span>{' '}
-                    <span className="font-medium text-gray-800 capitalize">
+                    <span className="text-[var(--color-muted-foreground)]">Then:</span>{' '}
+                    <span className="font-medium text-[var(--color-foreground)] capitalize">
                       {config.action_type}
                     </span>
                     {config.action_type === 'promote' && config.target_adset_name && (
@@ -1510,13 +1539,13 @@ export default function AutomationsPage() {
                     )}
                   </p>
                   <p>
-                    <span className="text-gray-400">Frequency:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">Frequency:</span>{' '}
                     {SCHEDULE_LABELS[config.schedule]} ·{' '}
                     {DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.label ||
                       config.date_preset}
                   </p>
                 </div>
-                <div className="mt-4 flex items-center gap-2 border-t border-gray-100 pt-4">
+                <div className="mt-4 flex items-center gap-2 border-t border-[var(--color-border)] pt-4">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1552,22 +1581,29 @@ export default function AutomationsPage() {
                 <p className="text-sm text-red-700">{testResults.error}</p>
               </div>
             ) : testResults?.matched === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-                <p className="text-sm font-medium text-gray-600">No ads matched the conditions</p>
-                <p className="mt-1 text-xs text-gray-400">
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
+                <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
+                  No ads matched the conditions
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                   Either no ads meet the thresholds, or check the campaign filter.
                 </p>
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium text-gray-900">{testResults?.matched || 0}</span> ad
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  <span className="font-medium text-[var(--color-foreground)]">
+                    {testResults?.matched || 0}
+                  </span>{' '}
+                  ad
                   {testResults?.matched !== 1 ? 's' : ''} would be affected:
                 </p>
                 {testResults?.results?.map((r: TestResultEntry, i: number) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                  <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
                     <div className="flex items-center justify-between">
-                      <p className="truncate text-sm font-medium text-gray-900">{r.entity_name}</p>
+                      <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
+                        {r.entity_name}
+                      </p>
                       <span
                         className={`rounded px-2 py-0.5 text-[10px] font-medium ${
                           r.action?.includes('pause')
@@ -1580,7 +1616,7 @@ export default function AutomationsPage() {
                         {r.action?.replace('would_', '→ ')}
                       </span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-500">
+                    <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
                       <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
                       <span>Results: {r.metrics?.results}</span>
                       <span>
@@ -1655,20 +1691,29 @@ export default function AutomationsPage() {
                 <p className="text-sm text-red-700">{runResults.error}</p>
               </div>
             ) : runResults?.matched === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-                <p className="text-sm font-medium text-gray-600">No ads matched the conditions</p>
-                <p className="mt-1 text-xs text-gray-400">No actions were taken.</p>
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
+                <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
+                  No ads matched the conditions
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  No actions were taken.
+                </p>
               </div>
             ) : (
               <>
-                <p className="text-sm text-gray-600">
-                  <span className="font-medium text-gray-900">{runResults?.matched || 0}</span> ad
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  <span className="font-medium text-[var(--color-foreground)]">
+                    {runResults?.matched || 0}
+                  </span>{' '}
+                  ad
                   {runResults?.matched !== 1 ? 's' : ''} affected:
                 </p>
                 {runResults?.results?.map((r: TestResultEntry, i: number) => (
-                  <div key={i} className="rounded-lg border border-gray-200 p-3">
+                  <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
                     <div className="flex items-center justify-between">
-                      <p className="truncate text-sm font-medium text-gray-900">{r.entity_name}</p>
+                      <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
+                        {r.entity_name}
+                      </p>
                       <span
                         className={`rounded px-2 py-0.5 text-[10px] font-medium ${
                           r.action?.includes('pause')
@@ -1681,7 +1726,7 @@ export default function AutomationsPage() {
                         {r.action}
                       </span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-500">
+                    <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
                       <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
                       <span>Results: {r.metrics?.results}</span>
                       <span>

@@ -45,7 +45,7 @@ export function SlidePanel({
             'fixed top-0 right-0 z-50 flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-card)] shadow-xl',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
-            'duration-300'
+            'duration-300 ease-in-out'
           )}
           style={{ width }}
         >

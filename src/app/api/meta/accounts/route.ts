@@ -24,6 +24,8 @@ export async function GET() {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('GET /api/meta/accounts');
+
   try {
     const meta = new MetaService(session.meta_access_token, '');
     const data = await meta.request<{ data?: AdAccountRow[] }>('/me/adaccounts', {
@@ -51,6 +53,8 @@ export async function POST(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  logger.info('POST /api/meta/accounts');
 
   try {
     const { ad_account_id } = await request.json();

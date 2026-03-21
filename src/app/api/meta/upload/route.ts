@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const action = formData.get('action') as string;
 
+    logger.info('POST /api/meta/upload', { action });
+
     const meta = MetaService.fromSession(session);
 
     if (action === 'upload_image') {

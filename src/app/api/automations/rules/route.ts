@@ -19,6 +19,8 @@ export async function GET(_request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('GET /api/automations/rules');
+
   const store = await createRulesStore();
   const allRules = await store.getAll();
   // Filter rules for the current ad account (rules without ad_account_id are shown to all — legacy rules)
@@ -34,6 +36,8 @@ export async function POST(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  logger.info('POST /api/automations/rules');
 
   try {
     const body = await request.json();
@@ -102,6 +106,8 @@ export async function PUT(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('PUT /api/automations/rules');
+
   try {
     const body = await request.json();
     const ruleId = body.id;
@@ -143,6 +149,8 @@ export async function DELETE(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  logger.info('DELETE /api/automations/rules');
 
   const ruleId = request.nextUrl.searchParams.get('id');
 

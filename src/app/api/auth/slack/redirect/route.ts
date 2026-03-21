@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Auth:SlackRedirect');
 
 /**
  * GET /api/auth/slack/redirect
@@ -13,6 +16,7 @@ export async function GET() {
 
   if (result instanceof NextResponse) return result;
 
+  logger.info('Initiating Slack OAuth');
   const clientId = process.env.SLACK_CLIENT_ID!;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/slack/callback`;
   const scope = 'chat:write,channels:read,incoming-webhook';

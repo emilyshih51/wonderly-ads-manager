@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Automations:History');
 
 interface HistoryEvent {
   id: string;
@@ -36,9 +39,13 @@ export async function GET() {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('GET /api/automations/history');
+
   const redis = await getRedisClient();
 
   if (!redis) {
+    logger.info('Redis unavailable, returning empty history');
+
     return NextResponse.json({ data: [] });
   }
 
@@ -49,7 +56,7 @@ export async function GET() {
     try {
       history.push(JSON.parse(entry));
     } catch {
-      /* skip malformed entries */
+      logger.warn('Skipping malformed history entry');
     }
   }
 
@@ -69,9 +76,13 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('POST /api/automations/history');
+
   const redis = await getRedisClient();
 
   if (!redis) {
+    logger.warn('Redis unavailable');
+
     return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
   }
 
@@ -119,9 +130,13 @@ export async function DELETE() {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('DELETE /api/automations/history');
+
   const redis = await getRedisClient();
 
   if (!redis) {
+    logger.warn('Redis unavailable');
+
     return NextResponse.json({ error: 'Redis unavailable' }, { status: 503 });
   }
 

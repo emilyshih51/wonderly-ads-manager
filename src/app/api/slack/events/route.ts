@@ -58,7 +58,9 @@ export async function POST(request: NextRequest) {
 
   try {
     body = JSON.parse(rawBody) as SlackEventBody;
-  } catch {
+  } catch (e) {
+    logger.warn('Invalid event JSON', e);
+
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 

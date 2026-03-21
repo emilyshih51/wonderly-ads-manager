@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { createLogger } from '@/services/logger';
+
+const logger = createLogger('Meta:Debug');
 
 /**
  * GET /api/meta/debug
@@ -18,6 +21,8 @@ export async function GET() {
 
   if (result instanceof NextResponse) return result;
   const session = result;
+
+  logger.info('GET /api/meta/debug', { adAccountId: session.ad_account_id });
 
   const meta = MetaService.fromSession(session);
   const results: Record<string, unknown> = {
@@ -50,6 +55,8 @@ export async function GET() {
             raw_response: insights,
           };
         } catch (err) {
+          logger.error(`Campaign insights error for ${c.id}`, err);
+
           return {
             campaign_id: c.id,
             campaign_name: c.name,
@@ -61,6 +68,7 @@ export async function GET() {
 
     results.campaign_insights = campaignInsights;
   } catch (err) {
+    logger.error('Campaigns fetch error', err);
     results.campaigns_error = err instanceof Error ? err.message : String(err);
   }
 
@@ -71,6 +79,7 @@ export async function GET() {
 
     results.adsets = (adSets as { data?: unknown }).data;
   } catch (err) {
+    logger.error('Ad sets fetch error', err);
     results.adsets_error = err instanceof Error ? err.message : String(err);
   }
 
@@ -88,6 +97,7 @@ export async function GET() {
       success: true,
     };
   } catch (err) {
+    logger.error('Ad sets full fields error', err);
     results.adsets_full_fields_error = err instanceof Error ? err.message : String(err);
   }
 

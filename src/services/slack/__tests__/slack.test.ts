@@ -188,6 +188,34 @@ describe('SlackService', () => {
     });
   });
 
+  describe('buildNotificationBlocks() [static]', () => {
+    it('returns header + body + footer blocks', () => {
+      const blocks = SlackService.buildNotificationBlocks(
+        '*Header*',
+        ['Body line 1', 'Body line 2'],
+        '_footer_'
+      );
+
+      expect(blocks).toHaveLength(4);
+      expect(blocks[0]).toMatchObject({ type: 'section', text: { text: '*Header*' } });
+      expect(blocks[1]).toMatchObject({ type: 'section', text: { text: 'Body line 1' } });
+      expect(blocks[2]).toMatchObject({ type: 'section', text: { text: 'Body line 2' } });
+      expect(blocks[3]).toMatchObject({ type: 'context' });
+    });
+
+    it('omits footer when not provided', () => {
+      const blocks = SlackService.buildNotificationBlocks('*H*', ['Body']);
+
+      expect(blocks).toHaveLength(2);
+    });
+
+    it('skips empty body sections', () => {
+      const blocks = SlackService.buildNotificationBlocks('*H*', ['', 'Body', '']);
+
+      expect(blocks).toHaveLength(2);
+    });
+  });
+
   describe('sendAutomationNotification()', () => {
     const baseNotification = {
       ruleName: 'High CPA Rule',
@@ -199,20 +227,26 @@ describe('SlackService', () => {
       metrics: { spend: 50, results: 5, cost_per_result: 10, clicks: 100, ctr: 0.02 },
     };
 
-    it('posts a default message with emoji and metrics', async () => {
+    it('posts Block Kit blocks with [Wonderly] header and metrics', async () => {
       const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
       const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
 
       await svc.sendAutomationNotification('C1', baseNotification);
 
       const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(options.body as string) as { text: string };
+      const body = JSON.parse(options.body as string) as {
+        text: string;
+        blocks: Array<Record<string, unknown>>;
+      };
 
+      expect(body.blocks).toBeDefined();
+      expect(body.blocks.length).toBeGreaterThanOrEqual(3);
+      const headerBlock = body.blocks[0] as { text: { text: string } };
+
+      expect(headerBlock.text.text).toContain('[Wonderly]');
+      expect(headerBlock.text.text).toContain('High CPA Rule');
+      expect(body.text).toContain('[Wonderly]');
       expect(body.text).toContain('High CPA Rule');
-      expect(body.text).toContain('⏸️');
-      expect(body.text).toContain('Paused');
-      expect(body.text).toContain('$50.00');
-      expect(body.text).toContain('Results: 5');
     });
 
     it('renders a custom message template with placeholders', async () => {
@@ -225,7 +259,10 @@ describe('SlackService', () => {
       });
 
       const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(options.body as string) as { text: string };
+      const body = JSON.parse(options.body as string) as {
+        text: string;
+        blocks: Array<Record<string, unknown>>;
+      };
 
       expect(body.text).toContain('High CPA Rule');
       expect(body.text).toContain('Paused');
@@ -233,7 +270,7 @@ describe('SlackService', () => {
       expect(body.text).toContain('spend=$50.00');
     });
 
-    it('appends duplicate ad link when duplicatedAdId is provided', async () => {
+    it('includes duplicate ad link in blocks when duplicatedAdId is provided', async () => {
       const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
       const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
 
@@ -243,15 +280,22 @@ describe('SlackService', () => {
       });
 
       const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(options.body as string) as { text: string };
+      const body = JSON.parse(options.body as string) as {
+        blocks: Array<{ type: string; text?: { text: string } }>;
+      };
 
-      expect(body.text).toContain('Duplicated to winners ad set');
-      expect(body.text).toContain('dup-456');
+      const allBlockText = body.blocks
+        .filter((b) => b.text?.text)
+        .map((b) => b.text!.text)
+        .join(' ');
+
+      expect(allBlockText).toContain('Duplicated to winners ad set');
+      expect(allBlockText).toContain('dup-456');
     });
   });
 
   describe('sendBudgetNotification()', () => {
-    it('posts a budget changed message', async () => {
+    it('posts Block Kit blocks with budget details', async () => {
       const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
       const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
 
@@ -261,8 +305,12 @@ describe('SlackService', () => {
       });
 
       const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(options.body as string) as { text: string };
+      const body = JSON.parse(options.body as string) as {
+        text: string;
+        blocks: Array<Record<string, unknown>>;
+      };
 
+      expect(body.blocks).toBeDefined();
       expect(body.text).toContain('My Ad Set');
       expect(body.text).toContain('$100.00');
     });
@@ -283,6 +331,90 @@ describe('SlackService', () => {
       expect(body.text).toContain('raised');
       expect(body.text).toContain('$100.00');
       expect(body.text).toContain('$150.00');
+    });
+  });
+
+  describe('sendLaunchNotification()', () => {
+    it('posts Block Kit blocks with launch details', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendLaunchNotification('C1', {
+        adsetName: 'Summer Campaign',
+        budget: '$50.00/day',
+        adCount: 3,
+        status: 'Active',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as {
+        text: string;
+        blocks: Array<{ type: string; text?: { text: string } }>;
+      };
+
+      expect(body.blocks).toBeDefined();
+      expect(body.text).toContain('[Wonderly]');
+      expect(body.text).toContain('Summer Campaign');
+      const allBlockText = body.blocks
+        .filter((b) => b.text?.text)
+        .map((b) => b.text!.text)
+        .join(' ');
+
+      expect(allBlockText).toContain('Summer Campaign');
+      expect(allBlockText).toContain('$50.00/day');
+      expect(allBlockText).toContain('3 ads');
+      expect(allBlockText).toContain('Active');
+    });
+
+    it('renders custom message template with placeholders', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendLaunchNotification('C1', {
+        adsetName: 'My Set',
+        budget: '$25.00/day',
+        adCount: 2,
+        status: 'Paused (draft)',
+        customMessage: 'Launched {adset_name} with {budget} — {ad_count} ads as {status}',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as {
+        blocks: Array<{ type: string; text?: { text: string } }>;
+      };
+
+      const allBlockText = body.blocks
+        .filter((b) => b.text?.text)
+        .map((b) => b.text!.text)
+        .join(' ');
+
+      expect(allBlockText).toContain('Launched My Set with $25.00/day');
+      expect(allBlockText).toContain('2 ads as Paused (draft)');
+    });
+
+    it('uses singular "ad" when adCount is 1', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendLaunchNotification('C1', {
+        adsetName: 'Solo',
+        budget: '$10.00/day',
+        adCount: 1,
+        status: 'Active',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as {
+        blocks: Array<{ type: string; text?: { text: string } }>;
+      };
+
+      const allBlockText = body.blocks
+        .filter((b) => b.text?.text)
+        .map((b) => b.text!.text)
+        .join(' ');
+
+      expect(allBlockText).toContain('1 ad created');
+      expect(allBlockText).not.toContain('1 ads');
     });
   });
 });

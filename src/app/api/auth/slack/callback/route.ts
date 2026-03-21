@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
+  logger.info('Slack OAuth callback');
+
   const code = request.nextUrl.searchParams.get('code');
 
   if (!code) {

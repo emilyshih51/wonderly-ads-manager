@@ -86,9 +86,13 @@ export class ChatMemoryService {
     try {
       const key = redisKey(userId);
 
-      await this.redis.lPush(key, JSON.stringify(message));
-      await this.redis.lTrim(key, 0, MAX_MESSAGES - 1);
-      await this.redis.expire(key, TTL_SECONDS);
+      // Pipeline all three commands into a single round trip
+      await this.redis
+        .multi()
+        .lPush(key, JSON.stringify(message))
+        .lTrim(key, 0, MAX_MESSAGES - 1)
+        .expire(key, TTL_SECONDS)
+        .exec();
     } catch (error) {
       logger.error('Failed to append chat memory', error);
     }

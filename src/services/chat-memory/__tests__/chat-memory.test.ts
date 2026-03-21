@@ -16,6 +16,13 @@ function makeRedis(initial: StoredMessage[] = []) {
   // Store newest-first (like LPUSH would)
   const list = initial.map((m) => JSON.stringify(m)).reverse();
 
+  const multiChain = {
+    lPush: vi.fn().mockReturnThis(),
+    lTrim: vi.fn().mockReturnThis(),
+    expire: vi.fn().mockReturnThis(),
+    exec: vi.fn().mockResolvedValue([]),
+  };
+
   return {
     lRange: vi.fn().mockImplementation(async () => [...list]),
     lPush: vi.fn().mockImplementation(async (_key: string, value: string) => {
@@ -26,6 +33,8 @@ function makeRedis(initial: StoredMessage[] = []) {
     lTrim: vi.fn().mockResolvedValue('OK'),
     expire: vi.fn().mockResolvedValue(true),
     del: vi.fn().mockResolvedValue(1),
+    multi: vi.fn().mockReturnValue(multiChain),
+    _multiChain: multiChain,
   };
 }
 
@@ -87,18 +96,23 @@ describe('ChatMemoryService', () => {
       await expect(nullService.appendMessage('user-1', makeMessage())).resolves.toBeUndefined();
     });
 
-    it('calls LPUSH, LTRIM, and EXPIRE', async () => {
+    it('pipelines LPUSH, LTRIM, and EXPIRE via multi', async () => {
       const msg = makeMessage({ content: 'Test' });
 
       await service.appendMessage('user-1', msg);
 
-      expect(redis.lPush).toHaveBeenCalledWith('chat:memory:user-1', JSON.stringify(msg));
-      expect(redis.lTrim).toHaveBeenCalledWith('chat:memory:user-1', 0, 49);
-      expect(redis.expire).toHaveBeenCalledWith('chat:memory:user-1', 60 * 60 * 24 * 7);
+      expect(redis.multi).toHaveBeenCalled();
+      expect(redis._multiChain.lPush).toHaveBeenCalledWith(
+        'chat:memory:user-1',
+        JSON.stringify(msg)
+      );
+      expect(redis._multiChain.lTrim).toHaveBeenCalledWith('chat:memory:user-1', 0, 49);
+      expect(redis._multiChain.expire).toHaveBeenCalledWith('chat:memory:user-1', 60 * 60 * 24 * 7);
+      expect(redis._multiChain.exec).toHaveBeenCalled();
     });
 
     it('does not throw on Redis error', async () => {
-      redis.lPush.mockRejectedValue(new Error('Connection lost'));
+      redis._multiChain.exec.mockRejectedValue(new Error('Connection lost'));
 
       await expect(service.appendMessage('user-1', makeMessage())).resolves.toBeUndefined();
     });

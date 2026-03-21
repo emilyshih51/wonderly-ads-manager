@@ -141,15 +141,18 @@ export async function POST(request: NextRequest) {
     const storedHistory = await memory.getHistory(session.id);
     const history = storedHistory.map((m) => ({ role: m.role, content: m.content }));
 
-    // Persist the user message immediately
-    await memory.appendMessage(session.id, {
+    // Persist user message in parallel with the AI call (non-blocking)
+    const userMsgPromise = memory.appendMessage(session.id, {
       role: 'user',
       content: message,
       timestamp: Date.now(),
     });
 
     const ai = new AnthropicService(apiKey);
-    const stream = await ai.chat({ message, systemPrompt: SYSTEM_PROMPT, context, history });
+    const [stream] = await Promise.all([
+      ai.chat({ message, systemPrompt: SYSTEM_PROMPT, context, history }),
+      userMsgPromise,
+    ]);
 
     // Wrap the stream to accumulate the assistant's full response
     let fullContent = '';

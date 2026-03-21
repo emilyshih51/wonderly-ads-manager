@@ -200,7 +200,7 @@ export default function SettingsPage() {
                     <li>
                       Mention the bot in any channel:{' '}
                       <code className="rounded bg-[var(--color-card)] px-1.5 py-0.5 text-xs">
-                        @Wonderly how are my campaigns doing?
+                        @ads-manager how are my campaigns doing?
                       </code>
                     </li>
                     <li>It can answer questions about spend, results, CTR, and CPA.</li>

@@ -1523,13 +1523,13 @@ export default function ChatPage() {
               onClick={fetchData}
               disabled={dataLoading}
               title="Refresh data"
-              className="absolute top-1/2 left-3 -translate-y-1/2 rounded-md p-1 text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:opacity-50"
+              className="absolute top-3 left-3 rounded-md p-1 text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${dataLoading ? 'animate-spin' : ''}`} />
             </button>
             <Button
               size="icon"
-              className="absolute top-1/2 right-2 h-8 w-8 -translate-y-1/2 rounded-lg"
+              className="absolute top-1.5 right-2 h-8 w-8 rounded-lg"
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || isLoading}
             >

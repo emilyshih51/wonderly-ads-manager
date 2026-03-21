@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import {
   Inter,
   Noto_Sans,
@@ -97,11 +97,14 @@ const spaceGrotesk = Space_Grotesk({
   display: 'swap',
 });
 
+export const viewport: Viewport = {
+  themeColor: '#0467DF',
+};
+
 export const metadata: Metadata = {
   title: 'Wonderly Ads Manager',
   description: 'Manage your Meta ads, track performance, and automate your workflow.',
   manifest: '/manifest.json',
-  themeColor: '#0467DF',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

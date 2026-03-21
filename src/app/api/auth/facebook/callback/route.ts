@@ -68,24 +68,24 @@ export async function GET(request: NextRequest) {
     });
 
     // Allowlist check — only let authorized users in
-    const allowedEmails = (process.env.ALLOWED_EMAILS ?? '')
+    const allowedUserIds = (process.env.ALLOWED_USER_IDS ?? '')
       .replace(/^["']|["']$/g, '') // strip wrapping quotes from env value
       .split(',')
-      .map((s) => s.trim().toLowerCase())
+      .map((s) => s.trim())
       .filter(Boolean);
 
-    const userEmail = (userData.email ?? '').toLowerCase();
+    const userId = userData.id;
 
     logger.info('Login attempt', {
-      email: userEmail,
-      allowedEmails,
-      rawEnv: process.env.ALLOWED_EMAILS,
+      userId,
+      allowedUserIds,
+      rawEnv: process.env.ALLOWED_USER_IDS,
     });
 
-    if (allowedEmails.length > 0 && userEmail && !allowedEmails.includes(userEmail)) {
-      logger.warn('Login rejected — email not in allowlist', {
-        email: userEmail,
-        allowedEmails,
+    if (allowedUserIds.length > 0 && !allowedUserIds.includes(userId)) {
+      logger.warn('Login rejected — user ID not in allowlist', {
+        userId,
+        allowedUserIds,
       });
 
       return NextResponse.redirect(`${appUrl}/login?error=unauthorized`);

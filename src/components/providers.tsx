@@ -19,12 +19,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 /** Drop-in replacement for `next-themes` useTheme (light/dark only). */
 export const useTheme = () => useContext(ThemeContext);
 
-/**
- * Lightweight theme provider that avoids rendering a `<script>` tag inside
- * the React component tree (which triggers a React 19 console warning).
- *
- * The FOUC-prevention script lives in layout.tsx `<head>` instead.
- */
+/** Lightweight theme provider. Reads localStorage on mount and applies the theme class to `<html>`. */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'light';
@@ -41,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.classList.add(next);
   }, []);
 
-  // Apply class on mount (the <head> script handles FOUC, this syncs React state with DOM)
+  // Apply class on mount
   useEffect(() => {
     const root = document.documentElement;
 

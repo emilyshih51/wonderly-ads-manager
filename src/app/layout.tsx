@@ -159,6 +159,13 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("wonderly-theme")||"light";document.documentElement.classList.add(t)}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
         <ThemeProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>

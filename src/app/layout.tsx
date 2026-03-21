@@ -13,6 +13,7 @@ import {
 } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers';
 import { PWARegister } from '@/components/pwa-register';
+import { QueryProvider } from '@/lib/queries/client';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { cookies } from 'next/headers';
@@ -159,19 +160,14 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("wonderly-theme")||"light";document.documentElement.classList.add(t)}catch(e){}})()`,
-          }}
-        />
-      </head>
       <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
-        <ThemeProvider>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            {children}
-          </NextIntlClientProvider>
-        </ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider>
+            <NextIntlClientProvider key={locale} locale={locale} messages={messages}>
+              {children}
+            </NextIntlClientProvider>
+          </ThemeProvider>
+        </QueryProvider>
         <PWARegister />
       </body>
     </html>

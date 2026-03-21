@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('POST /api/meta/adsets/update');
+
   try {
     const body = (await request.json()) as {
       adset_id?: string;

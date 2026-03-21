@@ -18,6 +18,10 @@ export async function GET(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  const start = Date.now();
+
+  logger.info('GET /api/chat/data');
+
   const useMock =
     process.env.USE_MOCK_DATA === 'true' ||
     (process.env.NODE_ENV !== 'production' && request.nextUrl.searchParams.get('mock') === 'true');
@@ -42,6 +46,8 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(generateMockChatData());
     }
+
+    logger.info('Chat data fetched', { durationMs: Date.now() - start });
 
     return NextResponse.json({
       date: data.date,

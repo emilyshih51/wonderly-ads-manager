@@ -2,6 +2,7 @@
 
 import { type Table } from '@tanstack/react-table';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 
 interface DataTablePaginationProps<TData> {
@@ -14,6 +15,7 @@ interface DataTablePaginationProps<TData> {
  * @param table - TanStack table instance
  */
 export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
+  const tCommon = useTranslations('common');
   const { pageIndex, pageSize } = table.getState().pagination;
   const pageCount = table.getPageCount();
   const totalRows = table.getFilteredRowModel().rows.length;
@@ -24,7 +26,7 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
   return (
     <div className="flex items-center justify-between border-t border-[var(--color-border)] px-4 py-3">
       <p className="text-xs text-[var(--color-muted-foreground)]">
-        {totalRows === 0 ? 'No results' : `${from}–${to} of ${totalRows}`}
+        {totalRows === 0 ? tCommon('noResults') : `${from}–${to} of ${totalRows}`}
       </p>
 
       <div className="flex items-center gap-1">
@@ -35,7 +37,7 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
         >
           {[10, 25, 50].map((size) => (
             <option key={size} value={size}>
-              {size} / page
+              {`${size} ${tCommon('perPage')}`}
             </option>
           ))}
         </select>

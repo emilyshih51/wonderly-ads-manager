@@ -29,6 +29,7 @@ import type {
   ActionBlockType,
   AutomationNotification,
   BudgetNotification,
+  LaunchNotification,
 } from './types';
 
 const logger = createLogger('Slack');
@@ -285,10 +286,11 @@ export class SlackService {
         ? 'N/A'
         : `$${metrics.cost_per_result.toFixed(2)}`;
 
-    let text: string;
+    let fallbackText: string;
+    const bodySections: string[] = [];
 
     if (customMessage) {
-      text =
+      fallbackText =
         prefix +
         SlackService.sanitizeMentions(customMessage)
           .replace(/\{rule_name\}/g, SlackService.sanitizeMentions(ruleName))
@@ -301,10 +303,14 @@ export class SlackService {
           .replace(/\{cpa\}/g, cpaDisplay)
           .replace(/\{clicks\}/g, String(metrics.clicks ?? 0))
           .replace(/\{ctr\}/g, `${((metrics.ctr ?? 0) * 100).toFixed(2)}%`);
+
+      bodySections.push(fallbackText);
     } else {
-      text = `${prefix}${actionEmoji} *${ruleName}*\n`;
-      text += `${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>\n`;
-      text += `Spend: $${metrics.spend.toFixed(2)} · Results: ${resultDisplay} · CPA: ${cpaDisplay}`;
+      fallbackText = `${prefix}[Wonderly] ${actionEmoji} ${ruleName} — ${actionVerb} ${entityType}: ${entityName}`;
+      bodySections.push(`${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>`);
+      bodySections.push(
+        `*Spend:* $${metrics.spend.toFixed(2)}  *Results:* ${resultDisplay}  *CPA:* ${cpaDisplay}`
+      );
     }
 
     if (duplicatedAdId) {
@@ -312,10 +318,17 @@ export class SlackService {
       const dupFilterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${dupEncodedName}`;
       const dupLink = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId}&filter_set=${dupFilterSet}&selected_ad_ids=${duplicatedAdId}&nav_source=ads_manager`;
 
-      text += `\n📋 Duplicated to winners ad set: <${dupLink}|View new ad>`;
+      bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
     }
 
-    return this.postMessage(channelId, text);
+    const header = `${prefix}${actionEmoji} *[Wonderly]* ${ruleName}`;
+    const blocks = SlackService.buildNotificationBlocks(
+      header,
+      bodySections,
+      SlackService.timestampFooter()
+    );
+
+    return this.postMessage(channelId, fallbackText, blocks);
   }
 
   /**
@@ -332,16 +345,68 @@ export class SlackService {
     const { entityName, newBudget, previousBudget } = notification;
     const newDisplay = `$${newBudget.toFixed(2)}`;
 
-    let text = `💰 *[Wonderly]* ${entityName} budget changed to ${newDisplay}/day`;
+    let bodyText: string;
+    let fallbackText: string;
 
     if (previousBudget !== undefined) {
       const prevDisplay = `$${previousBudget.toFixed(2)}`;
       const direction = newBudget > previousBudget ? 'raised' : 'lowered';
 
-      text = `💰 *[Wonderly]* ${entityName} ${direction} budget from ${prevDisplay} to ${newDisplay}/day`;
+      bodyText = `*${entityName}* ${direction} budget from ${prevDisplay} to ${newDisplay}/day`;
+      fallbackText = `[Wonderly] ${entityName} ${direction} budget from ${prevDisplay} to ${newDisplay}/day`;
+    } else {
+      bodyText = `*${entityName}* budget changed to ${newDisplay}/day`;
+      fallbackText = `[Wonderly] ${entityName} budget changed to ${newDisplay}/day`;
     }
 
-    return this.postMessage(channelId, text);
+    const header = `*[Wonderly]* Budget Change`;
+    const blocks = SlackService.buildNotificationBlocks(
+      header,
+      [bodyText],
+      SlackService.timestampFooter()
+    );
+
+    return this.postMessage(channelId, fallbackText, blocks);
+  }
+
+  /**
+   * Post an ad set launch notification to a Slack channel.
+   *
+   * @param channelId - Slack channel ID to post to
+   * @param notification - Launch notification payload
+   * @returns The posted message metadata, or `null` on failure
+   */
+  async sendLaunchNotification(
+    channelId: string,
+    notification: LaunchNotification
+  ): Promise<SlackMessage | null> {
+    const { adsetName, budget, adCount, status, customMessage } = notification;
+
+    let bodyText: string;
+    let fallbackText: string;
+
+    if (customMessage) {
+      bodyText = SlackService.sanitizeMentions(customMessage)
+        .replace(/\{adset_name\}/g, SlackService.sanitizeMentions(adsetName))
+        .replace(/\{budget\}/g, budget)
+        .replace(/\{ad_count\}/g, String(adCount))
+        .replace(/\{status\}/g, status);
+      fallbackText = `[Wonderly] ${adsetName} launched with ${budget}`;
+    } else {
+      bodyText =
+        `*${SlackService.sanitizeMentions(adsetName)}* launched with ${budget}\n` +
+        `${adCount} ad${adCount !== 1 ? 's' : ''} created as ${status}`;
+      fallbackText = `[Wonderly] ${adsetName} launched with ${budget}`;
+    }
+
+    const header = `*[Wonderly]* Ad Set Launched`;
+    const blocks = SlackService.buildNotificationBlocks(
+      header,
+      [bodyText],
+      SlackService.timestampFooter()
+    );
+
+    return this.postMessage(channelId, fallbackText, blocks);
   }
 
   /**
@@ -457,6 +522,39 @@ export class SlackService {
             text: "_Click a button to execute the action. You'll be asked to confirm._",
           },
         ],
+      });
+    }
+
+    return blocks;
+  }
+
+  /**
+   * Build a Slack mrkdwn timestamp footer for notification blocks.
+   */
+  static timestampFooter(): string {
+    return `_${new Date().toLocaleTimeString()}_`;
+  }
+
+  /**
+   * Build a consistent Block Kit notification layout.
+   *
+   * @param header - Bold header line (mrkdwn)
+   * @param body - Body text sections (each becomes a section block)
+   * @param footer - Optional footer text shown as a context block
+   */
+  static buildNotificationBlocks(header: string, body: string[], footer?: string): SlackBlock[] {
+    const blocks: SlackBlock[] = [{ type: 'section', text: { type: 'mrkdwn', text: header } }];
+
+    for (const section of body) {
+      if (section) {
+        blocks.push({ type: 'section', text: { type: 'mrkdwn', text: section } });
+      }
+    }
+
+    if (footer) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: footer }],
       });
     }
 

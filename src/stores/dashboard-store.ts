@@ -40,51 +40,61 @@ export interface ChartWidget {
 /** Metadata for each available metric. */
 export const METRIC_OPTIONS: Record<
   ChartMetric,
-  { label: string; format: ChartFormat; defaultColor: string; defaultChartType: ChartType }
+  { labelKey: string; format: ChartFormat; defaultColor: string; defaultChartType: ChartType }
 > = {
-  spend: { label: 'Spend', format: 'currency', defaultColor: '#2563eb', defaultChartType: 'area' },
+  spend: {
+    labelKey: 'spend',
+    format: 'currency',
+    defaultColor: '#2563eb',
+    defaultChartType: 'area',
+  },
   impressions: {
-    label: 'Impressions',
+    labelKey: 'impressions',
     format: 'number',
     defaultColor: '#8b5cf6',
     defaultChartType: 'bar',
   },
-  clicks: { label: 'Clicks', format: 'number', defaultColor: '#f59e0b', defaultChartType: 'bar' },
-  ctr: { label: 'CTR', format: 'percent', defaultColor: '#10b981', defaultChartType: 'area' },
-  cpm: { label: 'CPM', format: 'currency', defaultColor: '#06b6d4', defaultChartType: 'area' },
-  cpc: { label: 'CPC', format: 'currency', defaultColor: '#ef4444', defaultChartType: 'area' },
+  clicks: {
+    labelKey: 'clicks',
+    format: 'number',
+    defaultColor: '#f59e0b',
+    defaultChartType: 'bar',
+  },
+  ctr: { labelKey: 'ctr', format: 'percent', defaultColor: '#10b981', defaultChartType: 'area' },
+  cpm: { labelKey: 'cpm', format: 'currency', defaultColor: '#06b6d4', defaultChartType: 'area' },
+  cpc: { labelKey: 'cpc', format: 'currency', defaultColor: '#ef4444', defaultChartType: 'area' },
   results: {
-    label: 'Results',
+    labelKey: 'results',
     format: 'number',
     defaultColor: '#6366f1',
     defaultChartType: 'bar',
   },
   cpr: {
-    label: 'Cost per Result',
+    labelKey: 'costPerResult',
     format: 'currency',
     defaultColor: '#ec4899',
     defaultChartType: 'area',
   },
-  reach: { label: 'Reach', format: 'number', defaultColor: '#14b8a6', defaultChartType: 'bar' },
+  reach: { labelKey: 'reach', format: 'number', defaultColor: '#14b8a6', defaultChartType: 'bar' },
 };
 
 /**
  * Pre-defined metric combinations that make analytical sense.
  * Each group contains metrics that are meaningful when compared together.
  */
-export const METRIC_COMBOS: { label: string; metrics: ChartMetric[] }[] = [
-  { label: 'Spend vs Results', metrics: ['spend', 'results'] },
-  { label: 'Spend vs CPA', metrics: ['spend', 'cpr'] },
-  { label: 'Clicks vs CTR', metrics: ['clicks', 'ctr'] },
-  { label: 'Spend vs Clicks', metrics: ['spend', 'clicks'] },
-  { label: 'Impressions vs Reach', metrics: ['impressions', 'reach'] },
-  { label: 'Impressions vs Clicks', metrics: ['impressions', 'clicks'] },
-  { label: 'CPC vs CTR', metrics: ['cpc', 'ctr'] },
-  { label: 'CPM vs CPC', metrics: ['cpm', 'cpc'] },
-  { label: 'Results vs CPA', metrics: ['results', 'cpr'] },
-  { label: 'Spend vs CPM', metrics: ['spend', 'cpm'] },
-  { label: 'Spend + Results + CPA', metrics: ['spend', 'results', 'cpr'] },
-  { label: 'Clicks + CTR + CPC', metrics: ['clicks', 'ctr', 'cpc'] },
+export const METRIC_COMBOS: { labelKey: string; metrics: ChartMetric[] }[] = [
+  { labelKey: 'spendVsResults', metrics: ['spend', 'results'] },
+  { labelKey: 'spendVsCpa', metrics: ['spend', 'cpr'] },
+  { labelKey: 'clicksVsCtr', metrics: ['clicks', 'ctr'] },
+  { labelKey: 'spendVsClicks', metrics: ['spend', 'clicks'] },
+  { labelKey: 'impressionsVsReach', metrics: ['impressions', 'reach'] },
+  { labelKey: 'impressionsVsClicks', metrics: ['impressions', 'clicks'] },
+  { labelKey: 'cpcVsCtr', metrics: ['cpc', 'ctr'] },
+  { labelKey: 'cpmVsCpc', metrics: ['cpm', 'cpc'] },
+  { labelKey: 'resultsVsCpa', metrics: ['results', 'cpr'] },
+  { labelKey: 'spendVsCpm', metrics: ['spend', 'cpm'] },
+  { labelKey: 'spendResultsCpa', metrics: ['spend', 'results', 'cpr'] },
+  { labelKey: 'clicksCtrCpc', metrics: ['clicks', 'ctr', 'cpc'] },
 ];
 
 function makeWidget(metric: ChartMetric, id?: string): ChartWidget {
@@ -95,7 +105,7 @@ function makeWidget(metric: ChartMetric, id?: string): ChartWidget {
     metric,
     metrics: [{ key: metric, color: meta.defaultColor }],
     chartType: meta.defaultChartType,
-    label: meta.label,
+    label: meta.labelKey,
     color: meta.defaultColor,
   };
 }
@@ -155,7 +165,7 @@ export const useDashboardStore = create<DashboardState>()(
             return {
               ...w,
               metrics: [...w.metrics, { key: metric, color: meta.defaultColor }],
-              label: w.metrics.length === 0 ? meta.label : `${w.label} + ${meta.label}`,
+              label: w.metrics.length === 0 ? meta.labelKey : `${w.label} + ${meta.labelKey}`,
             };
           }),
         })),
@@ -175,7 +185,7 @@ export const useDashboardStore = create<DashboardState>()(
               metric: primary.key,
               metrics: newMetrics,
               color: primary.color,
-              label: newMetrics.map((m) => METRIC_OPTIONS[m.key].label).join(' + '),
+              label: newMetrics.map((m) => METRIC_OPTIONS[m.key].labelKey).join(' + '),
               chartType: primaryMeta.defaultChartType,
             };
           }),
@@ -196,7 +206,7 @@ export const useDashboardStore = create<DashboardState>()(
               ...w,
               metric: metrics[0],
               metrics: widgetMetrics,
-              label: metrics.map((m) => METRIC_OPTIONS[m].label).join(' + '),
+              label: metrics.map((m) => METRIC_OPTIONS[m].labelKey).join(' + '),
               color: primary.defaultColor,
               chartType: 'area',
             };

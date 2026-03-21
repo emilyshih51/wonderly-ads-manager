@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AreaChart, BarChart, type ChartSeries } from '@/components/data/chart';
 import {
@@ -13,7 +14,8 @@ import {
   type ChartWidget as ChartWidgetConfig,
 } from '@/stores/dashboard-store';
 import { GripVertical, X, BarChart3, TrendingUp, Plus, Layers } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useTranslations } from 'next-intl';
+import { cn, DATE_PRESETS } from '@/lib/utils';
 
 interface ChartWidgetProps {
   widget: ChartWidgetConfig;
@@ -25,6 +27,8 @@ interface ChartWidgetProps {
  * A single draggable chart card with multi-metric comparison support.
  */
 export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
+  const tCommon = useTranslations('common');
+  const tMetrics = useTranslations('metrics');
   const {
     updateWidget,
     removeWidget,
@@ -57,7 +61,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
 
     return {
       key: m.key,
-      label: meta.label,
+      label: tMetrics(meta.labelKey),
       color: m.color,
       format: meta.format,
       yAxisId: needsRightAxis ? 'right' : 'left',
@@ -78,7 +82,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
     updateWidget(widget.id, {
       metric,
       metrics: [{ key: metric, color: meta.defaultColor }],
-      label: meta.label,
+      label: meta.labelKey,
       color: meta.defaultColor,
       chartType: meta.defaultChartType,
     });
@@ -92,7 +96,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
           {...attributes}
           {...listeners}
           className="flex cursor-grab items-center justify-center py-1.5 text-[var(--color-muted-foreground)] opacity-40 transition-opacity hover:opacity-100 active:cursor-grabbing"
-          aria-label="Drag to reorder"
+          aria-label={tCommon('dragToReorder')}
         >
           <GripVertical className="h-4 w-4 rotate-90" />
         </div>
@@ -103,9 +107,11 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Metric chips */}
               {metrics.map((m) => (
-                <button
+                <Button
                   key={m.key}
-                  className="flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs font-medium text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-accent)]"
+                  variant="outline"
+                  size="sm"
+                  className="h-auto gap-1 px-2 py-1"
                   onClick={() => {
                     if (metrics.length === 1) {
                       // Single metric — cycle to next
@@ -117,7 +123,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                   }}
                 >
                   <div className="h-2 w-2 rounded-full" style={{ backgroundColor: m.color }} />
-                  <span>{METRIC_OPTIONS[m.key].label}</span>
+                  <span>{tMetrics(METRIC_OPTIONS[m.key].labelKey)}</span>
                   {metrics.length > 1 && (
                     <X
                       className="h-3 w-3 text-[var(--color-muted-foreground)] hover:text-red-500"
@@ -127,56 +133,62 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                       }}
                     />
                   )}
-                </button>
+                </Button>
               ))}
 
               {/* Add metric button */}
               {metrics.length < 3 && (
                 <div className="relative">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowAddMenu(!showAddMenu)}
-                    className="flex items-center gap-1 rounded-md border border-dashed border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-muted-foreground)] transition-colors hover:border-[var(--color-foreground)] hover:text-[var(--color-foreground)]"
+                    className="h-auto gap-1 border-dashed px-2 py-1 text-[var(--color-muted-foreground)] hover:border-[var(--color-foreground)] hover:text-[var(--color-foreground)]"
                   >
                     <Plus className="h-3 w-3" />
-                    <span className="hidden sm:inline">Add</span>
-                  </button>
+                    <span className="hidden sm:inline">{tCommon('add')}</span>
+                  </Button>
 
                   {showAddMenu && (
                     <div className="absolute top-full left-0 z-50 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-xl">
                       {/* Quick combos */}
                       <div className="border-b border-[var(--color-border)] p-2">
                         <p className="mb-1 px-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                          Presets
+                          {tCommon('presets')}
                         </p>
                         {METRIC_COMBOS.filter((c) => c.metrics.includes(metrics[0].key))
                           .slice(0, 4)
                           .map((combo) => (
-                            <button
-                              key={combo.label}
-                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-[var(--color-foreground)] hover:bg-[var(--color-accent)]"
+                            <Button
+                              key={combo.labelKey}
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start gap-2"
                               onClick={() => {
                                 applyCombo(widget.id, combo.metrics);
                                 setShowAddMenu(false);
                               }}
                             >
                               <Layers className="h-3 w-3 text-[var(--color-muted-foreground)]" />
-                              {combo.label}
-                            </button>
+                              {tCommon(combo.labelKey)}
+                            </Button>
                           ))}
                       </div>
 
                       {/* Individual metrics */}
                       <div className="max-h-48 overflow-y-auto p-2">
                         <p className="mb-1 px-1 text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                          Add metric
+                          {tCommon('addMetric')}
                         </p>
                         {availableMetrics.map((key) => {
                           const meta = METRIC_OPTIONS[key];
 
                           return (
-                            <button
+                            <Button
                               key={key}
-                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-[var(--color-foreground)] hover:bg-[var(--color-accent)]"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start gap-2"
                               onClick={() => {
                                 addMetricToWidget(widget.id, key);
                                 setShowAddMenu(false);
@@ -186,11 +198,11 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                                 className="h-2 w-2 rounded-full"
                                 style={{ backgroundColor: meta.defaultColor }}
                               />
-                              {meta.label}
+                              {tMetrics(meta.labelKey)}
                               <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">
                                 {meta.format}
                               </span>
-                            </button>
+                            </Button>
                           );
                         })}
                       </div>
@@ -200,45 +212,51 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
               )}
 
               <span className="text-[11px] text-[var(--color-muted-foreground)]">
-                {datePreset.replace(/_/g, ' ')}
+                {tCommon(DATE_PRESETS.find((p) => p.value === datePreset)?.labelKey ?? datePreset)}
               </span>
             </div>
 
             <div className="flex items-center gap-1">
               <div className="flex overflow-hidden rounded-md border border-[var(--color-border)]">
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => updateWidget(widget.id, { chartType: 'area' })}
                   className={cn(
-                    'p-1.5 transition-colors',
+                    'h-auto w-auto p-1.5',
                     widget.chartType === 'area'
-                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                      : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]'
+                      : 'text-[var(--color-muted-foreground)]'
                   )}
-                  aria-label="Area chart"
+                  aria-label={tCommon('areaChart')}
                 >
                   <TrendingUp className="h-3.5 w-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => updateWidget(widget.id, { chartType: 'bar' })}
                   className={cn(
-                    'p-1.5 transition-colors',
+                    'h-auto w-auto p-1.5',
                     widget.chartType === 'bar'
-                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                      : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]'
+                      : 'text-[var(--color-muted-foreground)]'
                   )}
-                  aria-label="Bar chart"
+                  aria-label={tCommon('barChart')}
                 >
                   <BarChart3 className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
               {widgets.length > 1 && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => removeWidget(widget.id)}
-                  className="rounded-md p-1.5 text-[var(--color-muted-foreground)] transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950 dark:hover:text-red-400"
-                  aria-label="Remove chart"
+                  className="h-auto w-auto p-1.5 text-[var(--color-muted-foreground)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950 dark:hover:text-red-400"
+                  aria-label={tCommon('removeChart')}
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
             </div>
           </div>

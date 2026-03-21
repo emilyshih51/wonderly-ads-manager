@@ -88,3 +88,20 @@ export interface BudgetNotification {
   /** Previous daily budget in dollars, if known. */
   previousBudget?: number;
 }
+
+/**
+ * Payload for an ad set launch notification.
+ * Used by `sendLaunchNotification()` to post launch alerts.
+ */
+export interface LaunchNotification {
+  /** Display name of the launched ad set. */
+  adsetName: string;
+  /** Pre-formatted budget string (e.g. `"$50.00/day"`). */
+  budget: string;
+  /** Number of ads created in the ad set. */
+  adCount: number;
+  /** Human-readable status label (e.g. `"Active"` or `"Paused (draft)"`). */
+  status: string;
+  /** Optional custom message template with `{adset_name}`, `{budget}`, `{ad_count}`, `{status}` placeholders. */
+  customMessage?: string;
+}

@@ -93,6 +93,7 @@ const INITIAL_STATE: LaunchState = {
 
 export default function LaunchPage() {
   const t = useTranslations('adsets');
+  const tCommon = useTranslations('common');
   const [state, setState] = useState<LaunchState>(INITIAL_STATE);
   const { data: campaigns = [] } = useCampaignList();
   const { data: adSets = [], isError: adSetsError } = useAdSets({});
@@ -159,8 +160,8 @@ export default function LaunchPage() {
 
   /* ---------- Sync query error to local fetchError state ---------- */
   useEffect(() => {
-    if (adSetsError) setFetchError('Failed to load data');
-  }, [adSetsError]);
+    if (adSetsError) setFetchError(t('failedToLoadData'));
+  }, [adSetsError, t]);
 
   /* ---------- Build source options (filtered by search) ---------- */
   const sourceOptions = useMemo(() => {
@@ -284,7 +285,7 @@ export default function LaunchPage() {
       if (campaignAdSets.length > 0) {
         adsetId = campaignAdSets[0].id;
       } else {
-        throw new Error('Duplicated campaign has no ad sets. Please duplicate an ad set instead.');
+        throw new Error(t('duplicateCampaignNoAdSets'));
       }
     }
 
@@ -475,19 +476,19 @@ export default function LaunchPage() {
     try {
       // Validate
       if (!state.sourceId || !state.newName) {
-        throw new Error('Please select a source and enter a new name');
+        throw new Error(t('selectSourceAndName'));
       }
 
       if (state.images.length === 0) {
-        throw new Error('Please upload at least one image');
+        throw new Error(t('uploadAtLeastOneImage'));
       }
 
       if (!getFirstPrimaryText()) {
-        throw new Error('Please enter at least one primary text');
+        throw new Error(t('enterAtLeastOnePrimaryText'));
       }
 
       if (!getFirstHeadline()) {
-        throw new Error('Please enter at least one headline');
+        throw new Error(t('enterAtLeastOneHeadline'));
       }
 
       const adsetId = await duplicateSource(state);
@@ -497,9 +498,7 @@ export default function LaunchPage() {
         setLaunchSuccess(true);
         await notifySlack(state, adsetId, successCount);
       } else {
-        setLaunchError(
-          'Ad set was duplicated but all ad creations failed. Check the error details on each image.'
-        );
+        setLaunchError(t('adSetDuplicatedButFailed'));
       }
     } catch (err) {
       setLaunchError(err instanceof Error ? err.message : 'Launch failed');
@@ -531,7 +530,7 @@ export default function LaunchPage() {
             }}
             variant="outline"
           >
-            <Plus className="mr-1 h-4 w-4" /> New Campaign
+            <Plus className="mr-1 h-4 w-4" /> {t('newCampaign')}
           </Button>
         </div>
       </Header>
@@ -547,10 +546,10 @@ export default function LaunchPage() {
               <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: '#22c55e' }} />
               <div>
                 <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                  Ads launched successfully!
+                  {t('adsLaunchedSuccess')}
                 </p>
                 <p className="text-xs text-[var(--color-muted-foreground)]">
-                  {uploadedCount} ads created and ready to review in Meta
+                  {t('adsCreatedReady', { count: uploadedCount })}
                 </p>
               </div>
             </div>
@@ -564,7 +563,9 @@ export default function LaunchPage() {
             >
               <AlertCircle className="h-5 w-5 flex-shrink-0" style={{ color: '#ef4444' }} />
               <div>
-                <p className="text-sm font-semibold text-[var(--color-foreground)]">Error</p>
+                <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                  {tCommon('error')}
+                </p>
                 <p className="text-xs text-[var(--color-muted-foreground)]">{launchError}</p>
               </div>
             </div>
@@ -585,7 +586,7 @@ export default function LaunchPage() {
             <CardContent className="!p-5 sm:!p-6">
               <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
                 <Copy className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                Select Source to Duplicate
+                {t('selectSource')}
               </h2>
 
               <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -593,18 +594,18 @@ export default function LaunchPage() {
                   [
                     {
                       key: 'existing' as const,
-                      label: 'Add to Ad Set',
-                      desc: 'Upload new ads to an existing ad set',
+                      label: t('addToAdSet'),
+                      desc: t('addToAdSetDesc'),
                     },
                     {
                       key: 'adset' as const,
-                      label: 'Duplicate Ad Set',
-                      desc: 'Clone and enhance an existing ad set',
+                      label: t('duplicateAdSet'),
+                      desc: t('duplicateAdSetDesc'),
                     },
                     {
                       key: 'campaign' as const,
-                      label: 'Duplicate Campaign',
-                      desc: 'Start from a campaign template',
+                      label: t('duplicateCampaign'),
+                      desc: t('duplicateCampaignDesc'),
                     },
                   ] as const
                 ).map((opt) => (
@@ -644,7 +645,7 @@ export default function LaunchPage() {
                   <div className="relative">
                     <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
                     <Input
-                      placeholder={`Search ${state.sourceType}s...`}
+                      placeholder={t('searchPlaceholder', { type: state.sourceType })}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -654,7 +655,7 @@ export default function LaunchPage() {
                   {/* Source options */}
                   {sourceOptions.length === 0 ? (
                     <p className="py-4 text-center text-sm text-[var(--color-muted-foreground)]">
-                      No {state.sourceType}s found
+                      {t('noSourcesFound', { type: state.sourceType })}
                     </p>
                   ) : (
                     <div className="max-h-48 space-y-2 overflow-y-auto">
@@ -718,7 +719,7 @@ export default function LaunchPage() {
                     <div>
                       <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                         <Tag className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                        New Name
+                        {t('newName')}
                       </label>
                       <Input
                         value={state.newName}
@@ -728,7 +729,7 @@ export default function LaunchPage() {
                             newName: e.target.value,
                           }))
                         }
-                        placeholder="Name for the new ad set"
+                        placeholder={t('newNamePlaceholder')}
                       />
                     </div>
                   )}
@@ -738,7 +739,7 @@ export default function LaunchPage() {
                     <div>
                       <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                         <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                        Target Campaign (optional)
+                        {t('targetCampaign')}
                       </label>
                       <select
                         value={state.targetCampaign}
@@ -750,7 +751,7 @@ export default function LaunchPage() {
                         }
                         className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                       >
-                        <option value="">Same as source</option>
+                        <option value="">{t('sameAsSource')}</option>
                         {campaigns.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -769,7 +770,7 @@ export default function LaunchPage() {
             <CardContent className="!p-5 sm:!p-6">
               <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
                 <Type className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                Ad Setup
+                {t('adSetup')}
               </h2>
 
               <div className="space-y-6">
@@ -777,11 +778,11 @@ export default function LaunchPage() {
                 <div className="flex items-center gap-2">
                   {hasDefaults && (
                     <Button variant="outline" size="sm" onClick={loadDefaults}>
-                      Load Saved Defaults
+                      {t('loadSavedDefaults')}
                     </Button>
                   )}
                   <Button variant="ghost" size="sm" onClick={saveDefaults}>
-                    {hasDefaults ? 'Update Defaults' : 'Save as Default'}
+                    {hasDefaults ? t('updateDefaults') : t('saveAsDefault')}
                   </Button>
                 </div>
 
@@ -789,7 +790,7 @@ export default function LaunchPage() {
                 <div>
                   <label className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                     <Type className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                    Primary Text
+                    {t('primaryText')}
                     <span className="text-xs text-red-500">*</span>
                   </label>
                   <div className="space-y-2">
@@ -807,13 +808,16 @@ export default function LaunchPage() {
                             primaryTexts: newTexts,
                           }));
                         }}
-                        placeholder={`Primary Text ${idx + 1}${idx === 0 ? ' (required)' : ' (optional)'}`}
+                        placeholder={
+                          t('primaryTextPlaceholder', { num: idx + 1 }) +
+                          (idx === 0 ? ' ' + t('required') : ' ' + t('optional'))
+                        }
                         className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                       />
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                    Enter at least one primary text. The first filled text will be used.
+                    {t('primaryTextHelp')}
                   </p>
                 </div>
 
@@ -821,7 +825,7 @@ export default function LaunchPage() {
                 <div>
                   <label className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                     <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                    Headline
+                    {t('headline')}
                     <span className="text-xs text-red-500">*</span>
                   </label>
                   <div className="space-y-2">
@@ -838,12 +842,15 @@ export default function LaunchPage() {
                             headlines: newHeadlines,
                           }));
                         }}
-                        placeholder={`Headline ${idx + 1}${idx === 0 ? ' (required)' : ' (optional)'}`}
+                        placeholder={
+                          t('primaryTextPlaceholder', { num: idx + 1 }) +
+                          (idx === 0 ? ' ' + t('required') : ' ' + t('optional'))
+                        }
                       />
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                    Enter at least one headline. The first filled headline will be used.
+                    {t('headlineHelp')}
                   </p>
                 </div>
 
@@ -851,7 +858,7 @@ export default function LaunchPage() {
                   {/* Call to Action */}
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
-                      Call to Action
+                      {t('callToAction')}
                     </label>
                     <SelectNative
                       value={state.callToAction}
@@ -871,7 +878,7 @@ export default function LaunchPage() {
                   {/* Facebook Page ID */}
                   <div>
                     <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
-                      Facebook Page ID <span className="text-red-500">*</span>
+                      {t('facebookPageId')} <span className="text-red-500">*</span>
                     </label>
                     <Input
                       value={state.pageId}
@@ -881,14 +888,14 @@ export default function LaunchPage() {
                           pageId: e.target.value,
                         }))
                       }
-                      placeholder="Your Facebook Page ID"
+                      placeholder={t('facebookPageIdPlaceholder')}
                     />
                   </div>
 
                   {/* Daily Budget (optional) */}
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
-                      Daily Budget (optional)
+                      {t('dailyBudget')}
                     </label>
                     <div className="relative">
                       <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
@@ -908,7 +915,7 @@ export default function LaunchPage() {
                       />
                     </div>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      Leave blank to keep source budget
+                      {t('keepSourceBudget')}
                     </p>
                   </div>
                 </div>
@@ -917,7 +924,7 @@ export default function LaunchPage() {
                 <div>
                   <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-foreground)]">
                     <Globe className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                    Web Link
+                    {t('webLink')}
                   </label>
                   <Input
                     value={state.websiteUrl}
@@ -934,11 +941,10 @@ export default function LaunchPage() {
                 {/* URL Parameters */}
                 <div className="rounded-lg bg-[var(--color-muted)] p-4">
                   <p className="mb-2 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                    URL Parameters
+                    {t('urlParameters')}
                   </p>
                   <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">
-                    Meta dynamic parameters like {'{{campaign.id}}'} are replaced at impression
-                    time.
+                    {t('urlParametersHelp', { template: '{{campaign.id}}' })}
                   </p>
                   <textarea
                     rows={2}
@@ -964,7 +970,7 @@ export default function LaunchPage() {
                 {/* Display Link */}
                 <div>
                   <label className="mb-1.5 block text-xs text-[var(--color-muted-foreground)]">
-                    Display Link
+                    {t('displayLink')}
                   </label>
                   <Input
                     value={state.displayLink}
@@ -986,7 +992,7 @@ export default function LaunchPage() {
             <CardContent className="!p-5 sm:!p-6">
               <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
                 <ImageIcon className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                Upload Media
+                {t('uploadMedia')}
               </h2>
 
               {state.images.length === 0 ? (
@@ -994,10 +1000,10 @@ export default function LaunchPage() {
                   <Upload className="h-8 w-8 text-[var(--color-muted-foreground)]" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-[var(--color-foreground)]">
-                      Drop images here or click to upload
+                      {t('dropImages')}
                     </p>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      Each image becomes one ad variation
+                      {t('eachImageBecomesAd')}
                     </p>
                   </div>
                   <input
@@ -1013,13 +1019,15 @@ export default function LaunchPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-[var(--color-muted-foreground)]">
-                      {state.images.length} file
-                      {state.images.length !== 1 ? 's' : ''} uploaded
-                      {uploadedCount > 0 && ` • ${uploadedCount} processed`}
-                      {errorCount > 0 && ` • ${errorCount} failed`}
+                      {t('filesUploaded', {
+                        count: state.images.length,
+                        plural: state.images.length !== 1 ? 's' : '',
+                      })}
+                      {uploadedCount > 0 && ` • ${t('processed', { count: uploadedCount })}`}
+                      {errorCount > 0 && ` • ${t('failed', { count: errorCount })}`}
                     </p>
                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/15">
-                      <Plus className="h-3.5 w-3.5" /> Add More
+                      <Plus className="h-3.5 w-3.5" /> {t('addMore')}
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -1052,7 +1060,7 @@ export default function LaunchPage() {
                           ) : (
                             <NextImage
                               src={img.preview}
-                              alt="Ad preview"
+                              alt={t('adPreview')}
                               fill
                               sizes="120px"
                               className="object-cover"
@@ -1101,16 +1109,16 @@ export default function LaunchPage() {
           <Card>
             <CardContent className="!p-5 sm:!p-6">
               <h2 className="mb-5 text-sm font-semibold text-[var(--color-foreground)]">
-                Settings
+                {t('settingsSection')}
               </h2>
 
               <div className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4">
                 <div>
                   <p className="text-sm font-medium text-[var(--color-foreground)]">
-                    Launch as Active
+                    {t('launchAsActive')}
                   </p>
                   <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                    Ads launch as PAUSED by default. Toggle to launch as ACTIVE.
+                    {t('launchAsActiveDesc')}
                   </p>
                 </div>
                 <button
@@ -1135,7 +1143,7 @@ export default function LaunchPage() {
               {/* Slack Notification Message */}
               <div className="mt-5">
                 <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
-                  Slack Notification Message
+                  {t('slackNotificationMessage')}
                 </label>
                 <textarea
                   className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
@@ -1150,7 +1158,7 @@ export default function LaunchPage() {
                   placeholder="🚀 *[Wonderly]* {adset_name} launched with {budget}"
                 />
                 <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Variables: {'{adset_name}'} {'{budget}'} {'{ad_count}'} {'{status}'}
+                  {t('variables')} {'{adset_name}'} {'{budget}'} {'{ad_count}'} {'{status}'}
                 </p>
               </div>
             </CardContent>
@@ -1166,20 +1174,20 @@ export default function LaunchPage() {
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
                       <span className="text-sm font-medium text-[var(--color-foreground)]">
-                        Ready to launch
+                        {t('readyToLaunch')}
                       </span>
                     </div>
                   ) : (
                     <>
                       {[
-                        { done: !!state.sourceId, label: 'Select a source' },
+                        { done: !!state.sourceId, label: t('selectASource') },
                         {
                           done: state.sourceType === 'existing' || !!state.newName,
-                          label: 'Enter new name',
+                          label: t('enterNewName'),
                         },
-                        { done: state.images.length > 0, label: 'Upload images' },
-                        { done: !!getFirstPrimaryText(), label: 'Add primary text' },
-                        { done: !!getFirstHeadline(), label: 'Add headline' },
+                        { done: state.images.length > 0, label: t('uploadImages') },
+                        { done: !!getFirstPrimaryText(), label: t('addPrimaryText') },
+                        { done: !!getFirstHeadline(), label: t('addHeadline') },
                       ].map((step) => (
                         <div key={step.label} className="flex items-center gap-2">
                           {step.done ? (
@@ -1210,12 +1218,12 @@ export default function LaunchPage() {
                   {launching ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Launching...
+                      {t('launching')}
                     </>
                   ) : (
                     <>
                       <Rocket className="mr-2 h-4 w-4" />
-                      Launch Ads
+                      {t('launchAds')}
                     </>
                   )}
                 </Button>

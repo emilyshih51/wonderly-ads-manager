@@ -2,6 +2,7 @@
 
 import { Handle, Position } from 'reactflow';
 import { Play } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface ActionNodeProps {
   data: {
@@ -12,6 +13,8 @@ interface ActionNodeProps {
 }
 
 export function ActionNode({ data, selected }: ActionNodeProps) {
+  const t = useTranslations('automations');
+
   return (
     <div
       className={`min-w-[220px] rounded-xl border-2 bg-[var(--color-card)] px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-emerald-300'}`}
@@ -26,22 +29,22 @@ export function ActionNode({ data, selected }: ActionNodeProps) {
           <Play className="h-4 w-4 text-emerald-600" />
         </div>
         <span className="text-xs font-semibold tracking-wider text-emerald-700 uppercase">
-          Action
+          {t('action')}
         </span>
       </div>
       <p className="text-sm font-medium text-[var(--color-foreground)]">
-        {data.label || 'Select action...'}
+        {data.label || t('selectAction')}
       </p>
       {data.config?.action_type ? (
         <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
           {data.config.action_type === 'pause'
-            ? 'Pause ad/ad set'
+            ? t('pauseAdAdSet')
             : data.config.action_type === 'activate'
-              ? 'Activate ad/ad set'
+              ? t('activateAdAdSet')
               : data.config.action_type === 'slack_notify'
-                ? 'Send Slack notification'
+                ? t('sendSlackNotification')
                 : String(data.config.action_type)}
-          {data.config.also_notify_slack ? ' + Slack' : ''}
+          {data.config.also_notify_slack ? ' ' + t('plusSlack') : ''}
         </p>
       ) : null}
     </div>

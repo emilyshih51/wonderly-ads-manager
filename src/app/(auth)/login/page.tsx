@@ -31,6 +31,7 @@ const useIsMounted = () => useSyncExternalStore(subscribe, getSnapshot, getServe
 
 export default function LoginPage() {
   const t = useTranslations('login');
+  const tCommon = useTranslations('common');
   const { theme, setTheme } = useTheme();
   const mounted = useIsMounted();
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -67,7 +68,7 @@ export default function LoginPage() {
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className="rounded-md p-1.5 text-slate-400 hover:text-white lg:text-[var(--color-muted-foreground)] lg:hover:bg-[var(--color-accent)] lg:hover:text-[var(--color-foreground)]"
-          aria-label="Toggle theme"
+          aria-label={tCommon('toggleTheme')}
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
@@ -92,8 +93,8 @@ export default function LoginPage() {
                 className={cn(
                   'w-full px-3 py-2 text-left text-xs transition-colors',
                   locale === currentLocale
-                    ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
-                    : 'text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                    ? 'bg-primary/10 font-medium text-(--color-primary)'
+                    : 'text-(--color-foreground) hover:bg-(--color-accent)'
                 )}
               >
                 {LOCALE_NAMES[locale]}
@@ -108,7 +109,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       {/* Branding panel — top on mobile, left on desktop */}
-      <div className="relative flex flex-col overflow-hidden bg-gradient-to-br from-slate-900 to-blue-950 px-6 py-8 sm:px-10 lg:w-[58%] lg:justify-between lg:p-12">
+      <div className="relative flex flex-col overflow-hidden bg-linear-to-br from-slate-900 to-blue-950 px-6 py-8 sm:px-10 lg:w-[58%] lg:justify-between lg:p-12">
         {/* Background grid pattern */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
@@ -125,9 +126,7 @@ export default function LoginPage() {
             <div className="flex h-8 w-8 shrink-0 items-center justify-center lg:h-9 lg:w-9">
               <MetaLogo className="h-8 w-8 lg:h-9 lg:w-9" />
             </div>
-            <span className="text-base font-semibold text-white lg:text-lg">
-              Wonderly Ads Manager
-            </span>
+            <span className="text-base font-semibold text-white lg:text-lg">{t('appName')}</span>
           </div>
           <div className="lg:hidden">{controlButtons}</div>
         </div>

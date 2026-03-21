@@ -14,6 +14,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 
 type DataRecord = Record<string, unknown>;
@@ -62,17 +63,17 @@ const METRIC_FORMATS: Record<string, FormatType> = {
   reach: 'number',
 };
 
-/** Maps metric keys to display labels. */
-const METRIC_LABELS: Record<string, string> = {
-  spend: 'Spend',
-  impressions: 'Impressions',
-  clicks: 'Clicks',
-  ctr: 'CTR',
-  cpm: 'CPM',
-  cpc: 'CPC',
-  results: 'Results',
-  cpr: 'Cost/Result',
-  reach: 'Reach',
+/** Maps metric keys to translation keys. */
+const METRIC_LABEL_KEYS: Record<string, string> = {
+  spend: 'spend',
+  impressions: 'impressions',
+  clicks: 'clicks',
+  ctr: 'ctr',
+  cpm: 'cpm',
+  cpc: 'cpc',
+  results: 'results',
+  cpr: 'costPerResult',
+  reach: 'reach',
 };
 
 /** Related metrics to show alongside the primary one. */
@@ -109,6 +110,8 @@ function ChartTooltip({
   format = 'number',
   primaryKey,
 }: ChartTooltipProps) {
+  const tMetrics = useTranslations('metrics');
+
   if (!active || !payload?.length) return null;
 
   const isMultiSeries = payload.length > 1;
@@ -162,7 +165,7 @@ function ChartTooltip({
                 return (
                   <div key={key} className="flex items-center justify-between gap-3 text-[11px]">
                     <span className="text-[var(--color-muted-foreground)]">
-                      {METRIC_LABELS[key] ?? key}
+                      {tMetrics(METRIC_LABEL_KEYS[key] || key)}
                     </span>
                     <span className="font-medium text-[var(--color-foreground)] tabular-nums">
                       {formatValue(Number(val), fmt)}

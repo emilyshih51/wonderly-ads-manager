@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,8 +26,6 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  ToggleLeft,
-  ToggleRight,
   Loader2,
   Settings2,
   Check,
@@ -108,34 +107,34 @@ interface PreviewAd {
 /* ─────────── Constants ─────────── */
 
 const OPERATOR_OPTIONS = [
-  { label: 'is greater than', value: '>' },
-  { label: 'is less than', value: '<' },
-  { label: 'is greater than or equal to', value: '>=' },
-  { label: 'is less than or equal to', value: '<=' },
-  { label: 'is equal to', value: '==' },
+  { labelKey: 'operators.gt', value: '>' },
+  { labelKey: 'operators.lt', value: '<' },
+  { labelKey: 'operators.gte', value: '>=' },
+  { labelKey: 'operators.lte', value: '<=' },
+  { labelKey: 'operators.eq', value: '==' },
 ];
 
 const DATE_PRESET_OPTIONS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Yesterday', value: 'yesterday' },
-  { label: 'Last 3 days', value: 'last_3d' },
-  { label: 'Last 7 days', value: 'last_7d' },
-  { label: 'Last 14 days', value: 'last_14d' },
-  { label: 'Last 30 days', value: 'last_30d' },
+  { labelKey: 'datePresets.today', value: 'today' },
+  { labelKey: 'datePresets.yesterday', value: 'yesterday' },
+  { labelKey: 'datePresets.last3d', value: 'last_3d' },
+  { labelKey: 'datePresets.last7d', value: 'last_7d' },
+  { labelKey: 'datePresets.last14d', value: 'last_14d' },
+  { labelKey: 'datePresets.last30d', value: 'last_30d' },
 ];
 
 const SCHEDULE_OPTIONS = [
-  { label: 'Every 15 minutes', value: '15min' },
-  { label: 'Every hour', value: 'hourly' },
-  { label: 'Every 6 hours', value: '6hours' },
-  { label: 'Daily', value: 'daily' },
+  { labelKey: 'schedules.15min', value: '15min' },
+  { labelKey: 'schedules.hourly', value: 'hourly' },
+  { labelKey: 'schedules.6hours', value: '6hours' },
+  { labelKey: 'schedules.daily', value: 'daily' },
 ];
 
-const SCHEDULE_LABELS: Record<string, string> = {
-  '15min': 'Every 15 min',
-  hourly: 'Every hour',
-  '6hours': 'Every 6 hours',
-  daily: 'Daily',
+const SCHEDULE_LABEL_KEYS: Record<string, string> = {
+  '15min': 'scheduleLabels.15min',
+  hourly: 'scheduleLabels.hourly',
+  '6hours': 'scheduleLabels.6hours',
+  daily: 'scheduleLabels.daily',
 };
 
 const DEFAULT_CONFIG: RuleConfig = {
@@ -159,8 +158,8 @@ const DEFAULT_CONFIG: RuleConfig = {
 
 interface Template {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   icon: string;
   category: 'protect' | 'optimize';
   config: RuleConfig;
@@ -169,8 +168,8 @@ interface Template {
 const TEMPLATES: Template[] = [
   {
     id: 'pause-zero-results',
-    name: 'Pause ad: spend ≥ $30, 0 results',
-    description: 'Pause any ad spending $30+ with zero conversions',
+    nameKey: 'templates.pauseZeroResults',
+    descriptionKey: 'templates.pauseZeroResultsDesc',
     icon: '🛡️',
     category: 'protect',
     config: {
@@ -186,8 +185,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'pause-high-cpa',
-    name: 'Pause ad: spend ≥ $30, CPA ≥ $25',
-    description: 'Pause any ad spending $30+ with CPA at or above $25',
+    nameKey: 'templates.pauseHighCpa',
+    descriptionKey: 'templates.pauseHighCpaDesc',
     icon: '💰',
     category: 'protect',
     config: {
@@ -203,8 +202,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'promote-low-cpa-3',
-    name: 'Promote ad: CPA ≤ $15, results ≥ 3',
-    description: 'Pause + duplicate to Winners ad set when CPA is low',
+    nameKey: 'templates.promoteLowCpa3',
+    descriptionKey: 'templates.promoteLowCpa3Desc',
     icon: '🚀',
     category: 'optimize',
     config: {
@@ -220,8 +219,8 @@ const TEMPLATES: Template[] = [
   },
   {
     id: 'promote-low-cpa-5',
-    name: 'Promote ad: CPA ≤ $20, results ≥ 5',
-    description: 'Pause + duplicate to Winners ad set with more results',
+    nameKey: 'templates.promoteLowCpa5',
+    descriptionKey: 'templates.promoteLowCpa5Desc',
     icon: '🚀',
     category: 'optimize',
     config: {
@@ -288,6 +287,7 @@ function StepHeader({
 /* ─────────── Copilot Card Component ─────────── */
 
 function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
+  const t = useTranslations('automations');
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -309,29 +309,27 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6">
+    <Card className="relative overflow-hidden p-6">
       {/* Background accent */}
       <div className="absolute top-0 right-0 -mt-20 -mr-20 h-40 w-40 rounded-full bg-[var(--color-primary)]/5" />
 
       <div className="relative z-10">
         <div className="mb-4 flex items-center gap-2">
           <Wand2 className="h-5 w-5 text-[var(--color-primary)]" />
-          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Copilot</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-foreground)]">{t('copilot')}</h3>
           <span className="rounded bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-primary)]">
-            AI beta
+            {t('aiBeta')}
           </span>
         </div>
 
-        <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">
-          Describe what you want to automate in plain English
-        </p>
+        <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">{t('copilotHelp')}</p>
 
         <div className="space-y-3">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Pause ads with CPA over $25 in Brad campaign... or promote ads with CPA under $16 and results above 3"
+            placeholder={t('copilotPlaceholder')}
             disabled={isSubmitting}
             className="h-24 w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
@@ -345,24 +343,26 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                  Building...
+                  {t('building')}
                 </>
               ) : (
                 <>
                   <Wand2 className="mr-2 h-3.5 w-3.5" />
-                  Start building
+                  {t('startBuilding')}
                 </>
               )}
             </Button>
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 export default function AutomationsPage() {
   const t = useTranslations('automations');
+  const tCommon = useTranslations('common');
+  const tMetrics = useTranslations('metrics');
   const { data: rules = [], isLoading: rulesLoading } = useRules();
   const { data: activityLog = [] } = useAutomationHistory();
   const saveRule = useSaveRule();
@@ -434,7 +434,7 @@ export default function AutomationsPage() {
 
   const applyTemplate = (template: Template) => {
     setSelectedRule(null);
-    setRuleName(template.name);
+    setRuleName(t(template.nameKey));
     setConfig({ ...template.config });
     setOpenStep(1);
     setPreviewLoaded(false);
@@ -454,7 +454,7 @@ export default function AutomationsPage() {
 
   const newBlank = () => {
     setSelectedRule(null);
-    setRuleName('New Automation');
+    setRuleName(t('newAutomation'));
     setConfig({ ...DEFAULT_CONFIG });
     setOpenStep(1);
     setPreviewLoaded(false);
@@ -669,12 +669,12 @@ export default function AutomationsPage() {
                 className="h-8"
               >
                 <Play className="mr-1.5 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{testing ? 'Testing...' : 'Test Rule'}</span>
+                <span className="hidden sm:inline">{testing ? t('testing') : t('testRule')}</span>
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saveRule.isPending} className="h-8">
                 <Save className="mr-1.5 h-3.5 w-3.5" />
                 <span className="hidden sm:inline">
-                  {saveRule.isPending ? 'Saving...' : 'Save Rule'}
+                  {saveRule.isPending ? t('saving') : t('saveRule')}
                 </span>
               </Button>
             </>
@@ -711,16 +711,13 @@ export default function AutomationsPage() {
                 <Skeleton className="mb-4 h-3 w-24" />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                    >
+                    <Card key={i} className="flex items-start gap-3 p-4">
                       <Skeleton className="mt-0.5 h-5 w-5 rounded" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-4 w-32" />
                         <Skeleton className="h-3 w-full" />
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -729,10 +726,7 @@ export default function AutomationsPage() {
               <div>
                 <Skeleton className="mb-4 h-3 w-32" />
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="mb-2 flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                  >
+                  <Card key={i} className="mb-2 flex items-center gap-4 p-4">
                     <Skeleton className="h-7 w-7 rounded-full" />
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
@@ -746,7 +740,7 @@ export default function AutomationsPage() {
                       <Skeleton className="h-7 w-7 rounded-md" />
                       <Skeleton className="h-7 w-7 rounded-md" />
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             </div>
@@ -758,25 +752,25 @@ export default function AutomationsPage() {
               {/* Templates */}
               <div>
                 <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  Templates
+                  {t('templates')}
                 </h2>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {TEMPLATES.map((tmpl) => (
                     <button
                       key={tmpl.id}
                       onClick={() => applyTemplate(tmpl)}
-                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:shadow-md"
+                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left shadow-sm transition-all hover:shadow-md"
                     >
                       <span className="mt-0.5 text-lg">{tmpl.icon}</span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-[var(--color-foreground)]">
-                          {tmpl.name}
+                          {t(tmpl.nameKey)}
                         </p>
                         <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                          {tmpl.description}
+                          {t(tmpl.descriptionKey)}
                         </p>
                         <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
-                          Use template <ArrowRight className="h-3 w-3" />
+                          {t('useTemplate')} <ArrowRight className="h-3 w-3" />
                         </span>
                       </div>
                     </button>
@@ -787,43 +781,42 @@ export default function AutomationsPage() {
               {/* Active Rules */}
               <div>
                 <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  Your Rules {rules.length > 0 && `(${rules.length})`}
+                  {t('yourRules')} {rules.length > 0 && `(${rules.length})`}
                 </h2>
                 {rules.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-12 text-center">
+                  <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
                     <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                    <p className="text-sm text-[var(--color-muted-foreground)]">No rules yet</p>
-                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      Pick a template or create a new rule
+                    <p className="text-sm text-[var(--color-muted-foreground)]">
+                      {t('noRulesYet')}
                     </p>
-                  </div>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      {t('pickTemplate')}
+                    </p>
+                  </Card>
                 ) : (
                   <div className="space-y-2">
                     {rules.map((rule) => {
                       const cfg = getRuleSummary(rule);
                       const condSummary = cfg.conditions
-                        .map(
-                          (c) =>
-                            `${METRIC_OPTIONS.find((m) => m.value === c.metric)?.label || c.metric} ${c.operator} ${c.threshold}`
-                        )
+                        .map((c) => {
+                          const labelKey = METRIC_OPTIONS.find(
+                            (m) => m.value === c.metric
+                          )?.labelKey;
+
+                          return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
+                        })
                         .join(' AND ');
 
                       return (
-                        <div
+                        <Card
                           key={rule.id}
-                          className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:flex-row sm:items-center sm:gap-4"
+                          className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
                         >
-                          <button
-                            onClick={() => handleToggle(rule)}
-                            className="flex-shrink-0"
-                            title={rule.is_active ? 'Pause rule' : 'Enable rule'}
-                          >
-                            {rule.is_active ? (
-                              <ToggleRight className="h-7 w-7 text-emerald-500" />
-                            ) : (
-                              <ToggleLeft className="h-7 w-7 text-[var(--color-muted-foreground)]" />
-                            )}
-                          </button>
+                          <Switch
+                            checked={rule.is_active}
+                            onCheckedChange={() => handleToggle(rule)}
+                            aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p
@@ -838,7 +831,7 @@ export default function AutomationsPage() {
                                     : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                                 }`}
                               >
-                                {rule.is_active ? 'Active' : 'Off'}
+                                {rule.is_active ? t('ruleActive') : t('ruleOff')}
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
@@ -846,7 +839,9 @@ export default function AutomationsPage() {
                                 <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
                               )}
                               {cfg.campaign_name && <span>·</span>}
-                              <span>{SCHEDULE_LABELS[cfg.schedule] || 'Hourly'}</span>
+                              <span>
+                                {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
+                              </span>
                               <span>·</span>
                               <span className="capitalize">{cfg.action_type}</span>
                               {cfg.slack_channel && (
@@ -858,7 +853,7 @@ export default function AutomationsPage() {
                             </div>
                             {condSummary && (
                               <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
-                                If: {condSummary}
+                                {t('if')}: {condSummary}
                               </p>
                             )}
                           </div>
@@ -876,7 +871,7 @@ export default function AutomationsPage() {
                                 <Play className="mr-1 h-3 w-3" />
                               )}
                               <span className="hidden sm:inline">
-                                {runningRuleId === rule.id ? 'Running…' : 'Run Now'}
+                                {runningRuleId === rule.id ? t('running') : t('runNow')}
                               </span>
                             </Button>
                             <Button
@@ -884,7 +879,7 @@ export default function AutomationsPage() {
                               size="icon"
                               className="h-7 w-7"
                               onClick={() => editRule(rule)}
-                              title="Edit rule"
+                              title={t('editRule')}
                             >
                               <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
                             </Button>
@@ -893,12 +888,12 @@ export default function AutomationsPage() {
                               size="icon"
                               className="h-7 w-7"
                               onClick={() => handleDelete(rule.id)}
-                              title="Delete rule"
+                              title={t('deleteRule')}
                             >
                               <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
                             </Button>
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
@@ -908,16 +903,16 @@ export default function AutomationsPage() {
               {/* Activity Log */}
               <div>
                 <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                  Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
+                  {t('activityLog')} {activityLog.length > 0 && `(${activityLog.length})`}
                 </h2>
                 {activityLog.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-8 text-center">
+                  <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
                     <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                    <p className="text-sm text-[var(--color-muted-foreground)]">No runs yet</p>
+                    <p className="text-sm text-[var(--color-muted-foreground)]">{t('noRunsYet')}</p>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      Test or activate a rule to see results here
+                      {t('testOrActivate')}
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   <div className="space-y-2">
                     {activityLog.map((event) => {
@@ -932,10 +927,7 @@ export default function AutomationsPage() {
                       const isTest = event.type === 'test';
 
                       return (
-                        <div
-                          key={event.id}
-                          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                        >
+                        <Card key={event.id} className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span
@@ -945,7 +937,7 @@ export default function AutomationsPage() {
                                     : 'bg-emerald-50 text-emerald-700'
                                 }`}
                               >
-                                {isTest ? 'Test' : 'Live'}
+                                {isTest ? t('test') : t('live')}
                               </span>
                               <p className="text-sm font-medium text-[var(--color-foreground)]">
                                 {event.rule_name}
@@ -962,14 +954,14 @@ export default function AutomationsPage() {
                                     onClick={() => handleRollback(event.id, event.results || [])}
                                     disabled={rollingBackId === event.id}
                                     className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
-                                    title="Undo actions from this run"
+                                    title={t('undoActions')}
                                   >
                                     {rollingBackId === event.id ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
                                       <RotateCcw className="h-3 w-3" />
                                     )}
-                                    Undo
+                                    {t('undo')}
                                   </button>
                                 )}
                               <p className="text-xs text-[var(--color-muted-foreground)]">
@@ -979,14 +971,14 @@ export default function AutomationsPage() {
                           </div>
                           <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
                             {event.matched === 0 ? (
-                              <p>No ads matched the conditions</p>
+                              <p>{t('noAdsMatched')}</p>
                             ) : (
                               <div className="space-y-1.5">
                                 <p>
                                   <span className="font-medium text-[var(--color-foreground)]">
                                     {event.matched}
                                   </span>{' '}
-                                  ad{event.matched !== 1 ? 's' : ''} matched
+                                  {t('adsMatched', { count: event.matched })}
                                 </p>
                                 {event.results?.map((r, i) => (
                                   <div
@@ -999,7 +991,7 @@ export default function AutomationsPage() {
                                     <div className="ml-2 flex flex-shrink-0 items-center gap-2">
                                       <span className="text-[var(--color-muted-foreground)]">
                                         ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'}{' '}
-                                        · {r.metrics?.results ?? 0} results
+                                        · {r.metrics?.results ?? 0} {tMetrics('results')}
                                       </span>
                                       <span
                                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
@@ -1016,7 +1008,7 @@ export default function AutomationsPage() {
                                       </span>
                                       {r.slack_sent && (
                                         <span className="text-[10px] text-emerald-500">
-                                          Slack sent
+                                          {t('slackSent')}
                                         </span>
                                       )}
                                     </div>
@@ -1025,7 +1017,7 @@ export default function AutomationsPage() {
                               </div>
                             )}
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
@@ -1041,27 +1033,27 @@ export default function AutomationsPage() {
         <div className="flex-1 overflow-y-auto bg-[var(--color-background)]">
           <div className="mx-auto max-w-2xl space-y-4 px-8 py-6">
             {/* Rule Name */}
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+            <Card className="p-5">
               <label className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                Rule Name
+                {t('ruleName')}
               </label>
               <Input
                 value={ruleName}
                 onChange={(e) => setRuleName(e.target.value)}
                 className="mt-2 h-10 text-base font-medium"
-                placeholder="e.g., Pause ad: spend ≥ $30, 0 results"
+                placeholder={t('ruleNamePlaceholder')}
               />
-            </div>
+            </Card>
 
             {/* ─── STEP 1: Apply rule to ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={1}
-                title="Apply rule to"
+                title={t('applyRuleTo')}
                 subtitle={
                   config.campaign_name
-                    ? `${config.entity_type === 'ad' ? 'All ads' : config.entity_type === 'adset' ? 'All ad sets' : 'Campaign'} in "${config.campaign_name}"`
-                    : 'Select a campaign and entity type'
+                    ? `${config.entity_type === 'ad' ? t('allAds') : config.entity_type === 'adset' ? t('allAdSets') : tCommon('campaigns')} ${t('inCampaign', { name: config.campaign_name })}`
+                    : t('selectCampaignAndEntity')
                 }
                 isOpen={openStep === 1}
                 onToggle={() => setOpenStep(openStep === 1 ? 0 : 1)}
@@ -1072,7 +1064,7 @@ export default function AutomationsPage() {
                   {/* Entity type */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                      Entity Level
+                      {t('entityLevel')}
                     </label>
                     <div className="mt-2 flex gap-2">
                       {['ad', 'adset', 'campaign'].map((type) => (
@@ -1085,7 +1077,11 @@ export default function AutomationsPage() {
                               : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border)]'
                           }`}
                         >
-                          {type === 'ad' ? 'Ads' : type === 'adset' ? 'Ad Sets' : 'Campaigns'}
+                          {type === 'ad'
+                            ? tCommon('ads')
+                            : type === 'adset'
+                              ? tCommon('adSets')
+                              : tCommon('campaigns')}
                         </button>
                       ))}
                     </div>
@@ -1094,7 +1090,7 @@ export default function AutomationsPage() {
                   {/* Campaign selector */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                      Campaign
+                      {tCommon('campaign')}
                     </label>
                     <div className="mt-2">
                       <CampaignSearch
@@ -1106,23 +1102,26 @@ export default function AutomationsPage() {
                             campaign_name: name,
                           })
                         }
-                        placeholder="Search by campaign name..."
+                        placeholder={t('searchByCampaign')}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                      Leave empty to apply to all campaigns
+                      {t('leaveEmptyAllCampaigns')}
                     </p>
                   </div>
 
                   {/* Schedule */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                      Check Frequency
+                      {t('checkFrequency')}
                     </label>
                     <SelectNative
                       value={config.schedule}
                       onChange={(e) => updateConfig({ schedule: e.target.value })}
-                      options={SCHEDULE_OPTIONS}
+                      options={SCHEDULE_OPTIONS.map((o) => ({
+                        label: t(o.labelKey),
+                        value: o.value,
+                      }))}
                       className="mt-2"
                     />
                   </div>
@@ -1130,16 +1129,19 @@ export default function AutomationsPage() {
                   {/* Performance period */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                      Performance Period
+                      {t('performancePeriod')}
                     </label>
                     <SelectNative
                       value={config.date_preset}
                       onChange={(e) => updateConfig({ date_preset: e.target.value })}
-                      options={DATE_PRESET_OPTIONS}
+                      options={DATE_PRESET_OPTIONS.map((o) => ({
+                        label: t(o.labelKey),
+                        value: o.value,
+                      }))}
                       className="mt-2"
                     />
                     <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
-                      Time range used when evaluating conditions
+                      {t('timeRangeDesc')}
                     </p>
                   </div>
 
@@ -1149,26 +1151,29 @@ export default function AutomationsPage() {
                     className="mt-2"
                     disabled={!isStep1Complete}
                   >
-                    Continue <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    {t('continue')} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── STEP 2: Conditions ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={2}
-                title="Conditions"
+                title={t('setConditions')}
                 subtitle={
                   isStep2Complete
                     ? config.conditions
-                        .map(
-                          (c) =>
-                            `${METRIC_OPTIONS.find((m) => m.value === c.metric)?.label || c.metric} ${c.operator} ${c.threshold}`
-                        )
+                        .map((c) => {
+                          const labelKey = METRIC_OPTIONS.find(
+                            (m) => m.value === c.metric
+                          )?.labelKey;
+
+                          return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
+                        })
                         .join(' AND ')
-                    : 'Set performance thresholds'
+                    : t('setPerformanceThresholds')
                 }
                 isOpen={openStep === 2}
                 onToggle={() => setOpenStep(openStep === 2 ? 0 : 2)}
@@ -1177,7 +1182,7 @@ export default function AutomationsPage() {
               {openStep === 2 && (
                 <div className="space-y-3 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
                   <p className="text-xs text-[var(--color-muted-foreground)]">
-                    All conditions must be met (AND logic)
+                    {t('allConditionsMet')}
                   </p>
 
                   {config.conditions.map((cond, i) => (
@@ -1195,7 +1200,10 @@ export default function AutomationsPage() {
                               metric: e.target.value,
                             })
                           }
-                          options={METRIC_OPTIONS}
+                          options={METRIC_OPTIONS.map((o) => ({
+                            label: tCommon(o.labelKey),
+                            value: o.value,
+                          }))}
                         />
                         <SelectNative
                           value={cond.operator}
@@ -1204,7 +1212,10 @@ export default function AutomationsPage() {
                               operator: e.target.value,
                             })
                           }
-                          options={OPERATOR_OPTIONS}
+                          options={OPERATOR_OPTIONS.map((o) => ({
+                            label: t(o.labelKey),
+                            value: o.value,
+                          }))}
                           className="w-[180px]"
                         />
                         <Input
@@ -1215,7 +1226,7 @@ export default function AutomationsPage() {
                               threshold: e.target.value,
                             })
                           }
-                          placeholder="Value"
+                          placeholder={t('value')}
                           className="h-9 w-24"
                         />
                       </div>
@@ -1233,7 +1244,7 @@ export default function AutomationsPage() {
                     onClick={addCondition}
                     className="mt-1 flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add condition
+                    <Plus className="h-3.5 w-3.5" /> {t('addCondition')}
                   </button>
 
                   {/* Preview Matching Ads */}
@@ -1247,11 +1258,12 @@ export default function AutomationsPage() {
                       >
                         {previewLoading ? (
                           <>
-                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Loading...
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />{' '}
+                            {tCommon('loading')}
                           </>
                         ) : (
                           <>
-                            <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview Matching Ads
+                            <Eye className="mr-1.5 h-3.5 w-3.5" /> {t('previewMatchingAds')}
                           </>
                         )}
                       </Button>
@@ -1260,7 +1272,7 @@ export default function AutomationsPage() {
                           <span className="font-semibold text-[var(--color-foreground)]">
                             {previewAds.length}
                           </span>{' '}
-                          of {previewTotal} ads match
+                          {t('ofAdsMatch', { total: previewTotal })}
                         </span>
                       )}
                     </div>
@@ -1271,16 +1283,16 @@ export default function AutomationsPage() {
                           <thead className="bg-[var(--color-muted)]">
                             <tr>
                               <th className="px-3 py-2 text-left font-medium text-[var(--color-muted-foreground)]">
-                                Ad Name
+                                {tMetrics('adName')}
                               </th>
                               <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
-                                Spend
+                                {tMetrics('spend')}
                               </th>
                               <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
-                                Results
+                                {tMetrics('results')}
                               </th>
                               <th className="px-3 py-2 text-right font-medium text-[var(--color-muted-foreground)]">
-                                CPA
+                                {tMetrics('cpa')}
                               </th>
                             </tr>
                           </thead>
@@ -1305,7 +1317,7 @@ export default function AutomationsPage() {
                         </table>
                         {previewAds.length > 10 && (
                           <div className="border-t border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-xs text-[var(--color-muted-foreground)]">
-                            + {previewAds.length - 10} more ads
+                            {t('moreAds', { count: previewAds.length - 10 })}
                           </div>
                         )}
                       </div>
@@ -1314,10 +1326,10 @@ export default function AutomationsPage() {
                     {previewLoaded && previewAds.length === 0 && (
                       <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
                         <p className="text-sm text-[var(--color-muted-foreground)]">
-                          No ads currently match these conditions
+                          {t('noAdsMatch')}
                         </p>
                         <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                          Check your campaign selection and thresholds
+                          {t('checkThresholds')}
                         </p>
                       </div>
                     )}
@@ -1329,21 +1341,21 @@ export default function AutomationsPage() {
                     className="mt-2"
                     disabled={!isStep2Complete}
                   >
-                    Continue <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    {t('continue')} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── STEP 3: Action ─── */}
-            <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <Card className="overflow-hidden">
               <StepHeader
                 number={3}
-                title="Action"
+                title={t('actionStep')}
                 subtitle={
                   isStep3Complete
-                    ? `${config.action_type === 'promote' ? 'Promote (pause + duplicate)' : config.action_type === 'pause' ? 'Pause' : config.action_type === 'activate' ? 'Activate' : 'Notify'}${config.also_notify_slack ? ` → ${config.slack_channel || 'Slack'}` : ''}`
-                    : 'What happens when conditions are met'
+                    ? `${config.action_type === 'promote' ? t('promotePauseDuplicate') : config.action_type === 'pause' ? t('pause') : config.action_type === 'activate' ? t('activate') : t('notify')}${config.also_notify_slack ? ` → ${config.slack_channel || 'Slack'}` : ''}`
+                    : t('whatHappensWhenMet')
                 }
                 isOpen={openStep === 3}
                 onToggle={() => setOpenStep(openStep === 3 ? 0 : 3)}
@@ -1354,33 +1366,33 @@ export default function AutomationsPage() {
                   {/* Action type */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                      Action Type
+                      {t('actionType')}
                     </label>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       {[
                         {
                           value: 'pause',
-                          label: 'Pause',
+                          label: t('pause'),
                           icon: <Pause className="h-4 w-4" />,
-                          desc: 'Turn off the ad',
+                          desc: t('turnOffAd'),
                         },
                         {
                           value: 'promote',
-                          label: 'Promote',
+                          label: t('promote'),
                           icon: <Copy className="h-4 w-4" />,
-                          desc: 'Pause + duplicate to winners',
+                          desc: t('pauseDuplicateWinners'),
                         },
                         {
                           value: 'activate',
-                          label: 'Activate',
+                          label: t('activate'),
                           icon: <Play className="h-4 w-4" />,
-                          desc: 'Turn on the ad',
+                          desc: t('turnOnAd'),
                         },
                         {
                           value: 'slack_notify',
-                          label: 'Notify Only',
+                          label: t('notifyOnly'),
                           icon: <Bell className="h-4 w-4" />,
-                          desc: 'Just send a Slack message',
+                          desc: t('justSendSlack'),
                         },
                       ].map((action) => (
                         <button
@@ -1410,9 +1422,9 @@ export default function AutomationsPage() {
                   {config.action_type === 'promote' && (
                     <div>
                       <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                        Target Ad Set{' '}
+                        {t('targetAdSet')}{' '}
                         <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
-                          (duplicate winning ads here)
+                          {t('duplicateWinningAdsHere')}
                         </span>
                       </label>
                       <div className="mt-2">
@@ -1425,7 +1437,7 @@ export default function AutomationsPage() {
                               target_adset_name: name,
                             })
                           }
-                          placeholder="Search for winners ad set..."
+                          placeholder={t('searchForWinnersAdSet')}
                         />
                       </div>
                     </div>
@@ -1434,18 +1446,13 @@ export default function AutomationsPage() {
                   {/* Slack notification */}
                   <div className="border-t border-[var(--color-border)] pt-4">
                     <label className="flex cursor-pointer items-center gap-2.5">
-                      <input
-                        type="checkbox"
+                      <Switch
+                        size="sm"
                         checked={config.also_notify_slack}
-                        onChange={(e) =>
-                          updateConfig({
-                            also_notify_slack: e.target.checked,
-                          })
-                        }
-                        className="h-4 w-4 rounded border-[var(--color-border)] text-blue-600"
+                        onCheckedChange={(checked) => updateConfig({ also_notify_slack: checked })}
                       />
                       <span className="text-sm font-medium text-[var(--color-foreground)]">
-                        Send Slack notification
+                        {t('sendSlackNotification')}
                       </span>
                     </label>
 
@@ -1453,7 +1460,7 @@ export default function AutomationsPage() {
                       <div className="mt-3 ml-6 space-y-3">
                         <div>
                           <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                            Channel
+                            {t('slackChannel')}
                           </label>
                           <Input
                             value={config.slack_channel}
@@ -1463,14 +1470,14 @@ export default function AutomationsPage() {
                               })
                             }
                             className="mt-1 h-9"
-                            placeholder="#alerts"
+                            placeholder={t('channelPlaceholder')}
                           />
                         </div>
                         <div>
                           <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                            Custom Message{' '}
+                            {t('customMessage')}{' '}
                             <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
-                              (optional)
+                              {tCommon('optional')}
                             </span>
                           </label>
                           <textarea
@@ -1482,25 +1489,25 @@ export default function AutomationsPage() {
                             }
                             className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             rows={3}
-                            placeholder="Leave empty for default message"
+                            placeholder={t('leaveEmptyDefault')}
                           />
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {[
                               {
                                 var: '{rule_name}',
-                                label: 'Rule Name',
+                                label: t('ruleName'),
                               },
-                              { var: '{action}', label: 'Action' },
+                              { var: '{action}', label: t('action') },
                               {
                                 var: '{entity_name}',
-                                label: 'Ad Name',
+                                label: tMetrics('adName'),
                               },
-                              { var: '{ad_link}', label: 'Ad Link' },
-                              { var: '{spend}', label: 'Spend' },
-                              { var: '{results}', label: 'Results' },
-                              { var: '{cpa}', label: 'CPA' },
-                              { var: '{clicks}', label: 'Clicks' },
-                              { var: '{ctr}', label: 'CTR' },
+                              { var: '{ad_link}', label: t('adLink') },
+                              { var: '{spend}', label: tMetrics('spend') },
+                              { var: '{results}', label: tMetrics('results') },
+                              { var: '{cpa}', label: tMetrics('cpa') },
+                              { var: '{clicks}', label: tMetrics('clicks') },
+                              { var: '{ctr}', label: tMetrics('ctr') },
                             ].map((v) => (
                               <button
                                 key={v.var}
@@ -1522,19 +1529,19 @@ export default function AutomationsPage() {
                           {(config.slack_message || previewAds.length > 0) && (
                             <div className="mt-3">
                               <p className="mb-1.5 text-[10px] font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                                Message Preview
+                                {t('messagePreview')}
                               </p>
                               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3 text-sm whitespace-pre-wrap text-[var(--color-foreground)]">
                                 {(() => {
                                   const sampleAd = previewAds[0];
                                   const actionVerb =
                                     config.action_type === 'promote'
-                                      ? 'Promoted'
+                                      ? t('promoted')
                                       : config.action_type === 'pause'
-                                        ? 'Paused'
+                                        ? t('paused2')
                                         : config.action_type === 'activate'
-                                          ? 'Activated'
-                                          : 'Notified';
+                                          ? t('activated')
+                                          : t('notified');
                                   const msg =
                                     config.slack_message ||
                                     `${config.action_type === 'promote' ? '🚀' : '⏸️'} *${ruleName}*\n${actionVerb} ad: ${sampleAd ? sampleAd.ad_name : '<ad name>'}\nSpend: $${sampleAd?.spend || '0.00'} · Results: ${sampleAd?.results ?? 0} · CPA: ${sampleAd?.cpa === 'N/A' ? 'N/A' : `$${sampleAd?.cpa || '0.00'}`}`;
@@ -1558,7 +1565,7 @@ export default function AutomationsPage() {
                               </div>
                               {previewAds.length > 0 && (
                                 <p className="mt-1 text-[10px] text-[var(--color-muted-foreground)]">
-                                  Previewing with: {previewAds[0].ad_name}
+                                  {t('previewingWith', { name: previewAds[0].ad_name })}
                                 </p>
                               )}
                             </div>
@@ -1569,55 +1576,61 @@ export default function AutomationsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* ─── Summary + Actions ─── */}
             {isStep1Complete && isStep2Complete && isStep3Complete && (
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
+              <Card className="p-5">
                 <h3 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
-                  Summary
+                  {t('summary')}
                 </h3>
                 <div className="space-y-2 text-sm text-[var(--color-muted-foreground)]">
                   <p>
-                    <span className="text-[var(--color-muted-foreground)]">Apply to:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">{t('applyTo')}</span>{' '}
                     {config.entity_type === 'ad'
-                      ? 'All ads'
+                      ? t('allAds')
                       : config.entity_type === 'adset'
-                        ? 'All ad sets'
-                        : 'Campaigns'}
-                    {config.campaign_name && ` in "${config.campaign_name}"`}
+                        ? t('allAdSets')
+                        : tCommon('campaigns')}
+                    {config.campaign_name && ' ' + t('inCampaign', { name: config.campaign_name })}
                   </p>
                   <p>
-                    <span className="text-[var(--color-muted-foreground)]">When:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">{t('when')}</span>{' '}
                     {config.conditions.map((c, i) => (
                       <span key={c.id}>
                         {i > 0 && (
                           <span className="text-[var(--color-muted-foreground)]"> AND </span>
                         )}
                         <span className="font-medium text-[var(--color-foreground)]">
-                          {METRIC_OPTIONS.find((m) => m.value === c.metric)?.label} {c.operator}{' '}
-                          {c.threshold}
+                          {(() => {
+                            const lk = METRIC_OPTIONS.find((m) => m.value === c.metric)?.labelKey;
+
+                            return lk ? tCommon(lk) : c.metric;
+                          })()}{' '}
+                          {c.operator} {c.threshold}
                         </span>
                       </span>
                     ))}
                   </p>
                   <p>
-                    <span className="text-[var(--color-muted-foreground)]">Then:</span>{' '}
+                    <span className="text-[var(--color-muted-foreground)]">{t('then')}</span>{' '}
                     <span className="font-medium text-[var(--color-foreground)] capitalize">
                       {config.action_type}
                     </span>
                     {config.action_type === 'promote' && config.target_adset_name && (
-                      <span> to &ldquo;{config.target_adset_name}&rdquo;</span>
+                      <span> {t('toAdSet', { name: config.target_adset_name })}</span>
                     )}
                     {config.also_notify_slack && config.slack_channel && (
-                      <span> + notify {config.slack_channel}</span>
+                      <span> {t('notifyChannel', { channel: config.slack_channel })}</span>
                     )}
                   </p>
                   <p>
-                    <span className="text-[var(--color-muted-foreground)]">Frequency:</span>{' '}
-                    {SCHEDULE_LABELS[config.schedule]} ·{' '}
-                    {DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.label ||
-                      config.date_preset}
+                    <span className="text-[var(--color-muted-foreground)]">{t('frequency')}</span>{' '}
+                    {t(SCHEDULE_LABEL_KEYS[config.schedule] || 'scheduleLabels.hourly')} ·{' '}
+                    {t(
+                      DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.labelKey ||
+                        'datePresets.last7d'
+                    )}
                   </p>
                 </div>
                 <div className="mt-4 flex items-center gap-2 border-t border-[var(--color-border)] pt-4">
@@ -1628,14 +1641,14 @@ export default function AutomationsPage() {
                     disabled={testing}
                   >
                     <Play className="mr-1.5 h-3.5 w-3.5" />
-                    {testing ? 'Testing...' : 'Test Rule'}
+                    {testing ? t('testing') : t('testRule')}
                   </Button>
                   <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
                     <Save className="mr-1.5 h-3.5 w-3.5" />
-                    {saveRule.isPending ? 'Saving...' : 'Save Rule'}
+                    {saveRule.isPending ? t('saving') : t('saveRule')}
                   </Button>
                 </div>
-              </div>
+              </Card>
             )}
           </div>
         </div>
@@ -1645,10 +1658,8 @@ export default function AutomationsPage() {
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">Test Results</DialogTitle>
-            <DialogDescription className="text-xs">
-              Ads were not paused/promoted. Slack notifications were sent so you can preview them.
-            </DialogDescription>
+            <DialogTitle className="text-base">{t('testResults')}</DialogTitle>
+            <DialogDescription className="text-xs">{t('testResultsDesc')}</DialogDescription>
           </DialogHeader>
           <div className="mt-2 max-h-[400px] space-y-3 overflow-y-auto">
             {testResults?.error ? (
@@ -1658,10 +1669,10 @@ export default function AutomationsPage() {
             ) : testResults?.matched === 0 ? (
               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
                 <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
-                  No ads matched the conditions
+                  {t('noAdsMatched')}
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Either no ads meet the thresholds, or check the campaign filter.
+                  {t('noAdsMetThresholds')}
                 </p>
               </div>
             ) : (
@@ -1670,8 +1681,7 @@ export default function AutomationsPage() {
                   <span className="font-medium text-[var(--color-foreground)]">
                     {testResults?.matched || 0}
                   </span>{' '}
-                  ad
-                  {testResults?.matched !== 1 ? 's' : ''} would be affected:
+                  {t('adsWouldBeAffected', { count: testResults?.matched || 0 })}
                 </p>
                 {testResults?.results?.map((r: TestResultEntry, i: number) => (
                   <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
@@ -1692,10 +1702,14 @@ export default function AutomationsPage() {
                       </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
-                      <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
-                      <span>Results: {r.metrics?.results}</span>
                       <span>
-                        CPA:{' '}
+                        {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
+                      </span>
+                      <span>
+                        {tMetrics('results')}: {r.metrics?.results}
+                      </span>
+                      <span>
+                        {tMetrics('cpa')}:{' '}
                         {r.metrics?.cost_per_result === 'N/A'
                           ? 'N/A'
                           : `$${r.metrics?.cost_per_result}`}
@@ -1704,7 +1718,7 @@ export default function AutomationsPage() {
                     {r.warning && <p className="mt-1 text-[10px] text-amber-600">{r.warning}</p>}
                     {r.slack_sent && r.slack_channel && (
                       <p className="mt-1 text-[10px] text-emerald-600">
-                        Slack sent to {r.slack_channel}
+                        {t('slackSentTo', { channel: r.slack_channel })}
                       </p>
                     )}
                   </div>
@@ -1714,7 +1728,7 @@ export default function AutomationsPage() {
           </div>
           <div className="flex justify-end pt-2">
             <Button size="sm" onClick={() => setTestDialogOpen(false)}>
-              Close
+              {tCommon('close')}
             </Button>
           </div>
         </DialogContent>
@@ -1724,26 +1738,21 @@ export default function AutomationsPage() {
       <Dialog open={!!confirmRunRule} onOpenChange={(open) => !open && setConfirmRunRule(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">Run Rule Now</DialogTitle>
-            <DialogDescription className="text-xs">
-              This will execute the rule for real — matching ads will be paused, promoted, or
-              activated.
-            </DialogDescription>
+            <DialogTitle className="text-base">{t('runRuleNow')}</DialogTitle>
+            <DialogDescription className="text-xs">{t('runRuleNowDesc')}</DialogDescription>
           </DialogHeader>
           {confirmRunRule && (
             <div className="mt-2 space-y-3">
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm font-medium text-amber-800">{confirmRunRule.name}</p>
-                <p className="mt-1 text-xs text-amber-700">
-                  This will take real actions on your Meta ads. Are you sure?
-                </p>
+                <p className="mt-1 text-xs text-amber-700">{t('runRuleNowWarning')}</p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setConfirmRunRule(null)}>
-                  Cancel
+                  {tCommon('cancel')}
                 </Button>
                 <Button size="sm" onClick={() => handleRunNow(confirmRunRule)}>
-                  <Play className="mr-1.5 h-3.5 w-3.5" /> Run Now
+                  <Play className="mr-1.5 h-3.5 w-3.5" /> {t('runNow')}
                 </Button>
               </div>
             </div>
@@ -1755,10 +1764,8 @@ export default function AutomationsPage() {
       <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">Run Complete</DialogTitle>
-            <DialogDescription className="text-xs">
-              Actions have been executed on your Meta ads.
-            </DialogDescription>
+            <DialogTitle className="text-base">{t('runComplete')}</DialogTitle>
+            <DialogDescription className="text-xs">{t('runCompleteDesc')}</DialogDescription>
           </DialogHeader>
           <div className="mt-2 max-h-[400px] space-y-3 overflow-y-auto">
             {runResults?.error ? (
@@ -1768,10 +1775,10 @@ export default function AutomationsPage() {
             ) : runResults?.matched === 0 ? (
               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
                 <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
-                  No ads matched the conditions
+                  {t('noAdsMatched')}
                 </p>
                 <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  No actions were taken.
+                  {t('noActionsTaken')}
                 </p>
               </div>
             ) : (
@@ -1780,8 +1787,7 @@ export default function AutomationsPage() {
                   <span className="font-medium text-[var(--color-foreground)]">
                     {runResults?.matched || 0}
                   </span>{' '}
-                  ad
-                  {runResults?.matched !== 1 ? 's' : ''} affected:
+                  {t('adsAffected', { count: runResults?.matched || 0 })}
                 </p>
                 {runResults?.results?.map((r: TestResultEntry, i: number) => (
                   <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
@@ -1802,10 +1808,14 @@ export default function AutomationsPage() {
                       </span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
-                      <span>Spend: ${r.metrics?.spend?.toFixed(2)}</span>
-                      <span>Results: {r.metrics?.results}</span>
                       <span>
-                        CPA:{' '}
+                        {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
+                      </span>
+                      <span>
+                        {tMetrics('results')}: {r.metrics?.results}
+                      </span>
+                      <span>
+                        {tMetrics('cpa')}:{' '}
                         {r.metrics?.cost_per_result === 'N/A'
                           ? 'N/A'
                           : `$${r.metrics?.cost_per_result}`}
@@ -1813,12 +1823,12 @@ export default function AutomationsPage() {
                     </div>
                     {r.duplicated_ad_id && (
                       <p className="mt-1 text-[10px] text-emerald-600">
-                        Duplicated to winners ad set
+                        {t('duplicatedToWinners')}
                       </p>
                     )}
                     {r.slack_sent && r.slack_channel && (
                       <p className="mt-1 text-[10px] text-emerald-600">
-                        Slack sent to {r.slack_channel}
+                        {t('slackSentTo', { channel: r.slack_channel })}
                       </p>
                     )}
                     {r.error && <p className="mt-1 text-[10px] text-red-600">{r.error}</p>}
@@ -1829,7 +1839,7 @@ export default function AutomationsPage() {
           </div>
           <div className="flex justify-end pt-2">
             <Button size="sm" onClick={() => setRunDialogOpen(false)}>
-              Close
+              {tCommon('close')}
             </Button>
           </div>
         </DialogContent>

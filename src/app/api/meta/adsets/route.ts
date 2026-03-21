@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
+  logger.info('GET /api/meta/adsets', { campaignId, datePreset, withInsights });
+
   const meta = MetaService.fromSession(session);
 
   try {
@@ -41,7 +43,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           data: attachInsights(adsets, bulkInsights.data || [], 'adset_id'),
         });
-      } catch {
+      } catch (e) {
+        logger.warn('Ad set insights fetch failed, returning without insights', e);
+
         return NextResponse.json({
           data: adsets.map((a) => ({ ...a, insights: null })),
         });

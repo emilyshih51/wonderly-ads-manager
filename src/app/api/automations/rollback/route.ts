@@ -25,6 +25,10 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  const start = Date.now();
+
+  logger.info('POST /api/automations/rollback');
+
   const body = (await request.json()) as {
     results?: Array<{ entity_id?: string; action?: string; duplicated_ad_id?: string }>;
   };
@@ -98,6 +102,13 @@ export async function POST(request: NextRequest) {
       }
     }
   }
+
+  logger.info('Rollback complete', {
+    reversed: reversed.length,
+    skipped: skipped.length,
+    errors: errors.length,
+    durationMs: Date.now() - start,
+  });
 
   return NextResponse.json({ reversed, skipped, errors });
 }

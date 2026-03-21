@@ -30,6 +30,7 @@ export const maxDuration = 60;
  * Capped at `AUTOMATION_MAX_ACTIONS_PER_RUN` (default 20) actions per run.
  */
 export async function GET(request: NextRequest) {
+  const start = Date.now();
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get('authorization');
 
@@ -105,6 +106,13 @@ export async function GET(request: NextRequest) {
       }
     }
   }
+
+  logger.info('Evaluation complete', {
+    evaluated: activeRules.length,
+    accounts: Object.keys(rulesByAccount).length,
+    actions: results.length,
+    durationMs: Date.now() - start,
+  });
 
   return NextResponse.json({
     evaluated: activeRules.length,

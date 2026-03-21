@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get('state');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
+  logger.info('Facebook OAuth callback');
+
   if (!code) {
     return NextResponse.redirect(`${appUrl}/login?error=no_code`);
   }
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
       rawEnv: process.env.ALLOWED_EMAILS,
     });
 
-    if (allowedEmails.length > 0 && userEmail && !allowedEmails.includes(userEmail)) {
+    if (allowedEmails.length > 0 && (!userEmail || !allowedEmails.includes(userEmail))) {
       logger.warn('Login rejected — email not in allowlist', {
         email: userEmail,
         allowedEmails,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { type SlackService, createSlackService } from '@/services/slack';
+import { SlackService, createSlackService } from '@/services/slack';
 import { MetaService } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
 
   try {
     payload = JSON.parse(payloadString) as InteractionPayload;
-  } catch {
+  } catch (e) {
+    logger.warn('Invalid interaction payload', e);
+
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
@@ -154,23 +156,21 @@ async function processInteraction(payload: InteractionPayload, slack: SlackServi
 
     const result =
       mappedType === 'pause'
-        ? `✅ Paused "${label}"`
+        ? `Paused "${label}"`
         : mappedType === 'resume'
-          ? `✅ Resumed "${label}"`
-          : `✅ Set daily budget of "${label}" to $${Math.round(actionValue.action_budget!).toFixed(2)}`;
+          ? `Resumed "${label}"`
+          : `Set daily budget of "${label}" to $${Math.round(actionValue.action_budget!).toFixed(2)}`;
 
     const channelId = actionValue.channel_id ?? channel?.id;
 
     if (channelId && payload.message?.ts) {
-      const blocks = [
-        { type: 'section', text: { type: 'mrkdwn', text: result } },
-        {
-          type: 'context',
-          elements: [{ type: 'mrkdwn', text: `_Executed at ${new Date().toLocaleTimeString()}_` }],
-        },
-      ];
+      const blocks = SlackService.buildNotificationBlocks(
+        `*[Wonderly]* Action Completed`,
+        [result],
+        SlackService.timestampFooter()
+      );
 
-      await slack.updateMessage(channelId, payload.message.ts, result, blocks);
+      await slack.updateMessage(channelId, payload.message.ts, `[Wonderly] ${result}`, blocks);
     }
 
     logger.info('Action completed', result);
@@ -181,7 +181,18 @@ async function processInteraction(payload: InteractionPayload, slack: SlackServi
     const channelId = actionValue.channel_id ?? channel?.id;
 
     if (channelId && payload.message?.ts) {
-      await slack.updateMessage(channelId, payload.message.ts, `❌ Action failed: ${errorMsg}`);
+      const errorBlocks = SlackService.buildNotificationBlocks(
+        `*[Wonderly]* Action Failed`,
+        [errorMsg],
+        SlackService.timestampFooter()
+      );
+
+      await slack.updateMessage(
+        channelId,
+        payload.message.ts,
+        `[Wonderly] Action failed: ${errorMsg}`,
+        errorBlocks
+      );
     }
   }
 }

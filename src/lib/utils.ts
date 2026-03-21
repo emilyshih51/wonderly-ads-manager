@@ -99,13 +99,13 @@ export function getErrorMessage(error: unknown): string {
 
 /** Available date presets for Meta API insight queries, ordered from shortest to longest window. */
 export const DATE_PRESETS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Yesterday', value: 'yesterday' },
-  { label: 'Last 7 Days', value: 'last_7d' },
-  { label: 'Last 14 Days', value: 'last_14d' },
-  { label: 'Last 30 Days', value: 'last_30d' },
-  { label: 'This Month', value: 'this_month' },
-  { label: 'Last Month', value: 'last_month' },
+  { labelKey: 'today', value: 'today' },
+  { labelKey: 'yesterday', value: 'yesterday' },
+  { labelKey: 'last7Days', value: 'last_7d' },
+  { labelKey: 'last14Days', value: 'last_14d' },
+  { labelKey: 'last30Days', value: 'last_30d' },
+  { labelKey: 'thisMonth', value: 'this_month' },
+  { labelKey: 'lastMonth', value: 'last_month' },
 ];
 
 /** Supported call-to-action button types for Meta ad creatives. */

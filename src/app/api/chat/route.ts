@@ -117,6 +117,8 @@ export async function POST(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
 
+  logger.info('POST /api/chat');
+
   try {
     const { message, context, history } = await request.json();
 

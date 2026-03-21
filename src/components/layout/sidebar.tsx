@@ -29,13 +29,13 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { createLogger } from '@/services/logger';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { MetaLogo } from '@/components/ui/meta-logo';
 import { setLocale } from '@/i18n/actions';
-import { locales, type Locale, LOCALE_COOKIE } from '@/i18n/config';
+import { locales, type Locale } from '@/i18n/config';
 import { useAppStore } from '@/stores/app-store';
 
 const logger = createLogger('Sidebar');
@@ -296,12 +296,8 @@ export function Sidebar() {
   const [currentAccount, setCurrentAccount] = useState<AdAccount | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
-  const [currentLocale, setCurrentLocale] = useState<Locale>(() => {
-    if (typeof document === 'undefined') return 'en';
-    const m = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]*)`));
-
-    return m ? (decodeURIComponent(m[1]) as Locale) : 'en';
-  });
+  const localeFromServer = useLocale() as Locale;
+  const [currentLocale, setCurrentLocale] = useState<Locale>(localeFromServer);
   const [, startTransition] = useTransition();
 
   const accountDropdown = useDropdown();
@@ -367,7 +363,7 @@ export function Sidebar() {
     setCurrentLocale(locale);
     startTransition(async () => {
       await setLocale(locale);
-      window.location.reload();
+      router.refresh();
     });
   };
 
@@ -568,7 +564,7 @@ export function Sidebar() {
             >
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
-                {!collapsed && <span suppressHydrationWarning>{LOCALE_SHORT[currentLocale]}</span>}
+                {!collapsed && <span>{LOCALE_SHORT[currentLocale]}</span>}
               </div>
               {!collapsed && (
                 <ChevronDown

@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "CPA가 낮을 때 일시정지 + Winners 광고 세트로 복제",
       "promoteLowCpa5": "광고 프로모션: CPA ≤ $20, 결과 ≥ 5",
       "promoteLowCpa5Desc": "더 많은 결과로 일시정지 + Winners 광고 세트로 복제"
-    }
+    },
+    "adsWouldBeAffected": "개의 광고가 영향을 받습니다"
   },
   "settings": {
     "title": "설정",

@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "CPA 偏低時暫停並複製至優質廣告組合",
       "promoteLowCpa5": "推廣廣告：CPA ≤ $20，結果 ≥ 5",
       "promoteLowCpa5Desc": "以更多結果暫停並複製至優質廣告組合"
-    }
+    },
+    "adsWouldBeAffected": "個廣告會受到影響"
   },
   "settings": {
     "title": "設定",

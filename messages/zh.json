@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "当 CPA 较低时暂停并复制到优胜广告组",
       "promoteLowCpa5": "推广广告：CPA ≤ $20，结果 ≥ 5",
       "promoteLowCpa5Desc": "暂停并复制到优胜广告组（更多结果）"
-    }
+    },
+    "adsWouldBeAffected": "个广告会受到影响"
   },
   "settings": {
     "title": "设置",

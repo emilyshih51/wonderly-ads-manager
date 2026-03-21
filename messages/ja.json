@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "CPAが低い場合、一時停止してWinners広告セットに複製",
       "promoteLowCpa5": "広告を昇格：CPA ≤ $20、成果 ≥ 5件",
       "promoteLowCpa5Desc": "より多くの成果でWinners広告セットに一時停止＋複製"
-    }
+    },
+    "adsWouldBeAffected": "件の広告が影響を受けます"
   },
   "settings": {
     "title": "設定",

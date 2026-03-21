@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "Pausar + duplicar para conjunto Winners quando o CPA for baixo",
       "promoteLowCpa5": "Promover anúncio: CPA ≤ $20, resultados ≥ 5",
       "promoteLowCpa5Desc": "Pausar + duplicar para conjunto Winners com mais resultados"
-    }
+    },
+    "adsWouldBeAffected": "{count, plural, =0 {anúncios seriam afetados} =1 {anúncio seria afetado} other {anúncios seriam afetados}}"
   },
   "settings": {
     "title": "Configurações",

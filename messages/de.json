@@ -436,7 +436,8 @@
       "promoteLowCpa3Desc": "Pausieren + in Winners-Anzeigengruppe duplizieren bei niedrigem CPA",
       "promoteLowCpa5": "Anzeige befördern: CPA ≤ 20 $, Ergebnisse ≥ 5",
       "promoteLowCpa5Desc": "Pausieren + in Winners-Anzeigengruppe duplizieren mit mehr Ergebnissen"
-    }
+    },
+    "adsWouldBeAffected": "{count, plural, =0 {Anzeigen wären betroffen} =1 {Anzeige wäre betroffen} other {Anzeigen wären betroffen}}"
   },
   "settings": {
     "title": "Einstellungen",

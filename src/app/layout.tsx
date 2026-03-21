@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import {
   Inter,
   Noto_Sans,
@@ -160,15 +159,6 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("wonderly-theme")||"light";document.documentElement.classList.add(t)}catch(e){}})()`,
-          }}
-        />
-      </head>
       <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
         <ThemeProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>

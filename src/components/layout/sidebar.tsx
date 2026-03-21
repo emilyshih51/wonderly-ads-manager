@@ -59,11 +59,6 @@ const LOCALE_LABELS: Record<Locale, string> = {
 /*  Smart portal dropdown — auto-positions within viewport             */
 /* ------------------------------------------------------------------ */
 
-interface DropdownPos {
-  top: number;
-  left: number;
-}
-
 /**
  * Preferred placement relative to trigger:
  *  - "below"  → try below, flip above if no space
@@ -74,12 +69,11 @@ type Placement = 'below' | 'above' | 'right';
 
 function computePosition(
   trigger: DOMRect,
-  panel: HTMLDivElement,
+  ph: number,
+  pw: number,
   placement: Placement,
   gap = 6
-): DropdownPos {
-  const ph = panel.offsetHeight;
-  const pw = panel.offsetWidth;
+): { top: number; left: number } {
   const vh = window.innerHeight;
   const vw = window.innerWidth;
 
@@ -89,26 +83,19 @@ function computePosition(
   if (placement === 'right') {
     left = trigger.right + gap;
     top = trigger.top;
-    // flip left if overflows right
     if (left + pw > vw) left = trigger.left - pw - gap;
-    // clamp vertical
     if (top + ph > vh) top = vh - ph - 8;
     if (top < 8) top = 8;
   } else if (placement === 'below') {
     top = trigger.bottom + gap;
     left = trigger.left;
-    // flip above if overflows bottom
     if (top + ph > vh) top = trigger.top - ph - gap;
-    // clamp
     if (top < 8) top = 8;
     if (left + pw > vw) left = vw - pw - 8;
   } else {
-    // above
     top = trigger.top - ph - gap;
     left = trigger.left;
-    // flip below if overflows top
     if (top < 8) top = trigger.bottom + gap;
-    // clamp
     if (top + ph > vh) top = vh - ph - 8;
     if (left + pw > vw) left = vw - pw - 8;
   }
@@ -116,39 +103,13 @@ function computePosition(
   return { top, left };
 }
 
-function useDropdown(placement: Placement) {
+function useDropdown() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<DropdownPos>({ top: -9999, left: -9999 });
-  const placementRef = useRef(placement);
-
-  useEffect(() => {
-    placementRef.current = placement;
-  }, [placement]);
-
-  const reposition = useCallback(() => {
-    const el = triggerRef.current;
-    const panel = panelRef.current;
-
-    if (!el || !panel) return;
-    setPos(computePosition(el.getBoundingClientRect(), panel, placementRef.current));
-  }, []);
-
-  const toggle = useCallback(() => {
-    setOpen((prev) => !prev);
-  }, []);
 
   const close = useCallback(() => setOpen(false), []);
-
-  // Position after panel mounts / placement changes
-  useEffect(() => {
-    if (!open) return;
-    // requestAnimationFrame so the panel is in the DOM and has dimensions
-    const id = requestAnimationFrame(reposition);
-
-    return () => cancelAnimationFrame(id);
-  }, [open, placement, reposition]);
+  const toggle = useCallback(() => setOpen((p) => !p), []);
 
   // Close on outside click
   useEffect(() => {
@@ -168,7 +129,7 @@ function useDropdown(placement: Placement) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open, close]);
 
-  // Close on Escape
+  // Close on Escape / resize / scroll
   useEffect(() => {
     if (!open) return;
 
@@ -177,28 +138,70 @@ function useDropdown(placement: Placement) {
     };
 
     document.addEventListener('keydown', handler);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
 
-    return () => document.removeEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
   }, [open, close]);
 
-  return { triggerRef, panelRef, open, pos, toggle, close };
+  return { triggerRef, panelRef, open, toggle, close };
 }
 
 interface DropdownPanelProps {
   open: boolean;
-  pos: DropdownPos;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   panelRef: RefObject<HTMLDivElement | null>;
-  width?: number;
+  placement: Placement;
+  width: number;
   children: ReactNode;
 }
 
-function DropdownPanel({ open, pos, panelRef, width, children }: DropdownPanelProps) {
+function DropdownPanel({
+  open,
+  triggerRef,
+  panelRef,
+  placement,
+  width,
+  children,
+}: DropdownPanelProps) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPos(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on close
+
+      return;
+    }
+
+    // Wait one frame so the panel is in the DOM with real dimensions
+    const id = requestAnimationFrame(() => {
+      const el = triggerRef.current;
+      const panel = panelRef.current;
+
+      if (!el || !panel) return;
+      setPos(computePosition(el.getBoundingClientRect(), panel.offsetHeight, width, placement));
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [open, placement, triggerRef, panelRef, width]);
+
   if (!open) return null;
 
   return createPortal(
     <div
       ref={panelRef}
-      style={{ position: 'fixed', top: pos.top, left: pos.left, width, zIndex: 9999 }}
+      style={{
+        position: 'fixed',
+        top: pos?.top ?? -9999,
+        left: pos?.left ?? -9999,
+        width,
+        zIndex: 9999,
+        visibility: pos ? 'visible' : 'hidden',
+      }}
       className="sidebar-dropdown-down overflow-hidden rounded-lg border border-white/10 bg-[var(--color-sidebar)] py-1 shadow-xl"
     >
       {children}
@@ -230,8 +233,15 @@ export function Sidebar() {
   });
   const [, startTransition] = useTransition();
 
-  const accountDropdown = useDropdown(collapsed ? 'right' : 'below');
-  const langDropdown = useDropdown(collapsed ? 'right' : 'above');
+  const accountDropdown = useDropdown();
+  const langDropdown = useDropdown();
+
+  // Close dropdowns when collapsed state changes
+  useEffect(() => {
+    accountDropdown.close();
+    langDropdown.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on collapsed change
+  }, [collapsed]);
 
   const navigation = [
     { name: t('dashboard'), href: '/dashboard', icon: LayoutDashboard },
@@ -369,8 +379,9 @@ export function Sidebar() {
 
             <DropdownPanel
               open={accountDropdown.open}
-              pos={accountDropdown.pos}
+              triggerRef={accountDropdown.triggerRef}
               panelRef={accountDropdown.panelRef}
+              placement={collapsed ? 'right' : 'below'}
               width={208}
             >
               {accounts.map((account) => (
@@ -459,8 +470,9 @@ export function Sidebar() {
 
           <DropdownPanel
             open={langDropdown.open}
-            pos={langDropdown.pos}
+            triggerRef={langDropdown.triggerRef}
             panelRef={langDropdown.panelRef}
+            placement={collapsed ? 'right' : 'above'}
             width={112}
           >
             {locales.map((locale) => (
@@ -557,20 +569,18 @@ export function Sidebar() {
         />
       )}
 
-      {/* Mobile drawer */}
-      <aside
-        className={cn(
-          'fixed top-[calc(3.5rem-1px)] left-0 z-50 h-[calc(100vh-3.5rem+1px)] w-56 bg-[var(--color-sidebar)] transition-transform duration-200 ease-in-out md:hidden',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        )}
-      >
-        {sidebarContent}
-      </aside>
-
-      {/* Desktop sidebar */}
+      {/* Single sidebar — mobile: slide-in drawer, desktop: fixed collapsible panel */}
       <aside
         style={{ width: collapsed ? 64 : 224 }}
-        className="fixed top-0 left-0 z-40 hidden h-screen bg-[var(--color-sidebar)] transition-[width] duration-200 ease-in-out md:block"
+        className={cn(
+          'fixed left-0 z-50 bg-[var(--color-sidebar)] transition-all duration-200 ease-in-out',
+          // Mobile: drawer below top bar, slides in/out
+          'top-[calc(3.5rem-1px)] h-[calc(100vh-3.5rem+1px)]',
+          // Desktop: full-height, always translated in
+          'md:top-0 md:z-40 md:h-screen md:translate-x-0',
+          // Mobile slide
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        )}
       >
         {sidebarContent}
       </aside>

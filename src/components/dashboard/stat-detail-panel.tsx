@@ -15,14 +15,14 @@ type MetricKey = 'spend' | 'results' | 'ctr' | 'cpm' | 'cpc' | 'cpr';
 
 const METRIC_CONFIG: Record<
   MetricKey,
-  { label: string; format: 'currency' | 'percent' | 'number'; color: string; accent: string }
+  { labelKey: string; format: 'currency' | 'percent' | 'number'; color: string; accent: string }
 > = {
-  spend: { label: 'Spend', format: 'currency', color: '#2563eb', accent: '#10b981' },
-  results: { label: 'Results', format: 'number', color: '#10b981', accent: '#f43f5e' },
-  ctr: { label: 'CTR', format: 'percent', color: '#f59e0b', accent: '#8b5cf6' },
-  cpm: { label: 'CPM', format: 'currency', color: '#8b5cf6', accent: '#3b82f6' },
-  cpc: { label: 'CPC', format: 'currency', color: '#06b6d4', accent: '#f59e0b' },
-  cpr: { label: 'Cost per Result', format: 'currency', color: '#ef4444', accent: '#6366f1' },
+  spend: { labelKey: 'spend', format: 'currency', color: '#2563eb', accent: '#10b981' },
+  results: { labelKey: 'results', format: 'number', color: '#10b981', accent: '#f43f5e' },
+  ctr: { labelKey: 'ctr', format: 'percent', color: '#f59e0b', accent: '#8b5cf6' },
+  cpm: { labelKey: 'cpm', format: 'currency', color: '#8b5cf6', accent: '#3b82f6' },
+  cpc: { labelKey: 'cpc', format: 'currency', color: '#06b6d4', accent: '#f59e0b' },
+  cpr: { labelKey: 'costPerResult', format: 'currency', color: '#ef4444', accent: '#6366f1' },
 };
 
 const ENGAGEMENT_TYPES = new Set([
@@ -157,7 +157,9 @@ export interface StatDetailPanelProps {
  */
 export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetailPanelProps) {
   const tCommon = useTranslations('common');
+  const tMetrics = useTranslations('metrics');
   const config = METRIC_CONFIG[metric];
+  const configLabel = tMetrics(config.labelKey);
   const globalDatePreset = useAppStore((s) => s.datePreset);
   const [localDatePreset, setLocalDatePreset] = useState<string | null>(null);
   const [showCount, setShowCount] = useState<number>(20);
@@ -273,13 +275,15 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           tCommon('oneCampaign'))
         : tCommon('nCampaigns', { count: selectedCampaignIds.size });
 
-  const dateLabel = DATE_PRESETS.find((p) => p.value === datePreset)?.label ?? datePreset;
+  const dateLabel = DATE_PRESETS.find((p) => p.value === datePreset)
+    ? tCommon(DATE_PRESETS.find((p) => p.value === datePreset)!.labelKey)
+    : datePreset;
 
   return (
     <SlidePanel
       open={open}
       onOpenChange={(v) => !v && onClose()}
-      title={config.label}
+      title={configLabel}
       description={dateLabel}
     >
       {/* Controls row: date + campaign filter */}
@@ -302,7 +306,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
                     : 'text-[var(--color-muted-foreground)]'
                 )}
               >
-                {preset.label}
+                {tCommon(preset.labelKey)}
               </Button>
             ))}
           </div>
@@ -398,7 +402,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           <div className="mb-3">
             <p className="mb-1 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
               {tCommon('total') + ' '}
-              {config.label}
+              {configLabel}
             </p>
             <p className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]">
               {formatMetric(total, config.format)}
@@ -424,7 +428,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
               )}
               {zeroCount > 0 && (
                 <span>
-                  {zeroCount} {tCommon('withNo')} {config.label.toLowerCase()}
+                  {zeroCount} {tCommon('withNo')} {configLabel.toLowerCase()}
                 </span>
               )}
             </div>
@@ -480,7 +484,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
                 [metric]: computeTimeSeriesMetric(row, metric),
               }))}
               xKey="name"
-              series={[{ key: metric, label: config.label, color: config.accent }]}
+              series={[{ key: metric, label: configLabel, color: config.accent }]}
               format={config.format}
               height={130}
             />
@@ -496,7 +500,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
             <AreaChart
               data={chartData}
               xKey="name"
-              series={[{ key: metric, label: config.label, color: config.accent }]}
+              series={[{ key: metric, label: configLabel, color: config.accent }]}
               format={config.format}
               height={130}
             />

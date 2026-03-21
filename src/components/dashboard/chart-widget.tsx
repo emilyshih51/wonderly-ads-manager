@@ -15,7 +15,7 @@ import {
 } from '@/stores/dashboard-store';
 import { GripVertical, X, BarChart3, TrendingUp, Plus, Layers } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { cn } from '@/lib/utils';
+import { cn, DATE_PRESETS } from '@/lib/utils';
 
 interface ChartWidgetProps {
   widget: ChartWidgetConfig;
@@ -28,6 +28,7 @@ interface ChartWidgetProps {
  */
 export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
   const tCommon = useTranslations('common');
+  const tMetrics = useTranslations('metrics');
   const {
     updateWidget,
     removeWidget,
@@ -60,7 +61,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
 
     return {
       key: m.key,
-      label: meta.label,
+      label: tMetrics(meta.labelKey),
       color: m.color,
       format: meta.format,
       yAxisId: needsRightAxis ? 'right' : 'left',
@@ -81,7 +82,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
     updateWidget(widget.id, {
       metric,
       metrics: [{ key: metric, color: meta.defaultColor }],
-      label: meta.label,
+      label: meta.labelKey,
       color: meta.defaultColor,
       chartType: meta.defaultChartType,
     });
@@ -122,7 +123,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                   }}
                 >
                   <div className="h-2 w-2 rounded-full" style={{ backgroundColor: m.color }} />
-                  <span>{METRIC_OPTIONS[m.key].label}</span>
+                  <span>{tMetrics(METRIC_OPTIONS[m.key].labelKey)}</span>
                   {metrics.length > 1 && (
                     <X
                       className="h-3 w-3 text-[var(--color-muted-foreground)] hover:text-red-500"
@@ -145,7 +146,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                     className="h-auto gap-1 border-dashed px-2 py-1 text-[var(--color-muted-foreground)] hover:border-[var(--color-foreground)] hover:text-[var(--color-foreground)]"
                   >
                     <Plus className="h-3 w-3" />
-                    <span className="hidden sm:inline">Add</span>
+                    <span className="hidden sm:inline">{tCommon('add')}</span>
                   </Button>
 
                   {showAddMenu && (
@@ -159,7 +160,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                           .slice(0, 4)
                           .map((combo) => (
                             <Button
-                              key={combo.label}
+                              key={combo.labelKey}
                               variant="ghost"
                               size="sm"
                               className="w-full justify-start gap-2"
@@ -169,7 +170,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                               }}
                             >
                               <Layers className="h-3 w-3 text-[var(--color-muted-foreground)]" />
-                              {combo.label}
+                              {tCommon(combo.labelKey)}
                             </Button>
                           ))}
                       </div>
@@ -197,7 +198,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
                                 className="h-2 w-2 rounded-full"
                                 style={{ backgroundColor: meta.defaultColor }}
                               />
-                              {meta.label}
+                              {tMetrics(meta.labelKey)}
                               <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)]">
                                 {meta.format}
                               </span>
@@ -211,7 +212,7 @@ export function ChartWidget({ widget, data, datePreset }: ChartWidgetProps) {
               )}
 
               <span className="text-[11px] text-[var(--color-muted-foreground)]">
-                {datePreset.replace(/_/g, ' ')}
+                {tCommon(DATE_PRESETS.find((p) => p.value === datePreset)?.labelKey ?? datePreset)}
               </span>
             </div>
 

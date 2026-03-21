@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { useSyncExternalStore } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslations } from 'next-intl';
 
 const subscribe = () => () => {};
 
@@ -20,6 +21,7 @@ const useIsMounted = () => useSyncExternalStore(subscribe, getSnapshot, getServe
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const tCommon = useTranslations('common');
   const mounted = useIsMounted();
 
   const handleToggle = useCallback(() => {
@@ -35,7 +37,7 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       onClick={handleToggle}
-      aria-label="Toggle theme"
+      aria-label={tCommon('toggleTheme')}
       className="h-9 w-9 text-[var(--color-sidebar-foreground)] hover:bg-white/10 hover:text-white"
     >
       {mounted ? (

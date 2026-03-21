@@ -116,7 +116,7 @@ export function DataTable<TData, TValue>({
     };
 
     return [expandCol, ...columns];
-  }, [columns, renderSubRow]);
+  }, [columns, renderSubRow, tCommon]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns unstable function refs; React Compiler skips this component intentionally
   const table = useReactTable({

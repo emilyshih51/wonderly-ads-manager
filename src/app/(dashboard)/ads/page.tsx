@@ -26,12 +26,17 @@ import {
 
 import { useTranslations } from 'next-intl';
 
-const DATE_PRESET_OPTIONS = DATE_PRESETS.map((p) => ({ label: p.label, value: p.value }));
+function useDatePresetOptions() {
+  const tCommon = useTranslations('common');
+
+  return DATE_PRESETS.map((p) => ({ label: tCommon(p.labelKey), value: p.value }));
+}
 
 export default function TopPerformingAdsPage() {
   const t = useTranslations('ads');
   const tCommon = useTranslations('common');
   const tMetrics = useTranslations('metrics');
+  const datePresetOptions = useDatePresetOptions();
   const { setDatePreset, filterCampaignId, filterAdSetId, setFilterCampaignId, setFilterAdSetId } =
     useAppStore();
   const [localDatePreset, setLocalDatePreset] = useState('last_7d');
@@ -183,7 +188,7 @@ export default function TopPerformingAdsPage() {
               <SelectNative
                 value={localDatePreset}
                 onChange={(e) => handleDatePresetChange(e.target.value)}
-                options={DATE_PRESET_OPTIONS}
+                options={datePresetOptions}
               />
             </div>
           </div>

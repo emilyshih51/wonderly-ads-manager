@@ -64,11 +64,17 @@ export default function SettingsPage() {
     });
   };
 
+  const fontVarMap: Record<FontChoice, string> = {
+    'noto-sans': '--font-noto-sans',
+    inter: '--font-inter',
+    'jetbrains-mono': '--font-jetbrains-mono',
+  };
+
   const handleFontChange = (font: FontChoice) => {
     setCurrentFont(font);
+    document.documentElement.style.setProperty('--font-active', `var(${fontVarMap[font]})`);
     startTransition(async () => {
       await setFont(font);
-      router.refresh();
     });
   };
 

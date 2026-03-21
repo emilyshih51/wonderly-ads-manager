@@ -12,6 +12,7 @@ import {
   Space_Grotesk,
 } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers';
+import { PWARegister } from '@/components/pwa-register';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { cookies } from 'next/headers';
@@ -99,7 +100,17 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: 'Wonderly Ads Manager',
   description: 'Manage your Meta ads, track performance, and automate your workflow.',
-  icons: { icon: '/favicon.svg' },
+  manifest: '/manifest.json',
+  themeColor: '#0467DF',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Wonderly',
+  },
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/icons/apple-touch-icon.png',
+  },
 };
 
 export default async function RootLayout({
@@ -151,6 +162,7 @@ export default async function RootLayout({
             {children}
           </NextIntlClientProvider>
         </ThemeProvider>
+        <PWARegister />
       </body>
     </html>
   );

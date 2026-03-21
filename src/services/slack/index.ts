@@ -222,8 +222,6 @@ export class SlackService {
       const messages: SlackThreadMessage[] = [];
 
       for (const msg of repliesData.messages) {
-        if (msg.ts === threadTs && repliesData.messages.length > 1) continue;
-
         const isBot = msg.bot_id || (botUserId && msg.user === botUserId);
         const text = (msg.text || '').replace(/<@.+?>/g, '').trim();
 

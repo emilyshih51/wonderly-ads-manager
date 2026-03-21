@@ -16,7 +16,7 @@ export function AssistantTooltip({ visible }: AssistantTooltipProps) {
   return (
     <div
       className={cn(
-        'absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg',
+        'absolute top-0 left-1/2 -translate-x-1/2 rounded-lg whitespace-nowrap',
         'border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5',
         'text-xs font-medium text-[var(--color-foreground)] shadow-md',
         'pointer-events-none transition-opacity duration-200',

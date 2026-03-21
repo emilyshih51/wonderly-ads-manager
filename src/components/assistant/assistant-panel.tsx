@@ -55,7 +55,7 @@ export function AssistantPanel() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
             <Bot className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="text-sm font-semibold text-[var(--color-foreground)]">Winnie</span>
+          <span className="text-sm font-semibold text-[var(--color-foreground)]">Assistant</span>
           <span className="text-xs text-[var(--color-muted-foreground)]">· AI Assistant</span>
         </div>
         <button
@@ -85,8 +85,7 @@ export function AssistantPanel() {
               )}
               {!dataLoading && dataStats && (
                 <p className="text-xs text-[var(--color-muted-foreground)]">
-                  {dataStats.campaigns} campaigns · {dataStats.adSets} ad sets · {dataStats.ads}{' '}
-                  ads
+                  {dataStats.campaigns} campaigns · {dataStats.adSets} ad sets · {dataStats.ads} ads
                 </p>
               )}
             </div>

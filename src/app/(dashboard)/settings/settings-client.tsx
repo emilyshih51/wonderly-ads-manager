@@ -377,7 +377,7 @@ export function SettingsClient({
             </Card>
 
             {/* ── Danger zone ── */}
-            <Card className="overflow-hidden border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20">
+            <Card className="overflow-hidden border-red-200 bg-red-50/50 pt-4 dark:border-red-900/50 dark:bg-red-950/20">
               <CardContent className="px-5 pt-5 pb-4">
                 <p className="text-sm font-medium text-red-700 dark:text-red-400">{t('signOut')}</p>
                 <p className="mt-0.5 text-xs text-red-600/60 dark:text-red-400/50">
@@ -403,7 +403,7 @@ export function SettingsClient({
   );
 }
 
-/** Toggle row for showing/hiding the Shiba Inu AI assistant overlay. */
+/** Toggle row for showing/hiding the AI robot assistant overlay. */
 function AssistantToggle() {
   const { assistantEnabled, setAssistantEnabled } = useAssistantStore();
 
@@ -416,7 +416,7 @@ function AssistantToggle() {
         <div>
           <p className="text-sm font-medium text-[var(--color-foreground)]">AI Assistant</p>
           <p className="text-xs text-[var(--color-muted-foreground)]">
-            Show Winnie, the floating Shiba Inu chat assistant
+            Show the floating AI robot chat assistant
           </p>
         </div>
       </div>

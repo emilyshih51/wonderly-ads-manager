@@ -15,7 +15,7 @@ const AssistantCharacter = dynamic(
 );
 
 /**
- * Fixed-position overlay with the 3D Shiba and chat panel.
+ * Fixed-position overlay with the 3D robot assistant and chat panel.
  * Hover → wiggle, click → bounce + open panel.
  */
 export function AssistantOverlay() {
@@ -50,7 +50,7 @@ export function AssistantOverlay() {
 
   return (
     <>
-      <div className="fixed right-6 bottom-6 z-[10000] h-[110px] w-[110px]">
+      <div className="fixed right-3 bottom-6 z-[10000] h-[160px] w-[160px]">
         <div
           role="button"
           tabIndex={0}
@@ -60,7 +60,8 @@ export function AssistantOverlay() {
           onMouseLeave={handleMouseLeave}
           onKeyDown={(e) => e.key === 'Enter' && handleClick()}
           className={cn(
-            'relative h-full w-full cursor-pointer transition-transform duration-200 hover:scale-110 active:scale-95'
+            'relative h-full w-full cursor-pointer rounded-full transition-transform duration-200 hover:scale-110 active:scale-95',
+            '[filter:drop-shadow(0_0_12px_rgba(96,165,250,0.5))_drop-shadow(0_0_30px_rgba(96,165,250,0.25))]'
           )}
         >
           <AssistantTooltip visible={hovered && !assistantPanelOpen} />

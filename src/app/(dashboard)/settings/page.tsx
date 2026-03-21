@@ -170,24 +170,43 @@ export default function SettingsPage() {
                   <CardDescription>{t('slackBotDesc')}</CardDescription>
                 </div>
               </div>
-              {!slackLoading &&
-                (slackBotConfigured ? (
-                  <Badge variant="active">
-                    <CheckCircle2 className="mr-1 h-3 w-3" /> {t('configured')}
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">{t('notConfigured')}</Badge>
-                ))}
+              {slackLoading ? (
+                <div className="h-5 w-20 animate-pulse rounded bg-[var(--color-muted)]" />
+              ) : slackBotConfigured ? (
+                <Badge variant="active">
+                  <CheckCircle2 className="mr-1 h-3 w-3" /> {t('configured')}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{t('notConfigured')}</Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {slackLoading ? (
-              <div className="h-5 w-48 animate-pulse rounded bg-[var(--color-muted)]" />
+              <div className="space-y-3">
+                <div className="h-4 w-64 animate-pulse rounded bg-[var(--color-muted)]" />
+                <div className="h-4 w-48 animate-pulse rounded bg-[var(--color-muted)]" />
+              </div>
             ) : slackBotConfigured ? (
-              <div>
-                <p className="mb-4 text-sm text-[var(--color-muted-foreground)]">
+              <div className="space-y-4">
+                <p className="text-sm text-[var(--color-muted-foreground)]">
                   {t('slackConfigured')}
                 </p>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4">
+                  <h4 className="mb-2 text-sm font-medium text-[var(--color-foreground)]">
+                    How to use
+                  </h4>
+                  <ul className="space-y-1 text-sm text-[var(--color-muted-foreground)]">
+                    <li>
+                      Mention the bot in any channel:{' '}
+                      <code className="rounded bg-[var(--color-card)] px-1.5 py-0.5 text-xs">
+                        @Wonderly how are my campaigns doing?
+                      </code>
+                    </li>
+                    <li>It can answer questions about spend, results, CTR, and CPA.</li>
+                    <li>Action buttons (pause, adjust budget) will appear inline when relevant.</li>
+                  </ul>
+                </div>
               </div>
             ) : (
               <div className="space-y-4">

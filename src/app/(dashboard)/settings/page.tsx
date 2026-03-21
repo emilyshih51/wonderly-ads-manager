@@ -93,8 +93,8 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/8 dark:bg-violet-500/15">
-                <Type className="h-5 w-5 text-violet-500" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-border)]/40">
+                <Type className="h-5 w-5 text-[var(--color-muted-foreground)]" />
               </div>
               <div>
                 <CardTitle className="text-base">{t('appearance')}</CardTitle>
@@ -154,7 +154,7 @@ export default function SettingsPage() {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#4A154B]/8 dark:bg-[#E01E5A]/15">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-border)]/40">
                   <svg className="h-5 w-5" viewBox="0 0 54 54" fill="none">
                     <path
                       d="M19.712.133a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386h5.376V5.52A5.381 5.381 0 0 0 19.712.133m0 14.365H5.376A5.381 5.381 0 0 0 0 19.884a5.381 5.381 0 0 0 5.376 5.387h14.336a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386"
@@ -337,7 +337,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/8 p-2 dark:bg-blue-500/15">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-border)]/40 p-2">
                 <MetaLogo className="h-full w-full" />
               </div>
               <div>
@@ -354,13 +354,13 @@ export default function SettingsPage() {
         {/* Danger Zone */}
         <div className="rounded-xl bg-red-500/10 p-4 md:p-6">
           <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <h3 className="text-sm font-semibold text-red-600 dark:text-red-400">Danger Zone</h3>
+            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">Danger Zone</h3>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-medium text-[var(--color-foreground)]">{t('signOut')}</p>
-              <p className="mt-0.5 text-xs text-red-600/70 dark:text-red-400/70">
+              <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
                 Disconnect your Meta account and end this session.
               </p>
             </div>

@@ -91,6 +91,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Channel allowlist — only respond in permitted channels
+    const allowedChannels = (process.env.ALLOWED_SLACK_CHANNEL_IDS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (allowedChannels.length > 0 && !allowedChannels.includes(event.channel)) {
+      logger.warn('app_mention from disallowed channel, ignoring', { channel: event.channel });
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // User allowlist — only respond to permitted users
+    const allowedUsers = (process.env.ALLOWED_SLACK_USER_IDS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (allowedUsers.length > 0 && event.user && !allowedUsers.includes(event.user)) {
+      logger.warn('app_mention from disallowed user, ignoring', { user: event.user });
+
+      return NextResponse.json({ ok: true });
+    }
+
     logger.info('Received app_mention', {
       channel: event.channel,
       user: event.user,

@@ -364,6 +364,7 @@ export function Sidebar() {
     startTransition(async () => {
       await setLocale(locale);
       router.refresh();
+      router.replace(pathname);
     });
   };
 

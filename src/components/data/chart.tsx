@@ -22,6 +22,10 @@ export interface ChartSeries {
   key: string;
   label: string;
   color?: string;
+  /** Per-series format — overrides the chart-level format for this series. */
+  format?: FormatType;
+  /** Which Y-axis to use: 'left' (default) or 'right'. */
+  yAxisId?: 'left' | 'right';
 }
 
 type FormatType = 'currency' | 'percent' | 'number';
@@ -30,7 +34,10 @@ interface BaseChartProps {
   data: DataRecord[];
   xKey: string;
   series: ChartSeries[];
+  /** Default format for the left Y-axis. */
   format?: FormatType;
+  /** Format for the right Y-axis (if any series uses yAxisId='right'). */
+  rightFormat?: FormatType;
   height?: number;
   className?: string;
 }
@@ -104,42 +111,68 @@ function ChartTooltip({
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
 
-  const entry = payload[0];
-  const row = entry.payload;
-  const related = primaryKey ? (RELATED_METRICS[primaryKey] ?? []) : [];
+  const isMultiSeries = payload.length > 1;
+  const row = payload[0].payload;
 
   return (
     <div className="min-w-[140px] rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-lg">
       <p className="mb-2 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
         {label}
       </p>
-      {/* Primary value */}
-      <p className="text-lg font-bold tabular-nums" style={{ color: entry.color }}>
-        {formatValue(entry.value ?? 0, format)}
-      </p>
-      <p className="mb-2 text-[11px] text-[var(--color-muted-foreground)]">{entry.name}</p>
 
-      {/* Related metrics */}
-      {related.length > 0 && row && (
-        <div className="space-y-1 border-t border-[var(--color-border)] pt-2">
-          {related.map((key) => {
-            const val = row[key];
-
-            if (val == null) return null;
-            const fmt = METRIC_FORMATS[key] ?? 'number';
+      {isMultiSeries ? (
+        /* Multi-series: show all values with colored dots */
+        <div className="space-y-1.5">
+          {payload.map((entry, i) => {
+            const key = String(entry.dataKey ?? '');
+            const fmt = METRIC_FORMATS[key] ?? format;
 
             return (
-              <div key={key} className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-[var(--color-muted-foreground)]">
-                  {METRIC_LABELS[key] ?? key}
-                </span>
-                <span className="font-medium text-[var(--color-foreground)] tabular-nums">
-                  {formatValue(Number(val), fmt)}
+              <div key={i} className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: entry.color }}
+                  />
+                  <span className="text-xs text-[var(--color-muted-foreground)]">{entry.name}</span>
+                </div>
+                <span className="text-sm font-semibold tabular-nums" style={{ color: entry.color }}>
+                  {formatValue(entry.value ?? 0, fmt)}
                 </span>
               </div>
             );
           })}
         </div>
+      ) : (
+        /* Single series: show primary value + related context */
+        <>
+          <p className="text-lg font-bold tabular-nums" style={{ color: payload[0].color }}>
+            {formatValue(payload[0].value ?? 0, format)}
+          </p>
+          <p className="mb-2 text-[11px] text-[var(--color-muted-foreground)]">{payload[0].name}</p>
+
+          {primaryKey && row && (RELATED_METRICS[primaryKey] ?? []).length > 0 && (
+            <div className="space-y-1 border-t border-[var(--color-border)] pt-2">
+              {(RELATED_METRICS[primaryKey] ?? []).map((key) => {
+                const val = row[key];
+
+                if (val == null) return null;
+                const fmt = METRIC_FORMATS[key] ?? 'number';
+
+                return (
+                  <div key={key} className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="text-[var(--color-muted-foreground)]">
+                      {METRIC_LABELS[key] ?? key}
+                    </span>
+                    <span className="font-medium text-[var(--color-foreground)] tabular-nums">
+                      {formatValue(Number(val), fmt)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -148,14 +181,25 @@ function ChartTooltip({
 const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 /**
- * Themed AreaChart wrapper.
+ * Themed AreaChart wrapper with optional dual Y-axes for multi-format comparison.
  */
-export function AreaChart({ data, xKey, series, format = 'number', height = 280 }: BaseChartProps) {
+export function AreaChart({
+  data,
+  xKey,
+  series,
+  format = 'number',
+  rightFormat,
+  height = 280,
+}: BaseChartProps) {
   const primaryKey = series[0]?.key;
+  const hasRightAxis = series.some((s) => s.yAxisId === 'right');
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <RechartsAreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+      <RechartsAreaChart
+        data={data}
+        margin={{ top: 4, right: hasRightAxis ? 4 : 4, left: 0, bottom: 0 }}
+      >
         <defs>
           {series.map((s, i) => {
             const color = s.color ?? CHART_COLORS[i % CHART_COLORS.length];
@@ -181,12 +225,24 @@ export function AreaChart({ data, xKey, series, format = 'number', height = 280 
           tickLine={false}
         />
         <YAxis
+          yAxisId="left"
           tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => formatValue(v, format)}
           width={format === 'currency' ? 70 : 40}
         />
+        {hasRightAxis && (
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => formatValue(v, rightFormat ?? 'number')}
+            width={rightFormat === 'currency' ? 70 : 40}
+          />
+        )}
         <Tooltip
           content={<ChartTooltip format={format} primaryKey={primaryKey} />}
           cursor={{
@@ -204,6 +260,7 @@ export function AreaChart({ data, xKey, series, format = 'number', height = 280 
               type="monotone"
               dataKey={s.key}
               name={s.label}
+              yAxisId={s.yAxisId ?? 'left'}
               stroke={color}
               strokeWidth={2}
               fill={`url(#grad-${s.key})`}
@@ -223,10 +280,18 @@ export function AreaChart({ data, xKey, series, format = 'number', height = 280 
 }
 
 /**
- * Themed BarChart wrapper.
+ * Themed BarChart wrapper with optional dual Y-axes.
  */
-export function BarChart({ data, xKey, series, format = 'number', height = 280 }: BaseChartProps) {
+export function BarChart({
+  data,
+  xKey,
+  series,
+  format = 'number',
+  rightFormat,
+  height = 280,
+}: BaseChartProps) {
   const primaryKey = series[0]?.key;
+  const hasRightAxis = series.some((s) => s.yAxisId === 'right');
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -244,12 +309,24 @@ export function BarChart({ data, xKey, series, format = 'number', height = 280 }
           tickLine={false}
         />
         <YAxis
+          yAxisId="left"
           tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => formatValue(v, format)}
           width={format === 'currency' ? 70 : 40}
         />
+        {hasRightAxis && (
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => formatValue(v, rightFormat ?? 'number')}
+            width={rightFormat === 'currency' ? 70 : 40}
+          />
+        )}
         <Tooltip
           content={<ChartTooltip format={format} primaryKey={primaryKey} />}
           cursor={{ fill: 'var(--color-accent)', opacity: 0.5 }}
@@ -262,6 +339,7 @@ export function BarChart({ data, xKey, series, format = 'number', height = 280 }
               key={s.key}
               dataKey={s.key}
               name={s.label}
+              yAxisId={s.yAxisId ?? 'left'}
               fill={color}
               radius={[4, 4, 0, 0]}
               fillOpacity={0.85}

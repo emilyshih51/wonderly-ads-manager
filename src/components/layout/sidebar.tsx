@@ -40,6 +40,61 @@ import { useAppStore } from '@/stores/app-store';
 
 const logger = createLogger('Sidebar');
 
+/**
+ * Tooltip that appears to the right of a sidebar item when collapsed.
+ * CSS-only — no JS positioning needed since the sidebar is fixed-left.
+ */
+function SidebarTooltip({ label, children }: { label: string; children: ReactNode }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  const handleEnter = () => {
+    if (!wrapperRef.current) return;
+    const rect = wrapperRef.current.getBoundingClientRect();
+
+    setPos({
+      top: rect.top + rect.height / 2,
+      left: rect.right + 10,
+    });
+    setShow(true);
+  };
+
+  return (
+    <div ref={wrapperRef} onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-[9999]"
+            style={{ top: pos.top, left: pos.left, transform: 'translateY(-50%)' }}
+          >
+            <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-y-[5px] border-r-[5px] border-y-transparent border-r-[var(--color-foreground)]" />
+            <div className="rounded-md bg-[var(--color-foreground)] px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-[var(--color-background)] shadow-lg">
+              {label}
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
+}
+
+/** Wraps children in SidebarTooltip only when collapsed. */
+function MaybeTooltip({
+  collapsed,
+  label,
+  children,
+}: {
+  collapsed: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!collapsed) return <>{children}</>;
+
+  return <SidebarTooltip label={label}>{children}</SidebarTooltip>;
+}
+
 interface AdAccount {
   id: string;
   name: string;
@@ -47,12 +102,28 @@ interface AdAccount {
   is_current: boolean;
 }
 
-const LOCALE_LABELS: Record<Locale, string> = {
+const LOCALE_SHORT: Record<Locale, string> = {
   en: 'EN',
   es: 'ES',
   zh: '简',
   'zh-TW': '繁',
   ja: 'JA',
+  fr: 'FR',
+  de: 'DE',
+  ko: '한',
+  pt: 'PT',
+};
+
+const LOCALE_NAMES: Record<Locale, string> = {
+  en: 'English',
+  es: 'Español',
+  zh: '简体中文',
+  'zh-TW': '繁體中文',
+  ja: '日本語',
+  fr: 'Français',
+  de: 'Deutsch',
+  ko: '한국어',
+  pt: 'Português',
 };
 
 /* ------------------------------------------------------------------ */
@@ -284,7 +355,6 @@ export function Sidebar() {
       setCurrentAccount(account);
       setAccounts((prev) => prev.map((a) => ({ ...a, is_current: a.id === account.id })));
       router.refresh();
-      window.location.reload();
     } catch (e) {
       logger.error('Failed to switch account', e);
     } finally {
@@ -304,128 +374,162 @@ export function Sidebar() {
   const showSwitcher = !accountsLoading && accounts.length > 1;
 
   const sidebarContent = (
-    <div className="flex h-full flex-col overflow-x-hidden overflow-y-auto">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Logo — hidden on mobile since the top bar already shows it */}
-      <div className="hidden h-16 shrink-0 items-center gap-2.5 px-4 md:flex">
+      <div className="hidden h-16 shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-5 md:flex">
         <MetaLogo className="h-8 w-8 shrink-0" />
-        {!collapsed && (
-          <span className="text-sm font-semibold whitespace-nowrap text-[var(--color-sidebar-foreground)]">
-            Ads Manager
-          </span>
-        )}
+        <span className="text-sm font-semibold whitespace-nowrap text-[var(--color-sidebar-foreground)]">
+          Ads Manager
+        </span>
       </div>
 
-      {/* Account Switcher */}
-      <div className="px-3">
-        {accountsLoading ? (
-          collapsed ? (
-            <div className="mb-2 flex justify-center">
-              <div className="h-8 w-8 animate-pulse rounded-md bg-white/10" />
-            </div>
-          ) : (
-            <div className="mb-2 flex items-center justify-between rounded-md bg-white/5 px-3 py-2">
-              <div className="space-y-1.5">
-                <div className="h-3.5 w-28 animate-pulse rounded bg-white/10" />
-                <div className="h-3 w-20 animate-pulse rounded bg-white/[0.06]" />
-              </div>
-              <div className="h-3.5 w-3.5 animate-pulse rounded bg-white/[0.06]" />
-            </div>
-          )
-        ) : showSwitcher ? (
-          <div className="mb-2">
-            {collapsed ? (
-              <button
-                ref={accountDropdown.triggerRef}
-                onClick={accountDropdown.toggle}
-                title={currentAccount?.name || t('selectAccount')}
-                className={cn(
-                  'flex w-full justify-center rounded-md bg-white/5 py-2 transition-colors hover:bg-white/10',
-                  switching && 'pointer-events-none opacity-60'
-                )}
-                disabled={switching}
-              >
-                <span className="text-xs font-semibold text-white">
-                  {(currentAccount?.name || '?').charAt(0).toUpperCase()}
-                </span>
-              </button>
-            ) : (
-              <button
-                ref={accountDropdown.triggerRef}
-                onClick={accountDropdown.toggle}
-                className={cn(
-                  'flex w-full items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs transition-colors hover:bg-white/10',
-                  switching && 'pointer-events-none opacity-60'
-                )}
-                disabled={switching}
-              >
-                <div className="min-w-0 text-left">
-                  <p className="truncate text-xs font-medium text-white">
-                    {currentAccount?.name || t('selectAccount')}
-                  </p>
-                  {currentAccount?.business_name && (
-                    <p className="truncate text-[10px] text-[var(--color-muted-foreground)]">
-                      {currentAccount.business_name}
-                    </p>
-                  )}
-                </div>
-                <ChevronDown
-                  className={cn(
-                    'ml-2 h-3.5 w-3.5 shrink-0 text-[var(--color-muted-foreground)] transition-transform duration-200',
-                    accountDropdown.open && 'rotate-180'
-                  )}
-                />
-              </button>
-            )}
-
-            <DropdownPanel
-              open={accountDropdown.open}
-              triggerRef={accountDropdown.triggerRef}
-              panelRef={accountDropdown.panelRef}
-              placement={collapsed ? 'right' : 'below'}
-              width={208}
-            >
-              {accounts.map((account) => (
+      {/* Account Switcher — fixed height to prevent layout shift */}
+      <div className="shrink-0 px-3 pt-4 pb-2">
+        {collapsed ? (
+          /* Collapsed: show initial or loaded state in same-height container */
+          showSwitcher ? (
+            <>
+              <SidebarTooltip label={currentAccount?.name || t('selectAccount')}>
                 <button
-                  key={account.id}
-                  onClick={() => switchAccount(account)}
+                  ref={accountDropdown.triggerRef}
+                  onClick={accountDropdown.toggle}
                   className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors',
-                    account.is_current
-                      ? 'text-[var(--color-primary)]'
-                      : 'text-[var(--color-sidebar-foreground)] hover:bg-white/10'
+                    'flex h-9 w-full items-center justify-center rounded-md bg-white/5 transition-colors hover:bg-white/10',
+                    switching && 'pointer-events-none opacity-60'
                   )}
+                  disabled={switching}
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{account.name}</p>
-                    {account.business_name && (
+                  <span className="text-xs font-semibold text-white">
+                    {(currentAccount?.name || '?').charAt(0).toUpperCase()}
+                  </span>
+                </button>
+              </SidebarTooltip>
+              <DropdownPanel
+                open={accountDropdown.open}
+                triggerRef={accountDropdown.triggerRef}
+                panelRef={accountDropdown.panelRef}
+                placement="right"
+                width={208}
+              >
+                {accounts.map((account) => (
+                  <button
+                    key={account.id}
+                    onClick={() => switchAccount(account)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors',
+                      account.is_current
+                        ? 'text-[var(--color-primary)]'
+                        : 'text-[var(--color-sidebar-foreground)] hover:bg-white/10'
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{account.name}</p>
+                      {account.business_name && (
+                        <p className="truncate text-[10px] text-[var(--color-muted-foreground)]">
+                          {account.business_name}
+                        </p>
+                      )}
+                    </div>
+                    {account.is_current && (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
+                    )}
+                  </button>
+                ))}
+              </DropdownPanel>
+            </>
+          ) : (
+            /* Collapsed: loading or single account — reserve same height */
+            <div className="h-9" />
+          )
+        ) : (
+          /* Expanded: fixed-height container for skeleton → real → empty */
+          <div className="h-[42px]">
+            {accountsLoading ? (
+              <div className="flex h-full items-center justify-between rounded-md bg-white/5 px-3">
+                <div className="space-y-1.5">
+                  <div className="h-3 w-24 animate-pulse rounded bg-white/10" />
+                  <div className="h-2.5 w-16 animate-pulse rounded bg-white/[0.06]" />
+                </div>
+                <div className="h-3 w-3 animate-pulse rounded bg-white/[0.06]" />
+              </div>
+            ) : showSwitcher ? (
+              <>
+                <button
+                  ref={accountDropdown.triggerRef}
+                  onClick={accountDropdown.toggle}
+                  className={cn(
+                    'flex h-full w-full items-center justify-between rounded-md bg-white/5 px-3 text-xs transition-colors hover:bg-white/10',
+                    switching && 'pointer-events-none opacity-60'
+                  )}
+                  disabled={switching}
+                >
+                  <div className="min-w-0 text-left">
+                    <p className="truncate text-xs font-medium text-white">
+                      {currentAccount?.name || t('selectAccount')}
+                    </p>
+                    {currentAccount?.business_name && (
                       <p className="truncate text-[10px] text-[var(--color-muted-foreground)]">
-                        {account.business_name}
+                        {currentAccount.business_name}
                       </p>
                     )}
                   </div>
-                  {account.is_current && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
-                  )}
+                  <ChevronDown
+                    className={cn(
+                      'ml-2 h-3.5 w-3.5 shrink-0 text-[var(--color-muted-foreground)] transition-transform duration-200',
+                      accountDropdown.open && 'rotate-180'
+                    )}
+                  />
                 </button>
-              ))}
-            </DropdownPanel>
+                <DropdownPanel
+                  open={accountDropdown.open}
+                  triggerRef={accountDropdown.triggerRef}
+                  panelRef={accountDropdown.panelRef}
+                  placement="below"
+                  width={208}
+                >
+                  {accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      onClick={() => switchAccount(account)}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors',
+                        account.is_current
+                          ? 'text-[var(--color-primary)]'
+                          : 'text-[var(--color-sidebar-foreground)] hover:bg-white/10'
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{account.name}</p>
+                        {account.business_name && (
+                          <p className="truncate text-[10px] text-[var(--color-muted-foreground)]">
+                            {account.business_name}
+                          </p>
+                        )}
+                      </div>
+                      {account.is_current && (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
+                      )}
+                    </button>
+                  ))}
+                </DropdownPanel>
+              </>
+            ) : null}
           </div>
-        ) : null}
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      {/* Navigation — scrolls independently */}
+      <nav className="sidebar-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
         {navigation.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
           const isPrimary = item.isPrimary;
 
-          return (
+          const link = (
             <Link
               key={item.href}
               href={item.href}
-              title={collapsed ? item.name : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200',
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm whitespace-nowrap',
                 collapsed && 'justify-center px-2',
                 isActive && isPrimary
                   ? 'bg-[var(--color-primary)] text-white shadow-lg shadow-blue-500/20'
@@ -438,42 +542,51 @@ export function Sidebar() {
               {!collapsed && <span className="font-medium">{item.name}</span>}
             </Link>
           );
+
+          return collapsed ? (
+            <SidebarTooltip key={item.href} label={item.name}>
+              {link}
+            </SidebarTooltip>
+          ) : (
+            link
+          );
         })}
       </nav>
 
       {/* Bottom controls */}
-      <div className="space-y-1 px-3 py-4">
+      <div className="shrink-0 space-y-1.5 border-t border-white/[0.06] px-3 py-4">
         {/* Language switcher */}
         <div>
-          <button
-            ref={langDropdown.triggerRef}
-            onClick={langDropdown.toggle}
-            title={collapsed ? LOCALE_LABELS[currentLocale] : undefined}
-            className={cn(
-              'flex w-full items-center rounded-md py-1.5 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-white/5 hover:text-white',
-              collapsed ? 'justify-center px-2' : 'justify-between px-3'
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 shrink-0" />
-              {!collapsed && <span>{LOCALE_LABELS[currentLocale]}</span>}
-            </div>
-            {!collapsed && (
-              <ChevronDown
-                className={cn(
-                  'h-3 w-3 transition-transform duration-200',
-                  langDropdown.open && 'rotate-180'
-                )}
-              />
-            )}
-          </button>
+          <MaybeTooltip collapsed={collapsed} label="Language">
+            <button
+              ref={langDropdown.triggerRef}
+              onClick={langDropdown.toggle}
+              className={cn(
+                'flex w-full items-center rounded-lg py-2 text-xs whitespace-nowrap text-[var(--color-muted-foreground)] hover:bg-white/5 hover:text-white',
+                collapsed ? 'justify-center px-2' : 'justify-between px-3'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 shrink-0" />
+                {!collapsed && <span>{LOCALE_SHORT[currentLocale]}</span>}
+              </div>
+              {!collapsed && (
+                <ChevronDown
+                  className={cn(
+                    'h-3 w-3 shrink-0 transition-transform duration-200',
+                    langDropdown.open && 'rotate-180'
+                  )}
+                />
+              )}
+            </button>
+          </MaybeTooltip>
 
           <DropdownPanel
             open={langDropdown.open}
             triggerRef={langDropdown.triggerRef}
             panelRef={langDropdown.panelRef}
             placement={collapsed ? 'right' : 'above'}
-            width={112}
+            width={160}
           >
             {locales.map((locale) => (
               <button
@@ -486,7 +599,7 @@ export function Sidebar() {
                     : 'text-[var(--color-sidebar-foreground)] hover:bg-white/10'
                 )}
               >
-                <span>{LOCALE_LABELS[locale]}</span>
+                <span>{LOCALE_NAMES[locale]}</span>
                 {locale === currentLocale && (
                   <Check className="h-3 w-3 text-[var(--color-primary)]" />
                 )}
@@ -496,50 +609,54 @@ export function Sidebar() {
         </div>
 
         {/* Theme toggle */}
-        {collapsed ? (
-          <div className="flex justify-center py-1">
-            <ThemeToggle />
-          </div>
-        ) : (
-          <div className="flex items-center justify-between px-3 py-1">
-            <span className="text-xs text-[var(--color-muted-foreground)]">{t('theme')}</span>
-            <ThemeToggle />
-          </div>
-        )}
+        <MaybeTooltip collapsed={collapsed} label={t('theme')}>
+          {collapsed ? (
+            <div className="flex justify-center py-1.5">
+              <ThemeToggle />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg px-3 py-2 whitespace-nowrap">
+              <span className="text-xs text-[var(--color-muted-foreground)]">{t('theme')}</span>
+              <ThemeToggle />
+            </div>
+          )}
+        </MaybeTooltip>
 
         {/* Collapse toggle — hidden on mobile */}
-        <button
-          onClick={toggleSidebar}
-          title={collapsed ? 'Expand' : 'Collapse'}
-          className={cn(
-            'hidden w-full items-center gap-3 rounded-md py-2 text-sm text-[var(--color-muted-foreground)] transition-all duration-200 hover:bg-white/5 hover:text-white md:flex',
-            collapsed ? 'justify-center px-2' : 'px-3'
-          )}
-        >
-          {collapsed ? (
-            <ChevronsRight className="h-4.5 w-4.5 shrink-0" />
-          ) : (
-            <>
-              <ChevronsLeft className="h-4.5 w-4.5 shrink-0" />
-              <span className="font-medium">Collapse</span>
-            </>
-          )}
-        </button>
-
-        {/* Logout */}
-        <form action="/api/auth/logout" method="POST">
+        <MaybeTooltip collapsed={collapsed} label={collapsed ? 'Expand' : ''}>
           <button
-            type="submit"
-            title={collapsed ? t('signOut') : undefined}
+            onClick={toggleSidebar}
             className={cn(
-              'flex w-full items-center gap-3 rounded-md py-2 text-sm text-[var(--color-sidebar-foreground)] transition-all duration-200 hover:bg-white/5 hover:text-white',
+              'hidden w-full items-center gap-3 rounded-lg py-2.5 text-sm whitespace-nowrap text-[var(--color-muted-foreground)] hover:bg-white/5 hover:text-white md:flex',
               collapsed ? 'justify-center px-2' : 'px-3'
             )}
           >
-            <LogOut className="h-4.5 w-4.5 shrink-0" />
-            {!collapsed && <span className="font-medium">{t('signOut')}</span>}
+            {collapsed ? (
+              <ChevronsRight className="h-4.5 w-4.5 shrink-0" />
+            ) : (
+              <>
+                <ChevronsLeft className="h-4.5 w-4.5 shrink-0" />
+                <span className="font-medium">Collapse</span>
+              </>
+            )}
           </button>
-        </form>
+        </MaybeTooltip>
+
+        {/* Logout */}
+        <MaybeTooltip collapsed={collapsed} label={t('signOut')}>
+          <form action="/api/auth/logout" method="POST">
+            <button
+              type="submit"
+              className={cn(
+                'flex w-full items-center gap-3 rounded-lg py-2.5 text-sm whitespace-nowrap text-[var(--color-sidebar-foreground)] hover:bg-white/5 hover:text-white',
+                collapsed ? 'justify-center px-2' : 'px-3'
+              )}
+            >
+              <LogOut className="h-4.5 w-4.5 shrink-0" />
+              {!collapsed && <span className="font-medium">{t('signOut')}</span>}
+            </button>
+          </form>
+        </MaybeTooltip>
       </div>
     </div>
   );
@@ -571,13 +688,13 @@ export function Sidebar() {
 
       {/* Single sidebar — mobile: slide-in drawer, desktop: fixed collapsible panel */}
       <aside
-        style={{ width: collapsed ? 64 : 224 }}
         className={cn(
-          'fixed left-0 z-50 bg-[var(--color-sidebar)] transition-all duration-200 ease-in-out',
-          // Mobile: drawer below top bar, slides in/out
-          'top-[calc(3.5rem-1px)] h-[calc(100vh-3.5rem+1px)]',
-          // Desktop: full-height, always translated in
-          'md:top-0 md:z-40 md:h-screen md:translate-x-0',
+          'fixed left-0 z-50 w-56 overflow-hidden bg-[var(--color-sidebar)] transition-[width,transform] duration-200 ease-in-out',
+          // Mobile: drawer below top bar, explicit height
+          'top-[calc(3.5rem-1px)] h-[calc(100dvh-3.5rem+1px)]',
+          // Desktop: full viewport height from top
+          'md:top-0 md:z-40 md:h-[100dvh] md:translate-x-0',
+          collapsed ? 'md:w-16' : 'md:w-56',
           // Mobile slide
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}

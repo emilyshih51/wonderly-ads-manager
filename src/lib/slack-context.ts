@@ -199,7 +199,8 @@ export function formatContextForClaude(data: AdContextData): string {
     .pop();
 
   sections.push(
-    `CURRENT TIME: ${timeStr} ${tzAbbr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."\n`
+    `CURRENT TIME: ${timeStr} ${tzAbbr} on ${dayStr}. Today's data is PARTIAL — the day is not over. Do not compare today's totals to yesterday's full-day totals as a "drop."`,
+    `DATA BOUNDARY: Everything below is the ONLY data you have. Do not reference any campaigns, ad sets, ads, or metrics not listed here. If something is not in this data, say "I don't have data on that."\n`
   );
 
   // Account totals

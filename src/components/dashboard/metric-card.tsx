@@ -18,40 +18,22 @@ export interface MetricCardProps {
   icon: LucideIcon;
   color: string;
   bg: string;
+  accent: string;
   trend?: TrendInfo | null;
   trendLoading?: boolean;
   sparklineData?: number[];
-  sparklineColor?: string;
   onClick?: () => void;
   isPositiveTrend?: boolean;
 }
 
-/**
- * Stat card used on the dashboard.
- * Shows a metric value with an optional sparkline, trend badge, and click handler.
- *
- * @param label - Metric label text
- * @param value - Formatted metric value
- * @param icon - Lucide icon component
- * @param color - Icon text color class
- * @param bg - Icon background color class
- * @param trend - Trend data (pct change + direction)
- * @param trendLoading - Shows skeleton badge while prior period loads
- * @param sparklineData - Array of numbers for the sparkline
- * @param sparklineColor - Sparkline line color (defaults to blue)
- * @param onClick - Click handler — enables hover effect and cursor-pointer
- * @param isPositiveTrend - Whether 'up' direction is good (default true)
- */
 export function MetricCard({
   label,
   value,
   icon: Icon,
-  color,
-  bg,
+  accent,
   trend,
   trendLoading,
   sparklineData,
-  sparklineColor,
   onClick,
   isPositiveTrend = true,
 }: MetricCardProps) {
@@ -69,53 +51,64 @@ export function MetricCard({
     <Card
       onClick={onClick}
       className={cn(
-        'transition-all duration-200',
+        'relative overflow-hidden transition-all duration-200',
         onClick && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md'
       )}
     >
-      <CardContent className="p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-[var(--color-muted-foreground)]">{label}</span>
-          <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg', bg)}>
-            <Icon className={cn('h-4 w-4', color)} />
+      {/* Accent bar */}
+      <div
+        className="absolute top-0 left-0 h-full w-1 rounded-l-xl"
+        style={{ backgroundColor: accent }}
+      />
+
+      <CardContent className="p-4 pl-3.5 md:p-5 md:pl-4">
+        <div className="mb-2 flex items-center justify-between md:mb-3">
+          <span className="text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase md:text-xs">
+            {label}
+          </span>
+          <div
+            className="flex h-7 w-7 items-center justify-center rounded-lg md:h-8 md:w-8"
+            style={{ backgroundColor: `${accent}18` }}
+          >
+            <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" style={{ color: accent }} />
           </div>
         </div>
 
-        <p className="mb-2 text-2xl font-bold text-[var(--color-foreground)]">{value}</p>
+        <p className="mb-1.5 text-xl font-bold tracking-tight text-[var(--color-foreground)] md:mb-2 md:text-2xl">
+          {value}
+        </p>
 
         <div className="flex items-center justify-between">
-          {/* Trend badge */}
           {trendLoading ? (
-            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-14 rounded-full" />
           ) : trend && trend.direction !== 'flat' ? (
             <span
               className={cn(
-                'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium',
-                isGood && 'bg-emerald-100 text-emerald-700',
-                isBad && 'bg-red-100 text-red-700',
-                !isGood && !isBad && 'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]'
+                'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium md:text-xs',
+                isGood && 'text-emerald-600 dark:text-emerald-400',
+                isBad && 'text-red-500 dark:text-red-400',
+                !isGood && !isBad && 'text-[var(--color-muted-foreground)]'
               )}
             >
               {trend.direction === 'up' ? (
-                <ArrowUp className="h-3 w-3" />
+                <ArrowUp className="h-2.5 w-2.5 md:h-3 md:w-3" />
               ) : (
-                <ArrowDown className="h-3 w-3" />
+                <ArrowDown className="h-2.5 w-2.5 md:h-3 md:w-3" />
               )}
               {trend.pct}%
             </span>
           ) : trend?.direction === 'flat' ? (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-accent)] px-2 py-0.5 text-xs font-medium text-[var(--color-muted-foreground)]">
-              <Minus className="h-3 w-3" />
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] md:text-xs">
+              <Minus className="h-2.5 w-2.5 md:h-3 md:w-3" />
               0%
             </span>
           ) : (
             <span />
           )}
 
-          {/* Sparkline */}
           {sparklineData && sparklineData.length > 1 && (
-            <div className="opacity-60">
-              <Sparkline data={sparklineData} color={sparklineColor ?? '#2563eb'} />
+            <div className="hidden opacity-50 sm:block">
+              <Sparkline data={sparklineData} color={accent} />
             </div>
           )}
         </div>

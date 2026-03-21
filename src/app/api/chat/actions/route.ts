@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Chat:Actions');
@@ -55,7 +56,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid budget amount' }, { status: 400 });
       }
 
+      // Safety: reject budgets over $50,000/day — likely a hallucinated number
+      if (action.budget > 50_000) {
+        return NextResponse.json(
+          { error: `Budget of $${action.budget} exceeds safety limit of $50,000/day` },
+          { status: 400 }
+        );
+      }
+
+      // Safety: reject fractional budgets (should be whole dollars per system prompt)
+      if (action.budget !== Math.round(action.budget)) {
+        return NextResponse.json(
+          { error: 'Budget must be a whole dollar amount' },
+          { status: 400 }
+        );
+      }
+
       dailyBudgetCents = Math.round(action.budget) * 100;
+    }
+
+    // Safety: validate that the ID looks like a Meta object ID (numeric string)
+    if (!/^\d+$/.test(action.id)) {
+      return NextResponse.json({ error: `Invalid Meta object ID: ${action.id}` }, { status: 400 });
     }
 
     await meta.executeAction(actionType, action.id, dailyBudgetCents);
@@ -69,9 +91,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
-    logger.error('Error', error);
-    const message = error instanceof Error ? error.message : 'Action failed';
+    logger.error('Action execution error', error);
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return metaErrorResponse(error, 'Action failed');
   }
 }

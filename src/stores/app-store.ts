@@ -12,6 +12,8 @@ interface AppState {
   filterCampaignId: string | null;
   /** Filter ads page to a specific ad set ID (set from ad sets table "View Ads"). */
   filterAdSetId: string | null;
+  /** Whether the sidebar is collapsed to icon-only mode. */
+  sidebarCollapsed: boolean;
   /** Update the active date preset. */
   setDatePreset: (preset: string) => void;
   /** Toggle the full-page loading indicator. */
@@ -22,17 +24,21 @@ interface AppState {
   setFilterCampaignId: (id: string | null) => void;
   /** Set ad set filter for the ads page. */
   setFilterAdSetId: (id: string | null) => void;
+  /** Toggle sidebar collapsed state. */
+  toggleSidebar: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  datePreset: 'today',
+  datePreset: 'last_7d',
   isLoading: false,
   adAccountId: '',
   filterCampaignId: null,
   filterAdSetId: null,
+  sidebarCollapsed: false,
   setDatePreset: (preset) => set({ datePreset: preset }),
   setIsLoading: (loading) => set({ isLoading: loading }),
   setAdAccountId: (id) => set({ adAccountId: id }),
   setFilterCampaignId: (id) => set({ filterCampaignId: id }),
   setFilterAdSetId: (id) => set({ filterAdSetId: id }),
+  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 }));

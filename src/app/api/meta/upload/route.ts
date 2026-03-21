@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
+import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Upload');
@@ -137,33 +138,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: unknown) {
     logger.error('Upload error', error);
-    const metaError = (
-      error as {
-        metaError?: {
-          message?: string;
-          error_user_msg?: string;
-          error_user_title?: string;
-          code?: number;
-          error_subcode?: number;
-          fbtrace_id?: string;
-        };
-      }
-    )?.metaError;
-    const message =
-      metaError?.message || (error instanceof Error ? error.message : 'Upload failed');
-    const errorDetail = metaError?.error_user_msg || metaError?.error_user_title || '';
 
-    return NextResponse.json(
-      {
-        error: {
-          message,
-          detail: errorDetail,
-          meta_error_code: metaError?.code,
-          meta_error_subcode: metaError?.error_subcode,
-          fbtrace_id: metaError?.fbtrace_id,
-        },
-      },
-      { status: 500 }
-    );
+    return metaErrorResponse(error, 'Failed to upload');
   }
 }

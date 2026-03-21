@@ -6,8 +6,12 @@ import {
   Noto_Sans_SC,
   Noto_Sans_TC,
   JetBrains_Mono,
+  Geist,
+  Geist_Mono,
+  DM_Sans,
+  Space_Grotesk,
 } from 'next/font/google';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider } from '@/components/providers';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { cookies } from 'next/headers';
@@ -62,6 +66,36 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
 });
 
+// Geist — modern geometric by Vercel
+const geist = Geist({
+  variable: '--font-geist',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+// Geist Mono — monospace companion to Geist
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+// DM Sans — friendly geometric sans-serif
+const dmSans = DM_Sans({
+  variable: '--font-dm-sans',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+});
+
+// Space Grotesk — proportional techy feel
+const spaceGrotesk = Space_Grotesk({
+  variable: '--font-space-grotesk',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'Wonderly Ads Manager',
   description: 'Manage your Meta ads, track performance, and automate your workflow.',
@@ -87,6 +121,10 @@ export default async function RootLayout({
     'noto-sans': '--font-noto-sans',
     inter: '--font-inter',
     'jetbrains-mono': '--font-jetbrains-mono',
+    geist: '--font-geist',
+    'geist-mono': '--font-geist-mono',
+    'dm-sans': '--font-dm-sans',
+    'space-grotesk': '--font-space-grotesk',
   };
   const activeFontVar = fontVarMap[fontChoice];
 
@@ -98,23 +136,17 @@ export default async function RootLayout({
     notoSansTC.variable,
     inter.variable,
     jetbrainsMono.variable,
+    geist.variable,
+    geistMono.variable,
+    dmSans.variable,
+    spaceGrotesk.variable,
     'antialiased',
   ].join(' ');
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        {/* Set --font-active before first paint so Tailwind's font-sans utility picks the right font.
-            This overrides the @theme inline fallback and avoids any layout shift. */}
-        <style>{`:root { --font-active: var(${activeFontVar}); }`}</style>
-      </head>
-      <body className={fontClasses}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-          storageKey="wonderly-theme"
-        >
+      <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
+        <ThemeProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             {children}
           </NextIntlClientProvider>

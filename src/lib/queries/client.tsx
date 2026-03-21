@@ -11,7 +11,12 @@ function makeQueryClient() {
         staleTime: 5 * 60_000, // 5 min — data stays fresh across tab switches
         gcTime: 10 * 60_000, // 10 min — keep unused cache in memory
         refetchOnWindowFocus: true,
-        retry: 1,
+        retry: (failureCount, error) => {
+          // Don't retry rate limit errors — they won't succeed immediately
+          if (error instanceof Error && error.message.includes('rate limit')) return false;
+
+          return failureCount < 1;
+        },
       },
     },
   });

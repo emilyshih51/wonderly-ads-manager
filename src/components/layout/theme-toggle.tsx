@@ -1,11 +1,11 @@
 'use client';
 
 import { useTheme } from 'next-themes';
+import { useCallback } from 'react';
 import { useSyncExternalStore } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// useSyncExternalStore-based SSR safety: returns false on server, true on client
 const subscribe = () => () => {};
 
 const getSnapshot = () => true;
@@ -14,23 +14,39 @@ const useIsMounted = () => useSyncExternalStore(subscribe, getSnapshot, getServe
 
 /**
  * Toggle button that switches between light and dark theme.
- * Renders null until mounted to avoid hydration mismatch.
+ * Adds a temporary `.theme-transition` class to `<html>` so the
+ * CSS transition only fires during an actual theme switch — not on
+ * page load or navigation.
  */
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const mounted = useIsMounted();
 
-  if (!mounted) return null;
+  const handleToggle = useCallback(() => {
+    if (!mounted) return;
+    document.documentElement.classList.add('theme-transition');
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+    // Remove after transition completes
+    setTimeout(() => document.documentElement.classList.remove('theme-transition'), 200);
+  }, [mounted, theme, setTheme]);
 
   return (
     <Button
       variant="ghost"
       size="icon"
-      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      onClick={handleToggle}
       aria-label="Toggle theme"
       className="h-9 w-9 text-[var(--color-sidebar-foreground)] hover:bg-white/10 hover:text-white"
     >
-      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {mounted ? (
+        theme === 'dark' ? (
+          <Sun className="h-4 w-4" />
+        ) : (
+          <Moon className="h-4 w-4" />
+        )
+      ) : (
+        <Moon className="h-4 w-4 opacity-0" />
+      )}
     </Button>
   );
 }

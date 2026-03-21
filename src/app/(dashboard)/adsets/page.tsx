@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import NextImage from 'next/image';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
@@ -96,7 +96,7 @@ export default function LaunchPage() {
   const [state, setState] = useState<LaunchState>(INITIAL_STATE);
   const { data: campaigns = [] } = useCampaignList();
   const { data: adSets = [], isError: adSetsError } = useAdSets({});
-  const [sourceOptions, setSourceOptions] = useState<SourceOption[]>([]);
+  // sourceOptions is derived — computed via useMemo below
   const [searchQuery, setSearchQuery] = useState('');
   const [fetchError, setFetchError] = useState('');
   const [launching, setLaunching] = useState(false);
@@ -163,7 +163,7 @@ export default function LaunchPage() {
   }, [adSetsError]);
 
   /* ---------- Build source options (filtered by search) ---------- */
-  useEffect(() => {
+  const sourceOptions = useMemo(() => {
     const options: SourceOption[] = [];
     const query = searchQuery.toLowerCase();
 
@@ -186,7 +186,7 @@ export default function LaunchPage() {
       });
     }
 
-    setSourceOptions(options);
+    return options;
   }, [state.sourceType, searchQuery, campaigns, adSets]);
 
   /* ---------- Build final URL with URL parameters ---------- */
@@ -536,129 +536,106 @@ export default function LaunchPage() {
         </div>
       </Header>
 
-      <div className="p-8">
-        <div className="mx-auto max-w-4xl space-y-6">
+      <div className="p-4 sm:p-6 md:p-8">
+        <div className="mx-auto max-w-4xl space-y-5">
           {/* Success message */}
           {launchSuccess && (
-            <Card className="border-green-200 bg-green-50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
-                <div>
-                  <p className="text-sm font-semibold text-green-900">Ads launched successfully!</p>
-                  <p className="text-xs text-green-700">
-                    {uploadedCount} ads created and ready to review in Meta
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <div
+              className="flex items-center gap-3 rounded-xl border p-4"
+              style={{ borderColor: '#22c55e30', backgroundColor: '#22c55e10' }}
+            >
+              <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: '#22c55e' }} />
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                  Ads launched successfully!
+                </p>
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  {uploadedCount} ads created and ready to review in Meta
+                </p>
+              </div>
+            </div>
           )}
 
           {/* Error message */}
           {launchError && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="flex items-center gap-3 p-4">
-                <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-600" />
-                <div>
-                  <p className="text-sm font-semibold text-red-900">Error</p>
-                  <p className="text-xs text-red-700">{launchError}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div
+              className="flex items-center gap-3 rounded-xl border p-4"
+              style={{ borderColor: '#ef444430', backgroundColor: '#ef444410' }}
+            >
+              <AlertCircle className="h-5 w-5 flex-shrink-0" style={{ color: '#ef4444' }} />
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-foreground)]">Error</p>
+                <p className="text-xs text-[var(--color-muted-foreground)]">{launchError}</p>
+              </div>
+            </div>
           )}
 
           {/* Fetch error */}
           {fetchError && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="p-3 text-sm text-red-600">{fetchError}</CardContent>
-            </Card>
+            <div
+              className="rounded-xl border p-3 text-sm"
+              style={{ borderColor: '#ef444430', backgroundColor: '#ef444410', color: '#ef4444' }}
+            >
+              {fetchError}
+            </div>
           )}
 
           {/* SECTION 1: SOURCE (Duplicate from) */}
           <Card>
-            <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
-                <Copy className="h-4 w-4 text-blue-600" />
+            <CardContent className="!p-5 sm:!p-6">
+              <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
+                <Copy className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                 Select Source to Duplicate
               </h2>
 
-              <div className="mb-6 grid grid-cols-3 gap-4">
-                {/* Add to Existing Ad Set */}
-                <button
-                  onClick={() =>
-                    setState((prev) => ({
-                      ...prev,
-                      sourceType: state.sourceType === 'existing' ? null : 'existing',
-                      sourceId: '',
-                      sourceName: '',
-                      newName: '',
-                      searchQuery: '',
-                    }))
-                  }
-                  className={`rounded-lg border-2 p-4 text-left transition-all ${
-                    state.sourceType === 'existing'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                    Add to Ad Set
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    Upload new ads to an existing ad set
-                  </p>
-                </button>
-
-                {/* Duplicate Ad Set */}
-                <button
-                  onClick={() =>
-                    setState((prev) => ({
-                      ...prev,
-                      sourceType: state.sourceType === 'adset' ? null : 'adset',
-                      sourceId: '',
-                      sourceName: '',
-                      newName: '',
-                      searchQuery: '',
-                    }))
-                  }
-                  className={`rounded-lg border-2 p-4 text-left transition-all ${
-                    state.sourceType === 'adset'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                    Duplicate Ad Set
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    Clone and enhance an existing ad set
-                  </p>
-                </button>
-
-                {/* Duplicate Campaign */}
-                <button
-                  onClick={() =>
-                    setState((prev) => ({
-                      ...prev,
-                      sourceType: state.sourceType === 'campaign' ? null : 'campaign',
-                      sourceId: '',
-                      sourceName: '',
-                      newName: '',
-                      searchQuery: '',
-                    }))
-                  }
-                  className={`rounded-lg border-2 p-4 text-left transition-all ${
-                    state.sourceType === 'campaign'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-[var(--color-border)] hover:border-[var(--color-border)]'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-[var(--color-foreground)]">
-                    Duplicate Campaign
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    Start from a campaign template
-                  </p>
-                </button>
+              <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      key: 'existing' as const,
+                      label: 'Add to Ad Set',
+                      desc: 'Upload new ads to an existing ad set',
+                    },
+                    {
+                      key: 'adset' as const,
+                      label: 'Duplicate Ad Set',
+                      desc: 'Clone and enhance an existing ad set',
+                    },
+                    {
+                      key: 'campaign' as const,
+                      label: 'Duplicate Campaign',
+                      desc: 'Start from a campaign template',
+                    },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() =>
+                      setState((prev) => ({
+                        ...prev,
+                        sourceType: state.sourceType === opt.key ? null : opt.key,
+                        sourceId: '',
+                        sourceName: '',
+                        newName: '',
+                      }))
+                    }
+                    className="rounded-xl border-2 p-4 text-left transition-all"
+                    style={
+                      state.sourceType === opt.key
+                        ? {
+                            borderColor: 'var(--color-primary)',
+                            backgroundColor:
+                              'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+                          }
+                        : { borderColor: 'var(--color-border)' }
+                    }
+                  >
+                    <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                      {opt.label}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">{opt.desc}</p>
+                  </button>
+                ))}
               </div>
 
               {state.sourceType && (
@@ -700,11 +677,16 @@ export default function LaunchPage() {
                             }));
                             setSearchQuery('');
                           }}
-                          className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                          className="w-full rounded-lg border p-3 text-left transition-colors"
+                          style={
                             state.sourceId === option.id
-                              ? 'border-blue-400 bg-blue-50'
-                              : 'border-[var(--color-border)] hover:border-[var(--color-border)] hover:bg-[var(--color-muted)]'
-                          }`}
+                              ? {
+                                  borderColor: 'var(--color-primary)',
+                                  backgroundColor:
+                                    'color-mix(in srgb, var(--color-primary) 6%, transparent)',
+                                }
+                              : { borderColor: 'var(--color-border)' }
+                          }
                         >
                           <p className="text-sm font-medium text-[var(--color-foreground)]">
                             {option.name}
@@ -720,9 +702,13 @@ export default function LaunchPage() {
                   )}
 
                   {state.sourceId && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="text-sm font-medium text-green-900">
-                        Selected: {state.sourceName}
+                    <div
+                      className="flex items-center gap-2 rounded-lg border p-3"
+                      style={{ borderColor: '#22c55e30', backgroundColor: '#22c55e10' }}
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
+                      <p className="text-sm font-medium text-[var(--color-foreground)]">
+                        {state.sourceName}
                       </p>
                     </div>
                   )}
@@ -762,7 +748,7 @@ export default function LaunchPage() {
                             targetCampaign: e.target.value,
                           }))
                         }
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                       >
                         <option value="">Same as source</option>
                         {campaigns.map((c) => (
@@ -780,29 +766,23 @@ export default function LaunchPage() {
 
           {/* SECTION 2: AD SETUP */}
           <Card>
-            <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
-                <Type className="h-4 w-4 text-blue-600" />
+            <CardContent className="!p-5 sm:!p-6">
+              <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
+                <Type className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                 Ad Setup
               </h2>
 
-              <div className="space-y-5">
+              <div className="space-y-6">
                 {/* Default text actions */}
                 <div className="flex items-center gap-2">
                   {hasDefaults && (
-                    <button
-                      onClick={loadDefaults}
-                      className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                    >
+                    <Button variant="outline" size="sm" onClick={loadDefaults}>
                       Load Saved Defaults
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    onClick={saveDefaults}
-                    className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-                  >
+                  <Button variant="ghost" size="sm" onClick={saveDefaults}>
                     {hasDefaults ? 'Update Defaults' : 'Save as Default'}
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Primary Texts */}
@@ -828,7 +808,7 @@ export default function LaunchPage() {
                           }));
                         }}
                         placeholder={`Primary Text ${idx + 1}${idx === 0 ? ' (required)' : ' (optional)'}`}
-                        className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                       />
                     ))}
                   </div>
@@ -867,7 +847,7 @@ export default function LaunchPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {/* Call to Action */}
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
@@ -970,7 +950,7 @@ export default function LaunchPage() {
                       }))
                     }
                     placeholder="utm_source=facebook&utm_medium={{campaign.id}}&..."
-                    className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-xs text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-xs text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                   />
                   {state.websiteUrl && (
                     <div className="mt-2 rounded border border-[var(--color-border)] bg-[var(--color-card)] p-2">
@@ -1003,9 +983,9 @@ export default function LaunchPage() {
 
           {/* SECTION 3: MEDIA */}
           <Card>
-            <CardContent className="p-6">
-              <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-[var(--color-foreground)]">
-                <ImageIcon className="h-4 w-4 text-blue-600" />
+            <CardContent className="!p-5 sm:!p-6">
+              <h2 className="mb-5 flex items-center gap-2 text-sm font-semibold text-[var(--color-foreground)]">
+                <ImageIcon className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                 Upload Media
               </h2>
 
@@ -1038,7 +1018,7 @@ export default function LaunchPage() {
                       {uploadedCount > 0 && ` • ${uploadedCount} processed`}
                       {errorCount > 0 && ` • ${errorCount} failed`}
                     </p>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/15">
                       <Plus className="h-3.5 w-3.5" /> Add More
                       <input
                         ref={fileInputRef}
@@ -1055,15 +1035,16 @@ export default function LaunchPage() {
                     {state.images.map((img) => (
                       <div
                         key={img.id}
-                        className={`relative overflow-hidden rounded-lg border-2 transition-all ${
+                        className="relative overflow-hidden rounded-lg border-2 transition-all"
+                        style={
                           img.status === 'done'
-                            ? 'border-green-300 bg-green-50'
+                            ? { borderColor: '#22c55e50' }
                             : img.status === 'error'
-                              ? 'border-red-300 bg-red-50'
+                              ? { borderColor: '#ef444450' }
                               : img.status === 'uploading'
-                                ? 'border-blue-300 bg-blue-50'
-                                : 'border-[var(--color-border)]'
-                        }`}
+                                ? { borderColor: '#3b82f650' }
+                                : { borderColor: 'var(--color-border)' }
+                        }
                       >
                         <div className="relative aspect-square bg-[var(--color-muted)]">
                           {img.mediaType === 'video' ? (
@@ -1073,6 +1054,7 @@ export default function LaunchPage() {
                               src={img.preview}
                               alt="Ad preview"
                               fill
+                              sizes="120px"
                               className="object-cover"
                               unoptimized
                             />
@@ -1117,8 +1099,8 @@ export default function LaunchPage() {
 
           {/* SECTION 4: SETTINGS */}
           <Card>
-            <CardContent className="p-6">
-              <h2 className="mb-4 text-base font-semibold text-[var(--color-foreground)]">
+            <CardContent className="!p-5 sm:!p-6">
+              <h2 className="mb-5 text-sm font-semibold text-[var(--color-foreground)]">
                 Settings
               </h2>
 
@@ -1151,12 +1133,12 @@ export default function LaunchPage() {
               </div>
 
               {/* Slack Notification Message */}
-              <div className="mt-4">
+              <div className="mt-5">
                 <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
                   Slack Notification Message
                 </label>
                 <textarea
-                  className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
                   rows={3}
                   value={state.slackMessage}
                   onChange={(e) =>
@@ -1174,43 +1156,72 @@ export default function LaunchPage() {
             </CardContent>
           </Card>
 
-          {/* LAUNCH BUTTON */}
-          <div className="sticky bottom-0 -mx-8 border-t border-[var(--color-border)] bg-[var(--color-card)] px-8 py-4">
-            <div className="mx-auto flex max-w-4xl items-center justify-between">
-              <div className="text-sm text-[var(--color-muted-foreground)]">
-                {canLaunch ? (
-                  <span className="font-medium text-green-700">Ready to launch</span>
-                ) : (
-                  <span>
-                    {!state.sourceId && 'Select a source • '}
-                    {!state.newName && 'Enter new name • '}
-                    {!state.pageId && 'Enter Page ID • '}
-                    {state.images.length === 0 && 'Upload images • '}
-                    {!getFirstPrimaryText() && 'Add primary text • '}
-                    {!getFirstHeadline() && 'Add headline'}
-                  </span>
-                )}
+          {/* LAUNCH */}
+          <Card>
+            <CardContent className="!p-5 sm:!p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                {/* Checklist */}
+                <div className="space-y-1.5">
+                  {canLaunch ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#22c55e' }} />
+                      <span className="text-sm font-medium text-[var(--color-foreground)]">
+                        Ready to launch
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {[
+                        { done: !!state.sourceId, label: 'Select a source' },
+                        {
+                          done: state.sourceType === 'existing' || !!state.newName,
+                          label: 'Enter new name',
+                        },
+                        { done: state.images.length > 0, label: 'Upload images' },
+                        { done: !!getFirstPrimaryText(), label: 'Add primary text' },
+                        { done: !!getFirstHeadline(), label: 'Add headline' },
+                      ].map((step) => (
+                        <div key={step.label} className="flex items-center gap-2">
+                          {step.done ? (
+                            <CheckCircle2
+                              className="h-3.5 w-3.5 shrink-0"
+                              style={{ color: '#22c55e' }}
+                            />
+                          ) : (
+                            <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[var(--color-border)]" />
+                          )}
+                          <span
+                            className={`text-xs ${step.done ? 'text-[var(--color-muted-foreground)] line-through' : 'text-[var(--color-foreground)]'}`}
+                          >
+                            {step.label}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  onClick={handleLaunch}
+                  disabled={!canLaunch || launching}
+                  className="w-full sm:w-auto"
+                  size="lg"
+                >
+                  {launching ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Launching...
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="mr-2 h-4 w-4" />
+                      Launch Ads
+                    </>
+                  )}
+                </Button>
               </div>
-              <Button
-                onClick={handleLaunch}
-                disabled={!canLaunch || launching}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 font-semibold text-white hover:from-blue-700 hover:to-purple-700"
-                size="lg"
-              >
-                {launching ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Launching...
-                  </>
-                ) : (
-                  <>
-                    <Rocket className="mr-2 h-4 w-4" />
-                    Launch Ads
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 

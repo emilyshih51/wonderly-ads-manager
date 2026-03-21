@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { SlackService, createSlackService } from '@/services/slack';
+import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Notify');
@@ -62,10 +63,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid notification type' }, { status: 400 });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Notification failed';
+    logger.error('Notification error', error);
 
-    logger.error('Error', error);
-
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return metaErrorResponse(error, 'Failed to send notification');
   }
 }

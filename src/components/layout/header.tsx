@@ -1,6 +1,6 @@
 'use client';
 
-import { SelectNative } from '@/components/ui/select-native';
+import { Select } from '@/components/ui/dropdown';
 import { useAppStore } from '@/stores/app-store';
 import { DATE_PRESETS } from '@/lib/utils';
 
@@ -14,19 +14,23 @@ export function Header({ title, description, children }: HeaderProps) {
   const { datePreset, setDatePreset } = useAppStore();
 
   return (
-    <div className="flex items-center justify-between border-b border-(--color-border) bg-[var(--color-card)] px-8 py-5">
-      <div>
-        <h1 className="text-2xl font-bold text-(--color-foreground)">{title}</h1>
+    <div className="flex items-center gap-3 border-b border-(--color-border) bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8">
+      <div className="min-w-0 shrink-0">
+        <h1 className="truncate text-base font-semibold text-(--color-foreground) sm:text-lg">
+          {title}
+        </h1>
         {description && (
-          <p className="mt-1 text-sm text-(--color-muted-foreground)">{description}</p>
+          <p className="mt-0.5 hidden truncate text-xs text-(--color-muted-foreground) md:block">
+            {description}
+          </p>
         )}
       </div>
-      <div className="flex items-center gap-3">
-        <SelectNative
+      <div className="ml-auto flex min-w-0 items-center gap-2">
+        <Select
           value={datePreset}
-          onChange={(e) => setDatePreset(e.target.value)}
+          onChange={setDatePreset}
           options={DATE_PRESETS}
-          className="w-40"
+          className="h-8 shrink-0 text-xs sm:text-sm"
         />
         {children}
       </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { attachInsights } from '@/lib/utils';
+import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:AdSets');
@@ -51,6 +52,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Ad set fetch error', error);
 
-    return NextResponse.json({ error: 'Failed to fetch ad sets' }, { status: 500 });
+    return metaErrorResponse(error, 'Failed to fetch ad sets');
   }
 }

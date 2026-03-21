@@ -55,7 +55,10 @@
     "adSetsFor": "廣告組合 — {name}",
     "campaign": "廣告活動",
     "adSet": "廣告組合",
-    "costResult": "每次結果費用"
+    "costResult": "每次結果費用",
+    "dragToReorder": "拖曳以重新排列圖表",
+    "addChart": "新增圖表",
+    "resetLayout": "重設"
   },
   "campaigns": {
     "title": "廣告活動",
@@ -145,13 +148,21 @@
   "fonts": {
     "notoSans": "Noto Sans（推薦）",
     "inter": "Inter",
-    "jetbrainsMono": "JetBrains Mono"
+    "jetbrainsMono": "JetBrains Mono",
+    "geist": "Geist",
+    "geistMono": "Geist Mono",
+    "dmSans": "DM Sans",
+    "spaceGrotesk": "Space Grotesk"
   },
   "languages": {
     "en": "English",
     "es": "Español",
     "zh": "简体中文",
     "zh-TW": "繁體中文",
-    "ja": "日本語"
+    "ja": "日本語",
+    "fr": "Français",
+    "de": "Deutsch",
+    "ko": "한국어",
+    "pt": "Português"
   }
 }

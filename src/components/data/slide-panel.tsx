@@ -37,22 +37,21 @@ export function SlidePanel({
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         {/* Overlay */}
-        <DialogPrimitive.Overlay className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/60" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-[overlay-hide_200ms_ease-in] data-[state=open]:animate-[overlay-show_300ms_ease-out]" />
 
-        {/* Panel */}
+        {/* Panel — full-width on mobile, fixed width on sm+ */}
         <DialogPrimitive.Content
           className={cn(
-            'fixed top-0 right-0 z-50 flex h-full flex-col border-l border-[var(--color-border)] bg-[var(--color-card)] shadow-xl',
-            'data-[state=open]:animate-in data-[state=closed]:animate-out',
-            'data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right',
-            'duration-300 ease-in-out'
+            'slide-panel fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-[var(--color-border)] bg-[var(--color-card)] shadow-xl',
+            'data-[state=open]:animate-[slide-in_300ms_cubic-bezier(0.16,1,0.3,1)]',
+            'data-[state=closed]:animate-[slide-out_200ms_ease-in]'
           )}
-          style={{ width }}
+          style={{ ['--slide-panel-w' as string]: width }}
         >
           {/* Header */}
-          <div className="flex shrink-0 items-start justify-between border-b border-[var(--color-border)] p-6">
-            <div className="space-y-1 pr-8">
-              <DialogPrimitive.Title className="text-base font-semibold text-[var(--color-foreground)]">
+          <div className="flex shrink-0 items-start justify-between border-b border-[var(--color-border)] px-4 py-4 sm:px-6 sm:py-6">
+            <div className="min-w-0 space-y-1 pr-4">
+              <DialogPrimitive.Title className="truncate text-base font-semibold text-[var(--color-foreground)]">
                 {title}
               </DialogPrimitive.Title>
               {description && (
@@ -61,13 +60,13 @@ export function SlidePanel({
                 </DialogPrimitive.Description>
               )}
             </div>
-            <DialogPrimitive.Close className="rounded-md p-1 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none">
+            <DialogPrimitive.Close className="shrink-0 rounded-md p-1.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none">
               <X className="h-4 w-4" />
             </DialogPrimitive.Close>
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6">{children}</div>
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

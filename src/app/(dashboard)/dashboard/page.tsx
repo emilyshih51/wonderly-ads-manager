@@ -1,13 +1,30 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import NextImage from 'next/image';
+import { useState, useMemo, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { type ColumnDef } from '@tanstack/react-table';
 import { Header } from '@/components/layout/header';
-import { Card, CardContent } from '@/components/ui/card';
-import { SelectNative } from '@/components/ui/select-native';
+import { Card } from '@/components/ui/card';
+import { DataTable } from '@/components/data/data-table';
+import { Select } from '@/components/ui/dropdown';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { useAppStore } from '@/stores/app-store';
+import { useDashboardStore, METRIC_OPTIONS } from '@/stores/dashboard-store';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { formatTrend } from '@/lib/theme';
 import { useCampaigns, type CampaignRow } from '@/lib/queries/meta/use-campaigns';
@@ -21,7 +38,8 @@ import type { AdSetRow } from '@/lib/queries/meta/use-adsets';
 import { DashboardSkeleton } from '@/components/skeletons/dashboard-skeleton';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { StatDetailPanel } from '@/components/dashboard/stat-detail-panel';
-import { AreaChart, BarChart } from '@/components/data/chart';
+import { ChartWidget } from '@/components/dashboard/chart-widget';
+import { AdsGallery } from '@/components/dashboard/ads-gallery';
 import {
   DollarSign,
   Eye,
@@ -31,7 +49,8 @@ import {
   BarChart3,
   ArrowLeft,
   RefreshCw,
-  Image as ImageIcon,
+  Plus,
+  RotateCcw,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 import { useTranslations } from 'next-intl';
@@ -68,6 +87,7 @@ function getResults(
     return found ? parseInt(found.value) : 0;
   }
 
+  // Try conversions first
   const conversion = actions.find(
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
@@ -75,7 +95,21 @@ function getResults(
       !ENGAGEMENT_TYPES.has(a.action_type)
   );
 
-  return conversion ? parseInt(conversion.value) : 0;
+  if (conversion) return parseInt(conversion.value);
+
+  // Fall back to link_click or landing_page_view as a result proxy
+  const linkClick = actions.find(
+    (a) => a.action_type === 'link_click' || a.action_type === 'landing_page_view'
+  );
+
+  if (linkClick) return parseInt(linkClick.value);
+
+  // Last resort: any action that isn't a vanity metric
+  const anyAction = actions.find(
+    (a) => a.action_type !== 'impressions' && a.action_type !== 'reach'
+  );
+
+  return anyAction ? parseInt(anyAction.value) : 0;
 }
 
 function getCostPerResult(
@@ -98,6 +132,13 @@ function getCostPerResult(
       );
 
       if (conversion) return parseFloat(conversion.value);
+
+      // Fall back to link_click cost
+      const linkClickCost = costPerAction.find(
+        (a) => a.action_type === 'link_click' || a.action_type === 'landing_page_view'
+      );
+
+      if (linkClickCost) return parseFloat(linkClickCost.value);
     }
   }
 
@@ -118,6 +159,7 @@ function sumCampaigns(campaigns: CampaignRow[]) {
       acc.impressions += parseInt(c.insights.impressions || '0');
       acc.clicks += parseInt(c.insights.clicks || '0');
       acc.linkClicks += parseInt(c.insights.inline_link_clicks || '0');
+      acc.reach += parseInt(c.insights.reach || '0');
       acc.results += getResults(c.insights.actions, c.result_action_type);
       const cpr = getCostPerResult(
         c.insights.cost_per_action_type,
@@ -139,6 +181,7 @@ function sumCampaigns(campaigns: CampaignRow[]) {
       impressions: 0,
       clicks: 0,
       linkClicks: 0,
+      reach: 0,
       results: 0,
       costPerResultSum: 0,
       costPerResultCount: 0,
@@ -153,6 +196,7 @@ export default function DashboardPage() {
   const tMetrics = useTranslations('metrics');
   const tCommon = useTranslations('common');
   const { datePreset } = useAppStore();
+  const { widgets, setWidgets, addWidget, resetWidgets } = useDashboardStore();
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
 
@@ -226,6 +270,30 @@ export default function DashboardPage() {
     const t = sumCampaigns(activeCampaigns);
     const prior = sumCampaigns(priorCampaigns);
 
+    // When viewing all campaigns and campaign-level insights are empty,
+    // fall back to account-level time-series totals (which come from a
+    // different API endpoint and are more reliable).
+    const hasCampaignInsights = activeCampaigns.some((c) => c.insights !== null);
+
+    if (!hasCampaignInsights && selectedCampaign === 'all' && timeSeries.length > 0) {
+      for (const row of timeSeries) {
+        t.spend += parseFloat(row.spend || '0');
+        t.impressions += parseInt(row.impressions || '0');
+        t.clicks += parseInt(row.clicks || '0');
+        t.reach += parseInt(row.reach || '0');
+        const rowResults = getResults(row.actions, null);
+
+        t.results += rowResults;
+
+        if (rowResults > 0) {
+          const rowSpend = parseFloat(row.spend || '0');
+
+          t.costPerResultSum += rowSpend;
+          t.costPerResultCount += rowResults;
+        }
+      }
+    }
+
     const cpr = t.costPerResultCount > 0 ? t.costPerResultSum / t.costPerResultCount : null;
     const priorCpr =
       prior.costPerResultCount > 0 ? prior.costPerResultSum / prior.costPerResultCount : null;
@@ -245,15 +313,32 @@ export default function DashboardPage() {
     } else {
       cpmNum = t.impressions > 0 ? (t.spend / t.impressions) * 1000 : 0;
       ctrNum = t.impressions > 0 ? (t.clicks / t.impressions) * 100 : 0;
-      cpcNum = t.linkClicks > 0 ? t.spend / t.linkClicks : 0;
+      cpcNum = t.clicks > 0 ? t.spend / t.clicks : 0;
       cpm = t.impressions > 0 ? formatCurrency(cpmNum) : '-';
       ctr = t.impressions > 0 ? formatPercent(ctrNum) : '-';
-      cpc = t.linkClicks > 0 ? formatCurrency(cpcNum) : '-';
+      cpc = t.clicks > 0 ? formatCurrency(cpcNum) : '-';
     }
 
     const priorCpmNum = prior.impressions > 0 ? (prior.spend / prior.impressions) * 1000 : 0;
     const priorCtrNum = prior.impressions > 0 ? (prior.clicks / prior.impressions) * 100 : 0;
     const priorCpcNum = prior.linkClicks > 0 ? prior.spend / prior.linkClicks : 0;
+
+    // Build sparkline data from time-series for each metric
+    const spendSpark = timeSeries.map((r) => parseFloat(r.spend || '0'));
+    const cpmSpark = timeSeries.map((r) => {
+      const imp = parseInt(r.impressions || '0');
+      const sp = parseFloat(r.spend || '0');
+
+      return imp > 0 ? (sp / imp) * 1000 : 0;
+    });
+    const ctrSpark = timeSeries.map((r) => parseFloat(r.ctr || '0'));
+    const cpcSpark = timeSeries.map((r) => {
+      const cl = parseInt(r.clicks || '0');
+      const sp = parseFloat(r.spend || '0');
+
+      return cl > 0 ? sp / cl : 0;
+    });
+    const resultsSpark = timeSeries.map((r) => getResults(r.actions, selectedResultActionType));
 
     const cards = [
       {
@@ -262,9 +347,11 @@ export default function DashboardPage() {
         icon: DollarSign,
         color: 'text-emerald-600',
         bg: 'bg-emerald-100',
+        accent: '#10b981',
         metricKey: 'spend' as const,
         trend: priorCampaigns.length > 0 ? formatTrend(t.spend, prior.spend) : null,
-        isPositiveTrend: false, // higher spend = bad
+        isPositiveTrend: false,
+        sparklineData: spendSpark,
       },
       {
         label: tMetrics('cpm'),
@@ -272,9 +359,11 @@ export default function DashboardPage() {
         icon: Eye,
         color: 'text-blue-600',
         bg: 'bg-blue-100',
+        accent: '#3b82f6',
         metricKey: 'cpm' as const,
         trend: priorCampaigns.length > 0 ? formatTrend(cpmNum, priorCpmNum) : null,
         isPositiveTrend: false,
+        sparklineData: cpmSpark,
       },
       {
         label: tMetrics('ctr'),
@@ -282,9 +371,11 @@ export default function DashboardPage() {
         icon: MousePointer,
         color: 'text-purple-600',
         bg: 'bg-purple-100',
+        accent: '#8b5cf6',
         metricKey: 'ctr' as const,
         trend: priorCampaigns.length > 0 ? formatTrend(ctrNum, priorCtrNum) : null,
         isPositiveTrend: true,
+        sparklineData: ctrSpark,
       },
       {
         label: tMetrics('cpc'),
@@ -292,9 +383,11 @@ export default function DashboardPage() {
         icon: TrendingUp,
         color: 'text-amber-600',
         bg: 'bg-amber-100',
+        accent: '#f59e0b',
         metricKey: 'cpc' as const,
         trend: priorCampaigns.length > 0 ? formatTrend(cpcNum, priorCpcNum) : null,
         isPositiveTrend: false,
+        sparklineData: cpcSpark,
       },
       {
         label: tMetrics('results'),
@@ -302,9 +395,11 @@ export default function DashboardPage() {
         icon: Target,
         color: 'text-rose-600',
         bg: 'bg-rose-100',
+        accent: '#f43f5e',
         metricKey: 'results' as const,
         trend: priorCampaigns.length > 0 ? formatTrend(t.results, prior.results) : null,
         isPositiveTrend: true,
+        sparklineData: resultsSpark,
       },
       {
         label: tMetrics('costPerResult'),
@@ -312,6 +407,7 @@ export default function DashboardPage() {
         icon: BarChart3,
         color: 'text-indigo-600',
         bg: 'bg-indigo-100',
+        accent: '#6366f1',
         metricKey: 'cpr' as const,
         trend:
           priorCampaigns.length > 0 && cpr !== null && priorCpr !== null
@@ -322,32 +418,271 @@ export default function DashboardPage() {
     ];
 
     return { metricCards: cards };
-    // tMetrics and tCommon are stable refs from next-intl — safe to omit
+    // tMetrics is a stable ref from next-intl — safe to omit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCampaigns, priorCampaigns, selectedCampaign, timeSeries]);
 
-  const spendChartData = useMemo(
-    () =>
-      timeSeries.map((row) => ({
-        date: row.date_start?.split('T')[0]?.slice(5) || '',
-        spend: parseFloat(row.spend || '0'),
-      })),
-    [timeSeries]
-  );
+  /** Build chart data for all metrics from time-series rows. */
+  const chartDataByMetric = useMemo(() => {
+    return timeSeries.map((row) => {
+      const spend = parseFloat(row.spend || '0');
+      const impressions = parseInt(row.impressions || '0');
+      const clicks = parseInt(row.clicks || '0');
+      const results = getResults(row.actions, selectedResultActionType);
 
-  const resultsChartData = useMemo(
-    () =>
-      timeSeries.map((row) => ({
+      return {
         date: row.date_start?.split('T')[0]?.slice(5) || '',
-        results: getResults(row.actions, selectedResultActionType),
-      })),
-    [timeSeries, selectedResultActionType]
-  );
+        spend,
+        impressions,
+        clicks,
+        ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+        cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+        cpc: clicks > 0 ? spend / clicks : 0,
+        results,
+        cpr: results > 0 ? spend / results : 0,
+        reach: parseInt(row.reach || '0'),
+      };
+    });
+  }, [timeSeries, selectedResultActionType]);
 
   const campaignOptions = [
     { label: tCommon('allCampaigns'), value: 'all' },
     ...campaigns.map((c) => ({ label: c.name, value: c.id })),
   ];
+
+  /* ---------- Table column definitions ---------- */
+
+  const campaignColumns = useMemo<ColumnDef<CampaignRow>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: t('campaign'),
+        minSize: 180,
+        cell: ({ row }) => {
+          const isSelected = selectedCampaign === row.original.id;
+
+          return (
+            <div className="flex items-center gap-2">
+              {isSelected && <div className="h-5 w-0.5 rounded-full bg-[var(--color-primary)]" />}
+              <span className="font-medium text-[var(--color-foreground)]">
+                {row.original.name}
+              </span>
+            </div>
+          );
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'status',
+        header: tCommon('status'),
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        enableSorting: true,
+      },
+      {
+        id: 'spend',
+        header: tMetrics('spend'),
+        accessorFn: (row) => parseFloat(row.insights?.spend || '0'),
+        cell: ({ row }) => formatCurrency(row.original.insights?.spend),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'results',
+        header: tMetrics('results'),
+        accessorFn: (row) => getResults(row.insights?.actions, row.result_action_type),
+        cell: ({ row }) =>
+          formatNumber(getResults(row.original.insights?.actions, row.original.result_action_type)),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'cpm',
+        header: tMetrics('cpm'),
+        accessorFn: (row) => parseFloat(row.insights?.cpm || '0'),
+        cell: ({ row }) => formatCurrency(row.original.insights?.cpm),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'ctr',
+        header: tMetrics('ctr'),
+        accessorFn: (row) => parseFloat(row.insights?.ctr || '0'),
+        cell: ({ row }) => formatPercent(row.original.insights?.ctr),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'cpc',
+        header: tMetrics('cpc'),
+        accessorFn: (row) => parseFloat(row.insights?.cost_per_inline_link_click || '0'),
+        cell: ({ row }) => formatCurrency(row.original.insights?.cost_per_inline_link_click),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'costPerResult',
+        header: t('costResult'),
+        accessorFn: (row) =>
+          getCostPerResult(
+            row.insights?.cost_per_action_type,
+            row.result_action_type,
+            row.insights?.spend,
+            row.insights?.actions
+          ) ?? 0,
+        cell: ({ row }) =>
+          formatCurrency(
+            getCostPerResult(
+              row.original.insights?.cost_per_action_type,
+              row.original.result_action_type,
+              row.original.insights?.spend,
+              row.original.insights?.actions
+            )
+          ),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- translation fns are stable refs
+    [selectedCampaign]
+  );
+
+  const adSetColumns = useMemo<ColumnDef<AdSetRow>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: t('adSet'),
+        minSize: 180,
+        cell: ({ row }) => (
+          <span className="font-medium text-[var(--color-foreground)]">{row.original.name}</span>
+        ),
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'status',
+        header: tCommon('status'),
+        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        enableSorting: true,
+      },
+      {
+        id: 'budget',
+        header: tMetrics('budget'),
+        accessorFn: (row) => (row.daily_budget ? parseInt(row.daily_budget) / 100 : 0),
+        cell: ({ row }) => {
+          const adSet = row.original;
+
+          if (editingBudget?.id === adSet.id) {
+            return (
+              <div className="flex items-center justify-end gap-1">
+                <span className="text-sm text-[var(--color-muted-foreground)]">$</span>
+                <input
+                  type="number"
+                  className="w-20 rounded border border-[var(--color-primary)] bg-[var(--color-card)] px-1.5 py-0.5 text-right text-sm text-[var(--color-foreground)] focus:outline-none"
+                  value={editingBudget.value}
+                  onChange={(e) => setEditingBudget({ ...editingBudget, value: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleBudgetSave();
+                    if (e.key === 'Escape') setEditingBudget(null);
+                  }}
+                  autoFocus
+                  disabled={budgetMutation.isPending}
+                />
+                <button
+                  onClick={handleBudgetSave}
+                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                  disabled={budgetMutation.isPending}
+                >
+                  {budgetMutation.isPending ? '…' : '✓'}
+                </button>
+                <button
+                  onClick={() => setEditingBudget(null)}
+                  className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <button
+              className="cursor-pointer text-[var(--color-foreground)] hover:text-[var(--color-primary)] hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingBudget({
+                  id: adSet.id,
+                  type: 'adset',
+                  value: adSet.daily_budget ? String(parseInt(adSet.daily_budget) / 100) : '',
+                });
+              }}
+              title="Click to edit budget"
+            >
+              {adSet.daily_budget ? `$${(parseInt(adSet.daily_budget) / 100).toFixed(2)}` : '—'}
+            </button>
+          );
+        },
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'spend',
+        header: tMetrics('spend'),
+        accessorFn: (row) => parseFloat(row.insights?.spend || '0'),
+        cell: ({ row }) => formatCurrency(row.original.insights?.spend),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'results',
+        header: tMetrics('results'),
+        accessorFn: (row) => getResults(row.insights?.actions, selectedResultActionType),
+        cell: ({ row }) =>
+          formatNumber(getResults(row.original.insights?.actions, selectedResultActionType)),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'ctr',
+        header: tMetrics('ctr'),
+        accessorFn: (row) => parseFloat(row.insights?.ctr || '0'),
+        cell: ({ row }) => formatPercent(row.original.insights?.ctr),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+      {
+        id: 'cpc',
+        header: tMetrics('cpc'),
+        accessorFn: (row) => parseFloat(row.insights?.cost_per_inline_link_click || '0'),
+        cell: ({ row }) => formatCurrency(row.original.insights?.cost_per_inline_link_click),
+        meta: { align: 'right' },
+        enableSorting: true,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- translation fns are stable refs
+    [editingBudget, budgetMutation.isPending, selectedResultActionType]
+  );
+
+  /* ---------- Drag & Drop ---------- */
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (over && active.id !== over.id) {
+        const oldIndex = widgets.findIndex((w) => w.id === active.id);
+        const newIndex = widgets.findIndex((w) => w.id === over.id);
+
+        setWidgets(arrayMove(widgets, oldIndex, newIndex));
+      }
+    },
+    [widgets, setWidgets]
+  );
+
+  const canAddWidget = widgets.length < Object.keys(METRIC_OPTIONS).length;
 
   if (loading && campaigns.length === 0) {
     return <DashboardSkeleton />;
@@ -356,28 +691,20 @@ export default function DashboardPage() {
   return (
     <div>
       <Header title={t('title')} description={t('description')}>
-        <div className="flex items-center gap-3">
-          {campaignsFetching && (
-            <RefreshCw className="h-4 w-4 animate-spin text-[var(--color-muted-foreground)]" />
-          )}
-          <SelectNative
-            value={selectedCampaign}
-            onChange={(e) => setSelectedCampaign(e.target.value)}
-            options={campaignOptions}
-            className="w-72"
-          />
-        </div>
+        <Select
+          value={selectedCampaign}
+          onChange={setSelectedCampaign}
+          options={campaignOptions}
+          className="h-8 min-w-0 flex-1 truncate text-xs sm:max-w-xs sm:text-sm"
+        />
+        {campaignsFetching && (
+          <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-[var(--color-muted-foreground)]" />
+        )}
       </Header>
 
-      <div className="space-y-8 p-8">
-        {selectedCampaign !== 'all' && (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedCampaign('all')}>
-            <ArrowLeft className="mr-1 h-4 w-4" /> {t('backToAllCampaigns')}
-          </Button>
-        )}
-
+      <div className="space-y-5 p-4 sm:p-6 lg:p-8">
         {/* Metric Cards */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           {metricCards.map((metric) => (
             <MetricCard
               key={metric.label}
@@ -386,373 +713,119 @@ export default function DashboardPage() {
               icon={metric.icon}
               color={metric.color}
               bg={metric.bg}
+              accent={metric.accent}
               trend={metric.trend}
               trendLoading={priorLoading}
               isPositiveTrend={metric.isPositiveTrend}
+              sparklineData={metric.sparklineData}
               onClick={() => setSelectedMetric(metric.metricKey)}
             />
           ))}
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="mb-1 text-sm font-semibold text-[var(--color-foreground)]">
-                {t('spendOverTime')}
-              </h3>
-              <p className="mb-4 text-xs text-[var(--color-muted-foreground)]">
-                {datePreset.replace('_', ' ')}
-              </p>
-              <AreaChart
-                data={spendChartData}
-                xKey="date"
-                series={[{ key: 'spend', label: 'Spend', color: '#2563eb' }]}
-                format="currency"
-                height={280}
-              />
-            </CardContent>
-          </Card>
+        {/* Charts — drag & drop */}
+        <div>
+          <div className="mb-3 flex items-center justify-end gap-2">
+            {canAddWidget && (
+              <Button variant="outline" size="sm" onClick={addWidget}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                {t('addChart')}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={resetWidgets}>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              {t('resetLayout')}
+            </Button>
+          </div>
 
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="mb-1 text-sm font-semibold text-[var(--color-foreground)]">
-                {t('resultsOverTime')}
-              </h3>
-              <p className="mb-4 text-xs text-[var(--color-muted-foreground)]">
-                {datePreset.replace('_', ' ')}
-              </p>
-              <BarChart
-                data={resultsChartData}
-                xKey="date"
-                series={[{ key: 'results', label: tMetrics('results'), color: '#6366f1' }]}
-                format="number"
-                height={280}
-              />
-            </CardContent>
-          </Card>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={widgets.map((w) => w.id)} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {widgets.map((widget) => (
+                  <ChartWidget
+                    key={widget.id}
+                    widget={widget}
+                    data={chartDataByMetric}
+                    datePreset={datePreset}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* Campaign Performance Table */}
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
-              {t('campaignPerformance')}
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--color-border)]">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {t('campaign')}
-                    </th>
-                    <th className="px-2 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tCommon('status')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tMetrics('spend')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tMetrics('results')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tMetrics('cpm')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tMetrics('ctr')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {tMetrics('cpc')}
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                      {t('costResult')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="py-8 text-center text-[var(--color-muted-foreground)]"
-                      >
-                        {tCommon('loading')}
-                      </td>
-                    </tr>
-                  ) : activeCampaigns.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="py-8 text-center text-[var(--color-muted-foreground)]"
-                      >
-                        {t('noCampaignsFound')}
-                      </td>
-                    </tr>
-                  ) : (
-                    activeCampaigns.map((campaign) => {
-                      const i = campaign.insights;
-
-                      return (
-                        <tr
-                          key={campaign.id}
-                          className={`cursor-pointer border-b border-[var(--color-border)] hover:bg-[var(--color-accent)]/50 ${selectedCampaign === campaign.id ? 'bg-[var(--color-primary)]/5' : ''}`}
-                          onClick={() => setSelectedCampaign(campaign.id)}
-                        >
-                          <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
-                            {campaign.name}
-                          </td>
-                          <td className="px-2 py-3">
-                            <StatusBadge status={campaign.status} />
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatCurrency(i?.spend)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatNumber(getResults(i?.actions, campaign.result_action_type))}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatCurrency(i?.cpm)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatPercent(i?.ctr)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatCurrency(i?.cost_per_inline_link_click)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                            {formatCurrency(
-                              getCostPerResult(
-                                i?.cost_per_action_type,
-                                campaign.result_action_type,
-                                i?.spend,
-                                i?.actions
-                              )
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={campaignColumns}
+          data={activeCampaigns}
+          title={t('campaignPerformance')}
+          headerAction={
+            selectedCampaign !== 'all' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedCampaign('all')}
+                className="h-7 gap-1.5 text-xs"
+              >
+                <ArrowLeft className="h-3 w-3" />
+                {tCommon('allCampaigns')}
+              </Button>
+            ) : undefined
+          }
+          isLoading={loading}
+          emptyMessage={t('noCampaignsFound')}
+          searchKey="name"
+          searchPlaceholder={t('campaign')}
+          pagination={activeCampaigns.length > 10}
+          onRowClick={(campaign) => setSelectedCampaign(campaign.id)}
+        />
 
         {/* Ad Set Drill-down */}
         {selectedCampaign !== 'all' && (
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
-                {t('adSetsFor', {
-                  name: campaigns.find((c) => c.id === selectedCampaign)?.name ?? '',
-                })}
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--color-border)]">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {t('adSet')}
-                      </th>
-                      <th className="px-2 py-3 text-left text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tCommon('status')}
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tMetrics('budget')}
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tMetrics('spend')}
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tMetrics('results')}
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tMetrics('ctr')}
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-                        {tMetrics('cpc')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {drillLoading ? (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="py-8 text-center text-[var(--color-muted-foreground)]"
-                        >
-                          {t('loadingAdSets')}
-                        </td>
-                      </tr>
-                    ) : drillAdSets.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="py-8 text-center text-[var(--color-muted-foreground)]"
-                        >
-                          {t('noAdSetsFound')}
-                        </td>
-                      </tr>
-                    ) : (
-                      drillAdSets.map((adSet) => {
-                        const i = adSet.insights;
-
-                        return (
-                          <tr
-                            key={adSet.id}
-                            className="border-b border-[var(--color-border)] hover:bg-[var(--color-accent)]/50"
-                          >
-                            <td className="px-4 py-3 font-medium text-[var(--color-foreground)]">
-                              {adSet.name}
-                            </td>
-                            <td className="px-2 py-3">
-                              <StatusBadge status={adSet.status} />
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {editingBudget?.id === adSet.id ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <span className="text-sm text-[var(--color-muted-foreground)]">
-                                    $
-                                  </span>
-                                  <input
-                                    type="number"
-                                    className="w-20 rounded border border-[var(--color-primary)] bg-[var(--color-card)] px-1.5 py-0.5 text-right text-sm text-[var(--color-foreground)] focus:outline-none"
-                                    value={editingBudget.value}
-                                    onChange={(e) =>
-                                      setEditingBudget({ ...editingBudget, value: e.target.value })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleBudgetSave();
-                                      if (e.key === 'Escape') setEditingBudget(null);
-                                    }}
-                                    autoFocus
-                                    disabled={budgetMutation.isPending}
-                                  />
-                                  <button
-                                    onClick={handleBudgetSave}
-                                    className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
-                                    disabled={budgetMutation.isPending}
-                                  >
-                                    {budgetMutation.isPending ? '…' : '✓'}
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingBudget(null)}
-                                    className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  className="cursor-pointer text-[var(--color-foreground)] hover:text-[var(--color-primary)] hover:underline"
-                                  onClick={() =>
-                                    setEditingBudget({
-                                      id: adSet.id,
-                                      type: 'adset',
-                                      value: adSet.daily_budget
-                                        ? String(parseInt(adSet.daily_budget) / 100)
-                                        : '',
-                                    })
-                                  }
-                                  title="Click to edit budget"
-                                >
-                                  {adSet.daily_budget
-                                    ? `$${(parseInt(adSet.daily_budget) / 100).toFixed(2)}`
-                                    : '—'}
-                                </button>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                              {formatCurrency(i?.spend)}
-                            </td>
-                            <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                              {formatNumber(getResults(i?.actions, selectedResultActionType))}
-                            </td>
-                            <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                              {formatPercent(i?.ctr)}
-                            </td>
-                            <td className="px-4 py-3 text-right text-[var(--color-foreground)]">
-                              {formatCurrency(i?.cost_per_inline_link_click)}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <DataTable
+            columns={adSetColumns}
+            data={drillAdSets}
+            title={t('adSetsFor', {
+              name: campaigns.find((c) => c.id === selectedCampaign)?.name ?? '',
+            })}
+            isLoading={drillLoading}
+            emptyMessage={t('noAdSetsFound')}
+            searchKey="name"
+            searchPlaceholder={t('adSet')}
+            pagination={false}
+          />
         )}
 
-        {/* Ad Performance */}
+        {/* Ad Performance — uses the AdsGallery carousel with click-to-detail modal */}
         {selectedCampaign !== 'all' && !drillLoading && drillAds.length > 0 && (
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="mb-4 text-sm font-semibold text-[var(--color-foreground)]">
+          <Card className="overflow-hidden">
+            <div className="border-b border-[var(--color-border)] px-4 py-3 md:px-5">
+              <h3 className="text-sm font-medium text-[var(--color-foreground)]">
                 {t('adPerformance')}
               </h3>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {drillAds.map((ad) => {
-                  const i = ad.insights;
+            </div>
+            <div className="p-4 md:p-5">
+              <AdsGallery
+                ads={drillAds
+                  .map((ad, idx) => {
+                    const results = getResults(ad.insights?.actions, selectedResultActionType);
+                    const spend = parseFloat(ad.insights?.spend || '0');
 
-                  return (
-                    <div
-                      key={ad.id}
-                      className="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] transition-shadow hover:shadow-sm"
-                    >
-                      <div className="relative flex h-32 items-center justify-center bg-[var(--color-muted)]">
-                        {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
-                          <NextImage
-                            src={ad.creative.thumbnail_url || ad.creative.image_url!}
-                            alt={ad.name}
-                            fill
-                            className="object-cover"
-                          />
-                        ) : (
-                          <ImageIcon className="h-8 w-8 text-[var(--color-muted-foreground)]" />
-                        )}
-                        <div className="absolute top-1.5 right-1.5">
-                          <StatusBadge status={ad.status} />
-                        </div>
-                      </div>
-                      <div className="p-3">
-                        <p className="truncate text-xs font-medium text-[var(--color-foreground)]">
-                          {ad.name}
-                        </p>
-                        <div className="mt-2 grid grid-cols-3 gap-1 text-xs">
-                          <div>
-                            <span className="block text-[var(--color-muted-foreground)]">
-                              {tMetrics('spend')}
-                            </span>
-                            <span className="font-medium text-[var(--color-foreground)]">
-                              {formatCurrency(i?.spend)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="block text-[var(--color-muted-foreground)]">
-                              {tMetrics('ctr')}
-                            </span>
-                            <span className="font-medium text-[var(--color-foreground)]">
-                              {formatPercent(i?.ctr)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="block text-[var(--color-muted-foreground)]">
-                              {tMetrics('cpc')}
-                            </span>
-                            <span className="font-medium text-[var(--color-foreground)]">
-                              {formatCurrency(i?.cost_per_inline_link_click)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
+                    return {
+                      ...ad,
+                      results,
+                      cpa: results > 0 ? spend / results : null,
+                      rank: idx + 1,
+                    };
+                  })
+                  .sort((a, b) => b.results - a.results)
+                  .map((ad, idx) => ({ ...ad, rank: idx + 1 }))}
+              />
+            </div>
           </Card>
         )}
       </div>

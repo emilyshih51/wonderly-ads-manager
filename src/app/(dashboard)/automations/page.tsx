@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -307,15 +309,15 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
+    <div className="relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6">
       {/* Background accent */}
-      <div className="absolute top-0 right-0 -mt-20 -mr-20 h-40 w-40 rounded-full bg-gradient-to-bl from-blue-100 to-transparent opacity-30" />
+      <div className="absolute top-0 right-0 -mt-20 -mr-20 h-40 w-40 rounded-full bg-[var(--color-primary)]/5" />
 
       <div className="relative z-10">
         <div className="mb-4 flex items-center gap-2">
-          <Wand2 className="h-5 w-5 text-blue-600" />
+          <Wand2 className="h-5 w-5 text-[var(--color-primary)]" />
           <h3 className="text-sm font-semibold text-[var(--color-foreground)]">Copilot</h3>
-          <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+          <span className="rounded bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--color-primary)]">
             AI beta
           </span>
         </div>
@@ -331,14 +333,14 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
             onKeyDown={handleKeyDown}
             placeholder="Pause ads with CPA over $25 in Brad campaign... or promote ads with CPA under $16 and results above 3"
             disabled={isSubmitting}
-            className="h-24 w-full resize-none rounded-lg border border-blue-200 bg-[var(--color-card)] p-3 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-24 w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <div className="flex justify-end">
             <Button
               onClick={handleSubmit}
               disabled={!input.trim() || isSubmitting}
-              className="bg-blue-600 text-white hover:bg-blue-700"
+              className="bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:opacity-90"
             >
               {isSubmitting ? (
                 <>
@@ -361,7 +363,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
 
 export default function AutomationsPage() {
   const t = useTranslations('automations');
-  const { data: rules = [] } = useRules();
+  const { data: rules = [], isLoading: rulesLoading } = useRules();
   const { data: activityLog = [] } = useAutomationHistory();
   const saveRule = useSaveRule();
   const deleteRule = useDeleteRule();
@@ -635,43 +637,51 @@ export default function AutomationsPage() {
   return (
     <div className="flex h-screen flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-8 py-5">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8">
+        <div className="flex items-center gap-2">
           {viewMode === 'editor' && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setViewMode('list')}
-              className="mr-1 h-8 w-8"
+              className="h-8 w-8 shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           )}
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--color-foreground)]">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold text-[var(--color-foreground)] sm:text-lg">
               {viewMode === 'list' ? t('title') : selectedRule ? t('saveRule') : t('newRule')}
             </h1>
-            <p className="mt-0.5 text-sm text-[var(--color-muted-foreground)]">
+            <p className="mt-0.5 hidden text-xs text-[var(--color-muted-foreground)] sm:block">
               {viewMode === 'list' ? t('description') : t('conditions')}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {viewMode === 'editor' && (
             <>
-              <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestWorkflow}
+                disabled={testing}
+                className="h-8"
+              >
                 <Play className="mr-1.5 h-3.5 w-3.5" />
-                {testing ? 'Testing...' : 'Test Rule'}
+                <span className="hidden sm:inline">{testing ? 'Testing...' : 'Test Rule'}</span>
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
+              <Button size="sm" onClick={handleSave} disabled={saveRule.isPending} className="h-8">
                 <Save className="mr-1.5 h-3.5 w-3.5" />
-                {saveRule.isPending ? 'Saving...' : 'Save Rule'}
+                <span className="hidden sm:inline">
+                  {saveRule.isPending ? 'Saving...' : 'Save Rule'}
+                </span>
               </Button>
             </>
           )}
           {viewMode === 'list' && (
-            <Button size="sm" onClick={newBlank}>
-              <Plus className="mr-1 h-4 w-4" /> New Rule
+            <Button size="sm" onClick={newBlank} className="h-8">
+              <Plus className="mr-1 h-3.5 w-3.5" /> {t('newRule')}
             </Button>
           )}
         </div>
@@ -680,284 +690,349 @@ export default function AutomationsPage() {
       {/* ─── LIST VIEW ─── */}
       {viewMode === 'list' && (
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-10 px-8 py-8">
-            {/* Copilot */}
-            <CopilotCard onSubmit={useCopilot} />
-
-            {/* Templates */}
-            <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                Templates
-              </h2>
-              <div className="grid grid-cols-1 gap-2">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => applyTemplate(t)}
-                    className="group flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:border-[var(--color-border)] hover:shadow-sm"
-                  >
-                    <span className="text-xl">{t.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-[var(--color-foreground)]">{t.name}</p>
-                      <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                        {t.description}
-                      </p>
+          {rulesLoading ? (
+            <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 md:px-8">
+              {/* Copilot skeleton */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-72" />
                     </div>
-                    <span className="flex items-center gap-1 text-xs font-medium text-blue-600 opacity-0 transition-opacity group-hover:opacity-100">
-                      Use <ArrowRight className="h-3.5 w-3.5" />
-                    </span>
-                  </button>
+                  </div>
+                  <Skeleton className="mt-4 h-10 w-full rounded-lg" />
+                </CardContent>
+              </Card>
+
+              {/* Templates skeleton */}
+              <div>
+                <Skeleton className="mb-4 h-3 w-24" />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
+                    >
+                      <Skeleton className="mt-0.5 h-5 w-5 rounded" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rules skeleton */}
+              <div>
+                <Skeleton className="mb-4 h-3 w-32" />
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="mb-2 flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
+                  >
+                    <Skeleton className="h-7 w-7 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-4 w-12 rounded" />
+                      </div>
+                      <Skeleton className="h-3 w-56" />
+                    </div>
+                    <div className="flex gap-1">
+                      <Skeleton className="h-7 w-16 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 md:px-8">
+              {/* Copilot */}
+              <CopilotCard onSubmit={useCopilot} />
 
-            {/* Active Rules */}
-            <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                Your Rules {rules.length > 0 && `(${rules.length})`}
-              </h2>
-              {rules.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-12 text-center">
-                  <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                  <p className="text-sm text-[var(--color-muted-foreground)]">No rules yet</p>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    Pick a template or create a new rule
-                  </p>
+              {/* Templates */}
+              <div>
+                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  Templates
+                </h2>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {TEMPLATES.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      onClick={() => applyTemplate(tmpl)}
+                      className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:shadow-md"
+                    >
+                      <span className="mt-0.5 text-lg">{tmpl.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-[var(--color-foreground)]">
+                          {tmpl.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                          {tmpl.description}
+                        </p>
+                        <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
+                          Use template <ArrowRight className="h-3 w-3" />
+                        </span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {rules.map((rule) => {
-                    const cfg = getRuleSummary(rule);
-                    const condSummary = cfg.conditions
-                      .map(
-                        (c) =>
-                          `${METRIC_OPTIONS.find((m) => m.value === c.metric)?.label || c.metric} ${c.operator} ${c.threshold}`
-                      )
-                      .join(' AND ');
+              </div>
 
-                    return (
-                      <div
-                        key={rule.id}
-                        className="flex items-center gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                      >
-                        <button
-                          onClick={() => handleToggle(rule)}
-                          className="flex-shrink-0"
-                          title={rule.is_active ? 'Pause rule' : 'Enable rule'}
+              {/* Active Rules */}
+              <div>
+                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  Your Rules {rules.length > 0 && `(${rules.length})`}
+                </h2>
+                {rules.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-12 text-center">
+                    <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                    <p className="text-sm text-[var(--color-muted-foreground)]">No rules yet</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      Pick a template or create a new rule
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {rules.map((rule) => {
+                      const cfg = getRuleSummary(rule);
+                      const condSummary = cfg.conditions
+                        .map(
+                          (c) =>
+                            `${METRIC_OPTIONS.find((m) => m.value === c.metric)?.label || c.metric} ${c.operator} ${c.threshold}`
+                        )
+                        .join(' AND ');
+
+                      return (
+                        <div
+                          key={rule.id}
+                          className="flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:flex-row sm:items-center sm:gap-4"
                         >
-                          {rule.is_active ? (
-                            <ToggleRight className="h-7 w-7 text-emerald-500" />
-                          ) : (
-                            <ToggleLeft className="h-7 w-7 text-[var(--color-muted-foreground)]" />
-                          )}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p
-                              className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
-                            >
-                              {rule.name}
-                            </p>
-                            <span
-                              className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                rule.is_active
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                              }`}
-                            >
-                              {rule.is_active ? 'Active' : 'Off'}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
-                            {cfg.campaign_name && (
-                              <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
-                            )}
-                            {cfg.campaign_name && <span>·</span>}
-                            <span>{SCHEDULE_LABELS[cfg.schedule] || 'Hourly'}</span>
-                            <span>·</span>
-                            <span className="capitalize">{cfg.action_type}</span>
-                            {cfg.slack_channel && (
-                              <>
-                                <span>·</span>
-                                <span>{cfg.slack_channel}</span>
-                              </>
-                            )}
-                          </div>
-                          {condSummary && (
-                            <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
-                              If: {condSummary}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => setConfirmRunRule(rule)}
-                            disabled={runningRuleId === rule.id}
+                          <button
+                            onClick={() => handleToggle(rule)}
+                            className="flex-shrink-0"
+                            title={rule.is_active ? 'Pause rule' : 'Enable rule'}
                           >
-                            {runningRuleId === rule.id ? (
-                              <>
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Running...
-                              </>
+                            {rule.is_active ? (
+                              <ToggleRight className="h-7 w-7 text-emerald-500" />
                             ) : (
-                              <>
-                                <Play className="mr-1 h-3 w-3" /> Run Now
-                              </>
+                              <ToggleLeft className="h-7 w-7 text-[var(--color-muted-foreground)]" />
                             )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => editRule(rule)}
-                          >
-                            <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleDelete(rule.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Activity Log */}
-            <div>
-              <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
-              </h2>
-              {activityLog.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-8 text-center">
-                  <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                  <p className="text-sm text-[var(--color-muted-foreground)]">No runs yet</p>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    Test or activate a rule to see results here
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {activityLog.map((event) => {
-                    const date = new Date(event.timestamp);
-                    const timeStr = date.toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true,
-                    });
-                    const isTest = event.type === 'test';
-
-                    return (
-                      <div
-                        key={event.id}
-                        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                isTest
-                                  ? 'bg-amber-50 text-amber-700'
-                                  : 'bg-emerald-50 text-emerald-700'
-                              }`}
-                            >
-                              {isTest ? 'Test' : 'Live'}
-                            </span>
-                            <p className="text-sm font-medium text-[var(--color-foreground)]">
-                              {event.rule_name}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {!isTest &&
-                              event.results?.some((r) =>
-                                r.action
-                                  ? ['paused', 'activated', 'promoted'].includes(r.action)
-                                  : false
-                              ) && (
-                                <button
-                                  onClick={() => handleRollback(event.id, event.results || [])}
-                                  disabled={rollingBackId === event.id}
-                                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
-                                  title="Undo actions from this run"
-                                >
-                                  {rollingBackId === event.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <RotateCcw className="h-3 w-3" />
-                                  )}
-                                  Undo
-                                </button>
-                              )}
-                            <p className="text-xs text-[var(--color-muted-foreground)]">
-                              {timeStr}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                          {event.matched === 0 ? (
-                            <p>No ads matched the conditions</p>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <p>
-                                <span className="font-medium text-[var(--color-foreground)]">
-                                  {event.matched}
-                                </span>{' '}
-                                ad{event.matched !== 1 ? 's' : ''} matched
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p
+                                className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
+                              >
+                                {rule.name}
                               </p>
-                              {event.results?.map((r, i) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
-                                >
-                                  <span className="truncate text-[var(--color-foreground)]">
-                                    {r.entity_name}
-                                  </span>
-                                  <div className="ml-2 flex flex-shrink-0 items-center gap-2">
-                                    <span className="text-[var(--color-muted-foreground)]">
-                                      ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'} ·{' '}
-                                      {r.metrics?.results ?? 0} results
-                                    </span>
-                                    <span
-                                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                        r.action?.includes('pause') ||
-                                        r.action?.includes('would_pause')
-                                          ? 'bg-red-50 text-red-600'
-                                          : r.action?.includes('promote') ||
-                                              r.action?.includes('would_promote')
-                                            ? 'bg-emerald-50 text-emerald-600'
-                                            : 'bg-blue-50 text-blue-600'
-                                      }`}
-                                    >
-                                      {r.action?.replace('would_', '')}
-                                    </span>
-                                    {r.slack_sent && (
-                                      <span className="text-[10px] text-emerald-500">
-                                        Slack sent
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                              <span
+                                className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  rule.is_active
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                                    : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                                }`}
+                              >
+                                {rule.is_active ? 'Active' : 'Off'}
+                              </span>
                             </div>
-                          )}
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                              {cfg.campaign_name && (
+                                <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
+                              )}
+                              {cfg.campaign_name && <span>·</span>}
+                              <span>{SCHEDULE_LABELS[cfg.schedule] || 'Hourly'}</span>
+                              <span>·</span>
+                              <span className="capitalize">{cfg.action_type}</span>
+                              {cfg.slack_channel && (
+                                <>
+                                  <span>·</span>
+                                  <span>{cfg.slack_channel}</span>
+                                </>
+                              )}
+                            </div>
+                            {condSummary && (
+                              <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
+                                If: {condSummary}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 sm:shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setConfirmRunRule(rule)}
+                              disabled={runningRuleId === rule.id}
+                            >
+                              {runningRuleId === rule.id ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Play className="mr-1 h-3 w-3" />
+                              )}
+                              <span className="hidden sm:inline">
+                                {runningRuleId === rule.id ? 'Running…' : 'Run Now'}
+                              </span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => editRule(rule)}
+                              title="Edit rule"
+                            >
+                              <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleDelete(rule.id)}
+                              title="Delete rule"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Activity Log */}
+              <div>
+                <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  Activity Log {activityLog.length > 0 && `(${activityLog.length})`}
+                </h2>
+                {activityLog.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)] py-8 text-center">
+                    <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                    <p className="text-sm text-[var(--color-muted-foreground)]">No runs yet</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      Test or activate a rule to see results here
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {activityLog.map((event) => {
+                      const date = new Date(event.timestamp);
+                      const timeStr = date.toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                      const isTest = event.type === 'test';
+
+                      return (
+                        <div
+                          key={event.id}
+                          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  isTest
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-emerald-50 text-emerald-700'
+                                }`}
+                              >
+                                {isTest ? 'Test' : 'Live'}
+                              </span>
+                              <p className="text-sm font-medium text-[var(--color-foreground)]">
+                                {event.rule_name}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {!isTest &&
+                                event.results?.some((r) =>
+                                  r.action
+                                    ? ['paused', 'activated', 'promoted'].includes(r.action)
+                                    : false
+                                ) && (
+                                  <button
+                                    onClick={() => handleRollback(event.id, event.results || [])}
+                                    disabled={rollingBackId === event.id}
+                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
+                                    title="Undo actions from this run"
+                                  >
+                                    {rollingBackId === event.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="h-3 w-3" />
+                                    )}
+                                    Undo
+                                  </button>
+                                )}
+                              <p className="text-xs text-[var(--color-muted-foreground)]">
+                                {timeStr}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                            {event.matched === 0 ? (
+                              <p>No ads matched the conditions</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <p>
+                                  <span className="font-medium text-[var(--color-foreground)]">
+                                    {event.matched}
+                                  </span>{' '}
+                                  ad{event.matched !== 1 ? 's' : ''} matched
+                                </p>
+                                {event.results?.map((r, i) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
+                                  >
+                                    <span className="truncate text-[var(--color-foreground)]">
+                                      {r.entity_name}
+                                    </span>
+                                    <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                                      <span className="text-[var(--color-muted-foreground)]">
+                                        ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'}{' '}
+                                        · {r.metrics?.results ?? 0} results
+                                      </span>
+                                      <span
+                                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                          r.action?.includes('pause') ||
+                                          r.action?.includes('would_pause')
+                                            ? 'bg-red-50 text-red-600'
+                                            : r.action?.includes('promote') ||
+                                                r.action?.includes('would_promote')
+                                              ? 'bg-emerald-50 text-emerald-600'
+                                              : 'bg-blue-50 text-blue-600'
+                                        }`}
+                                      >
+                                        {r.action?.replace('would_', '')}
+                                      </span>
+                                      {r.slack_sent && (
+                                        <span className="text-[10px] text-emerald-500">
+                                          Slack sent
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

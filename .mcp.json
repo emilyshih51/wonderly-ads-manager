@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "biblio": {
+      "type": "http",
+      "url": "https://biblio.wonderly.info/mcp",
+      "headers": {
+        "Authorization": "Bearer ${BIBLIO_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

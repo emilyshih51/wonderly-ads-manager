@@ -4,7 +4,17 @@ import { useState, useTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Copy, Check, Globe, Type } from 'lucide-react';
+import {
+  CheckCircle2,
+  Copy,
+  Check,
+  Globe,
+  Type,
+  MessageSquare,
+  Zap,
+  LogOut,
+  AlertTriangle,
+} from 'lucide-react';
 import { MetaLogo } from '@/components/ui/meta-logo';
 import { useSlackStatus } from '@/lib/queries/slack/use-slack';
 import { useTranslations } from 'next-intl';
@@ -145,7 +155,6 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#4A154B]/10">
-                  {/* Slack logo */}
                   <svg className="h-5 w-5" viewBox="0 0 54 54" fill="none">
                     <path
                       d="M19.712.133a5.381 5.381 0 0 0-5.376 5.387 5.381 5.381 0 0 0 5.376 5.386h5.376V5.52A5.381 5.381 0 0 0 19.712.133m0 14.365H5.376A5.381 5.381 0 0 0 0 19.884a5.381 5.381 0 0 0 5.376 5.387h14.336a5.381 5.381 0 0 0 5.376-5.387 5.381 5.381 0 0 0-5.376-5.386"
@@ -171,7 +180,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               {slackLoading ? (
-                <div className="h-5 w-20 animate-pulse rounded bg-[var(--color-muted)]" />
+                <div className="h-5 w-20 animate-pulse rounded-full bg-[var(--color-muted)]" />
               ) : slackBotConfigured ? (
                 <Badge variant="active">
                   <CheckCircle2 className="mr-1 h-3 w-3" /> {t('configured')}
@@ -192,20 +201,32 @@ export default function SettingsPage() {
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   {t('slackConfigured')}
                 </p>
-                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4">
-                  <h4 className="mb-2 text-sm font-medium text-[var(--color-foreground)]">
-                    How to use
-                  </h4>
-                  <ul className="space-y-1 text-sm text-[var(--color-muted-foreground)]">
-                    <li>
-                      Mention the bot in any channel:{' '}
-                      <code className="rounded bg-[var(--color-card)] px-1.5 py-0.5 text-xs">
-                        @ads-manager how are my campaigns doing?
-                      </code>
-                    </li>
-                    <li>It can answer questions about spend, results, CTR, and CPA.</li>
-                    <li>Action buttons (pause, adjust budget) will appear inline when relevant.</li>
-                  </ul>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-[var(--color-border)] p-3">
+                    <MessageSquare className="mb-2 h-4 w-4 text-[#4A154B] dark:text-[#E01E5A]" />
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">Mention</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                      <code className="rounded bg-[var(--color-muted)] px-1 py-0.5">
+                        @ads-manager
+                      </code>{' '}
+                      in any channel
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[var(--color-border)] p-3">
+                    <Zap className="mb-2 h-4 w-4 text-amber-500" />
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">Ask</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                      Spend, results, CTR, CPA, or any metric
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[var(--color-border)] p-3">
+                    <CheckCircle2 className="mb-2 h-4 w-4 text-emerald-500" />
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">Act</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                      Pause, resume, or adjust budgets inline
+                    </p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -221,47 +242,41 @@ export default function SettingsPage() {
                         href="https://api.slack.com/apps"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
+                        className="text-blue-600 hover:underline dark:text-blue-400"
                       >
                         api.slack.com/apps
                       </a>
                     </li>
                     <li>
-                      2. Go to &ldquo;Socket Mode&rdquo; and enable it, save the app-level token as{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
-                        xapp_*.…
+                      2. Enable Socket Mode and save the app-level token as{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                        xapp_*
                       </code>
                     </li>
-                    <li>3. Go to &ldquo;Event Subscriptions&rdquo; and enable events</li>
+                    <li>3. Enable Event Subscriptions</li>
                     <li>
-                      4. Set the Request URL (see below) and subscribe to{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
+                      4. Set the Request URL (below) and subscribe to{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
                         app_mention
-                      </code>{' '}
-                      events
-                    </li>
-                    <li>
-                      5. Go to &ldquo;Interactivity&rdquo; and enable it with the Interactions URL
-                      (see below)
-                    </li>
-                    <li>
-                      6. Go to &ldquo;OAuth &amp; Permissions&rdquo; and add scopes:{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
-                        chat:write
                       </code>
-                      ,{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
+                    </li>
+                    <li>5. Enable Interactivity with the Interactions URL (below)</li>
+                    <li>
+                      6. Add OAuth scopes:{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
+                        chat:write
+                      </code>{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
                         app_mentions:read
                       </code>
                     </li>
-                    <li>7. Install the app to your workspace and copy the Bot Token</li>
+                    <li>7. Install to your workspace and copy the Bot Token</li>
                     <li>
-                      8. Set environment variables:{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
+                      8. Set env vars:{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
                         SLACK_BOT_TOKEN
-                      </code>
-                      ,{' '}
-                      <code className="rounded bg-[var(--color-muted)] px-2 py-1 text-xs">
+                      </code>{' '}
+                      <code className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-xs">
                         SLACK_SIGNING_SECRET
                       </code>
                     </li>
@@ -270,11 +285,11 @@ export default function SettingsPage() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-sm font-medium text-[var(--color-foreground)]">
+                    <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
                       {t('eventRequestUrl')}
                     </label>
                     <div className="mt-1 flex gap-2">
-                      <code className="flex-1 rounded bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
+                      <code className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
                         {eventUrl}
                       </code>
                       <Button
@@ -292,11 +307,11 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-[var(--color-foreground)]">
+                    <label className="text-xs font-medium text-[var(--color-muted-foreground)]">
                       {t('interactivityRequestUrl')}
                     </label>
                     <div className="mt-1 flex gap-2">
-                      <code className="flex-1 rounded bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
+                      <code className="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm break-all text-[var(--color-foreground)]">
                         {interactionUrl}
                       </code>
                       <Button
@@ -318,7 +333,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Meta Account Info */}
+        {/* Connected Account */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -333,13 +348,30 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-[var(--color-muted-foreground)]">{t('metaAccountInfo')}</p>
-            <form action="/api/auth/logout" method="POST" className="mt-4">
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone */}
+        <div className="rounded-xl border border-red-200 dark:border-red-900/50">
+          <div className="flex items-center gap-2 border-b border-red-200 px-6 py-3 dark:border-red-900/50">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <h3 className="text-sm font-medium text-red-600 dark:text-red-400">Danger Zone</h3>
+          </div>
+          <div className="flex items-center justify-between p-6">
+            <div>
+              <p className="text-sm font-medium text-[var(--color-foreground)]">{t('signOut')}</p>
+              <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                Disconnect your Meta account and end this session.
+              </p>
+            </div>
+            <form action="/api/auth/logout" method="POST">
               <Button variant="destructive" size="sm" type="submit">
+                <LogOut className="mr-1.5 h-3.5 w-3.5" />
                 {t('signOut')}
               </Button>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

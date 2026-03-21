@@ -13,6 +13,7 @@ import {
 } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers';
 import { PWARegister } from '@/components/pwa-register';
+import { QueryProvider } from '@/lib/queries/client';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { cookies } from 'next/headers';
@@ -160,11 +161,13 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
-        <ThemeProvider>
-          <NextIntlClientProvider key={locale} locale={locale} messages={messages}>
-            {children}
-          </NextIntlClientProvider>
-        </ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider>
+            <NextIntlClientProvider key={locale} locale={locale} messages={messages}>
+              {children}
+            </NextIntlClientProvider>
+          </ThemeProvider>
+        </QueryProvider>
         <PWARegister />
       </body>
     </html>

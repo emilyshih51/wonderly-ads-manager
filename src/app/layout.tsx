@@ -161,7 +161,7 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning>
       <body className={fontClasses} style={{ fontFamily: `var(${activeFontVar})` }}>
         <ThemeProvider>
-          <NextIntlClientProvider locale={locale} messages={messages}>
+          <NextIntlClientProvider key={locale} locale={locale} messages={messages}>
             {children}
           </NextIntlClientProvider>
         </ThemeProvider>

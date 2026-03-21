@@ -16,6 +16,7 @@ import {
   type ExpandedState,
 } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import {
@@ -74,7 +75,7 @@ export function DataTable<TData, TValue>({
   searchKey,
   searchPlaceholder,
   isLoading = false,
-  emptyMessage = 'No results.',
+  emptyMessage,
   pagination = true,
   pageSize = 25,
   onRowClick,
@@ -82,6 +83,8 @@ export function DataTable<TData, TValue>({
   getRowCanExpand,
   className,
 }: DataTableProps<TData, TValue>) {
+  const tCommon = useTranslations('common');
+  const resolvedEmptyMessage = emptyMessage ?? tCommon('noResults');
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
@@ -100,7 +103,7 @@ export function DataTable<TData, TValue>({
               row.toggleExpanded();
             }}
             className="flex h-6 w-6 items-center justify-center rounded text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-            aria-label="Toggle row"
+            aria-label={tCommon('toggleRow')}
           >
             {row.getIsExpanded() ? (
               <ChevronDown className="h-4 w-4" />
@@ -196,7 +199,7 @@ export function DataTable<TData, TValue>({
                 colSpan={allColumns.length}
                 className="py-10 text-center text-[var(--color-muted-foreground)]"
               >
-                {emptyMessage}
+                {resolvedEmptyMessage}
               </TableCell>
             </TableRow>
           ) : (

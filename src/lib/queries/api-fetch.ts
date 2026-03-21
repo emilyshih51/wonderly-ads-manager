@@ -7,7 +7,18 @@ export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
       window.location.href = '/login';
     }
 
-    throw new Error(`API error: ${res.status}`);
+    // Parse error body for a message (e.g. "rate limit")
+    let message = `API error: ${res.status}`;
+
+    try {
+      const body = await res.json();
+
+      if (body?.error) message = typeof body.error === 'string' ? body.error : message;
+    } catch {
+      // ignore parse failures
+    }
+
+    throw new Error(message);
   }
 
   return res.json() as Promise<T>;

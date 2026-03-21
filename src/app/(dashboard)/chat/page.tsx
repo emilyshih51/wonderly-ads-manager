@@ -22,6 +22,8 @@ import {
   ChevronRight,
   Check,
   X,
+  Copy,
+  MessageSquarePlus,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { createLogger } from '@/services/logger';
@@ -792,15 +794,16 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
-const COLOR_MAP: Record<string, string> = {
-  red: 'bg-red-50 group-hover:bg-red-100 text-red-600',
-  orange: 'bg-orange-50 group-hover:bg-orange-100 text-orange-600',
-  blue: 'bg-blue-50 group-hover:bg-blue-100 text-blue-600',
-  green: 'bg-green-50 group-hover:bg-green-100 text-green-600',
-  purple: 'bg-purple-50 group-hover:bg-purple-100 text-purple-600',
-  indigo: 'bg-indigo-50 group-hover:bg-indigo-100 text-indigo-600',
-  teal: 'bg-teal-50 group-hover:bg-teal-100 text-teal-600',
-  yellow: 'bg-yellow-50 group-hover:bg-yellow-100 text-yellow-600',
+/** Hex colors per prompt category — rendered via inline styles to work in both themes. */
+const COLOR_HEX: Record<string, string> = {
+  red: '#ef4444',
+  orange: '#f97316',
+  blue: '#3b82f6',
+  green: '#22c55e',
+  purple: '#8b5cf6',
+  indigo: '#6366f1',
+  teal: '#14b8a6',
+  yellow: '#eab308',
 };
 
 /* ───── action helpers ───── */
@@ -849,13 +852,20 @@ function actionIcon(type: string) {
   return ChevronRight;
 }
 
-function actionColor(type: string): string {
-  if (type.startsWith('pause')) return 'border-orange-200 bg-orange-50';
-  if (type.startsWith('resume')) return 'border-green-200 bg-green-50';
-  if (type === 'adjust_budget') return 'border-blue-200 bg-blue-50';
+function actionColor(type: string): { border: string; bg: string } {
+  if (type.startsWith('pause')) return { border: '#f97316', bg: '#f97316' };
+  if (type.startsWith('resume')) return { border: '#22c55e', bg: '#22c55e' };
+  if (type === 'adjust_budget') return { border: '#3b82f6', bg: '#3b82f6' };
 
-  return 'border-[var(--color-border)] bg-[var(--color-muted)]';
+  return { border: '', bg: '' };
 }
+
+const FOLLOW_UP_PROMPTS = [
+  'What should I do about this?',
+  'Break it down by ad set',
+  'Which ads should I pause?',
+  'Compare to last 7 days',
+];
 
 /* ───── main component ───── */
 export default function ChatPage() {
@@ -866,8 +876,21 @@ export default function ChatPage() {
   const [chatData, setChatData] = useState<ChatData | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    setInput('');
+    inputRef.current?.focus();
+  }, []);
+
+  const copyMessage = useCallback((id: string, content: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1117,7 +1140,6 @@ export default function ChatPage() {
   /* Format message content with markdown-like rendering */
   const formatContent = (content: string) => {
     return content.split('\n').map((line, i) => {
-      // Headers
       if (line.startsWith('#### '))
         return (
           <h5
@@ -1145,28 +1167,28 @@ export default function ChatPage() {
             {line.slice(2)}
           </h2>
         );
-      // Horizontal rule
       if (line.trim() === '---' || line.trim() === '***')
         return <hr key={i} className="my-3 border-[var(--color-border)]" />;
-      // Bold + italic
+
       let html = line
         .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>');
 
-      // Inline code
       html = html.replace(
         /`([^`]+)`/g,
         '<code class="bg-[var(--color-muted)] px-1 py-0.5 rounded text-xs font-mono">$1</code>'
       );
-      // Metric highlights: detect patterns like "$24.72" or "↓22%" or "+15.3%"
       html = html.replace(/(\$[\d,.]+)/g, '<span class="font-semibold">$1</span>');
       html = html.replace(
         /(↑[\d.]+%|↑\d+)/g,
-        '<span class="font-semibold text-green-600">$1</span>'
+        '<span class="font-semibold text-green-600 dark:text-green-400">$1</span>'
       );
-      html = html.replace(/(↓[\d.]+%|↓\d+)/g, '<span class="font-semibold text-red-600">$1</span>');
-      // Bullets
+      html = html.replace(
+        /(↓[\d.]+%|↓\d+)/g,
+        '<span class="font-semibold text-red-600 dark:text-red-400">$1</span>'
+      );
+
       if (line.startsWith('- ') || line.startsWith('• '))
         return (
           <li
@@ -1175,7 +1197,7 @@ export default function ChatPage() {
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html.slice(2)) }}
           />
         );
-      // Numbered
+
       const numMatch = line.match(/^(\d+)\.\s/);
 
       if (numMatch)
@@ -1186,21 +1208,21 @@ export default function ChatPage() {
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html.slice(numMatch[0].length)) }}
           />
         );
-      // Empty
+
       if (!line.trim()) return <br key={i} />;
-      // Confidence badge
+
       html = html
         .replace(
           /Confidence:\s*High/gi,
-          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Confidence: High</span>'
+          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400">Confidence: High</span>'
         )
         .replace(
           /Confidence:\s*Medium/gi,
-          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">Confidence: Medium</span>'
+          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400">Confidence: Medium</span>'
         )
         .replace(
           /Confidence:\s*Low/gi,
-          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Confidence: Low</span>'
+          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">Confidence: Low</span>'
         );
 
       return (
@@ -1226,7 +1248,12 @@ export default function ChatPage() {
     return (
       <div
         key={idx}
-        className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${colors} transition-all`}
+        className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] px-3 py-2.5 transition-all"
+        style={
+          colors.bg
+            ? { backgroundColor: `${colors.bg}10`, borderColor: `${colors.border}30` }
+            : undefined
+        }
       >
         <Icon className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
         <div className="min-w-0 flex-1">
@@ -1236,7 +1263,8 @@ export default function ChatPage() {
           </p>
           {action.result && (
             <p
-              className={`mt-0.5 text-xs ${action.status === 'error' ? 'text-red-600' : 'text-green-600'}`}
+              className="mt-0.5 text-xs"
+              style={{ color: action.status === 'error' ? '#ef4444' : '#22c55e' }}
             >
               {action.result}
             </p>
@@ -1244,122 +1272,125 @@ export default function ChatPage() {
         </div>
         {action.status === 'pending' && (
           <div className="flex flex-shrink-0 gap-1.5">
-            <button
-              onClick={() => executeAction(msgId, idx)}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
-            >
-              <Check className="h-3 w-3" /> Approve
-            </button>
-            <button
-              onClick={() => dismissAction(msgId, idx)}
-              className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
-            >
+            <Button size="sm" onClick={() => executeAction(msgId, idx)}>
+              <Check className="mr-1 h-3 w-3" /> Approve
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => dismissAction(msgId, idx)}>
               <X className="h-3 w-3" />
-            </button>
+            </Button>
           </div>
         )}
         {action.status === 'executing' && (
-          <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-500" />
+          <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" style={{ color: '#3b82f6' }} />
         )}
         {action.status === 'done' && (
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-3.5 w-3.5 text-green-600" />
+          <div
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: '#22c55e18', color: '#22c55e' }}
+          >
+            <Check className="h-3.5 w-3.5" />
           </div>
         )}
         {action.status === 'error' && (
-          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
-            <X className="h-3.5 w-3.5 text-red-600" />
+          <div
+            className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: '#ef444418', color: '#ef4444' }}
+          >
+            <X className="h-3.5 w-3.5" />
           </div>
         )}
       </div>
     );
   };
 
+  const lastMsg = messages[messages.length - 1];
+  const showFollowUps = lastMsg?.role === 'assistant' && !lastMsg.isLoading && !isLoading;
+
   return (
-    <div className="flex h-screen flex-col">
-      {/* Custom header without date picker — AI Chat always loads all available data */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-8 py-5">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">{t('title')}</h1>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{t('description')}</p>
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col md:h-[100dvh]">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8 md:py-4">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-bold text-[var(--color-foreground)] md:text-xl">
+            {t('title')}
+          </h1>
+          <p className="mt-0.5 hidden text-sm text-[var(--color-muted-foreground)] sm:block">
+            {t('description')}
+          </p>
         </div>
+        {messages.length > 0 && (
+          <Button variant="outline" size="sm" onClick={resetChat} className="shrink-0">
+            <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New Chat</span>
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           /* Empty state */
-          <div className="mx-auto max-w-3xl px-8 py-12">
+          <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-8 md:py-12">
             <div className="mb-10 text-center">
-              <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600">
-                <Sparkles className="h-8 w-8 text-white" />
+              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 md:h-16 md:w-16">
+                <Sparkles className="h-7 w-7 text-white md:h-8 md:w-8" />
               </div>
-              <h2 className="mb-2 text-2xl font-bold text-[var(--color-foreground)]">
+              <h2 className="mb-2 text-xl font-bold text-[var(--color-foreground)] md:text-2xl">
                 Ask anything about your ads
               </h2>
-              <p className="mx-auto max-w-lg text-[var(--color-muted-foreground)]">
-                Powered by Claude with access to your live Meta Ads data — including today vs
-                yesterday comparisons, hourly data, and audience breakdowns.
+              <p className="mx-auto max-w-lg text-sm text-[var(--color-muted-foreground)] md:text-base">
+                Powered by Claude with access to your live Meta Ads data — today vs yesterday,
+                hourly data, and audience breakdowns.
               </p>
 
-              {/* Data loading status */}
               {dataLoading && (
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading your account data (today,
-                  yesterday, hourly breakdowns)...
+                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading account data...
                 </div>
               )}
               {dataError && (
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-red-600">
+                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-red-600 dark:text-red-400">
                   <AlertTriangle className="h-4 w-4" /> {dataError}
                 </div>
               )}
               {!dataLoading && dataStats && (
-                <div className="mt-4 flex items-center justify-center gap-4 text-xs text-[var(--color-muted-foreground)]">
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-[var(--color-muted-foreground)]">
                   <span>{dataStats.campaigns} campaigns</span>
-                  <span>·</span>
+                  <span className="hidden sm:inline">·</span>
                   <span>{dataStats.adSets} ad sets</span>
-                  <span>·</span>
+                  <span className="hidden sm:inline">·</span>
                   <span>{dataStats.ads} ads</span>
                   {dataStats.hasYesterday && (
-                    <>
-                      <span>·</span>
-                      <span className="text-green-500">✓ yesterday comparison</span>
-                    </>
+                    <span className="text-green-600 dark:text-green-400">✓ yesterday</span>
                   )}
                   {dataStats.hasHourly && (
-                    <>
-                      <span>·</span>
-                      <span className="text-green-500">✓ hourly data</span>
-                    </>
+                    <span className="text-green-600 dark:text-green-400">✓ hourly</span>
                   )}
                   {dataStats.hasBreakdowns && (
-                    <>
-                      <span>·</span>
-                      <span className="text-green-500">✓ audience breakdowns</span>
-                    </>
+                    <span className="text-green-600 dark:text-green-400">✓ breakdowns</span>
                   )}
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               {SUGGESTED_PROMPTS.map((prompt, idx) => {
                 const Icon = prompt.icon;
-                const colorClasses = COLOR_MAP[prompt.color] || COLOR_MAP.blue;
+                const hex = COLOR_HEX[prompt.color] || COLOR_HEX.blue;
 
                 return (
                   <button
                     key={idx}
                     onClick={() => sendMessage(prompt.prompt)}
                     disabled={isLoading || dataLoading}
-                    className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition-all hover:border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-50"
+                    className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3.5 text-left transition-all hover:bg-[var(--color-muted)] disabled:opacity-50 sm:p-4"
                   >
                     <div
-                      className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${colorClasses}`}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9"
+                      style={{ backgroundColor: `${hex}18`, color: hex }}
                     >
-                      <Icon className="h-4.5 w-4.5" />
+                      <Icon className="h-4 w-4" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--color-foreground)]">
                         {prompt.label}
                       </p>
@@ -1374,98 +1405,139 @@ export default function ChatPage() {
           </div>
         ) : (
           /* Messages */
-          <div className="mx-auto max-w-3xl space-y-6 px-8 py-6">
+          <div className="mx-auto max-w-3xl space-y-5 px-4 py-4 sm:px-6 sm:py-6 md:px-8">
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}
-              >
-                {msg.role === 'assistant' && (
-                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-                    <Bot className="h-4 w-4 text-white" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[85%] ${
-                    msg.role === 'user'
-                      ? 'rounded-2xl rounded-tr-md bg-blue-600 px-4 py-3 text-white'
-                      : 'rounded-2xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-4'
-                  }`}
-                >
-                  {msg.isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                      <span className="text-sm text-[var(--color-muted-foreground)]">
-                        Diagnosing performance hour-by-hour…
-                      </span>
+              <div key={msg.id}>
+                <div className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 sm:h-8 sm:w-8">
+                      <Bot className="h-3.5 w-3.5 text-white sm:h-4 sm:w-4" />
                     </div>
-                  ) : (
-                    <>
-                      <div
-                        className={`space-y-1 text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-[var(--color-foreground)]'}`}
+                  )}
+                  <div
+                    className={`group/msg relative max-w-[90%] sm:max-w-[85%] ${
+                      msg.role === 'user'
+                        ? 'rounded-2xl rounded-tr-md bg-[var(--color-primary)] px-4 py-3 text-[var(--color-primary-foreground)]'
+                        : 'rounded-2xl rounded-tl-md border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3.5 sm:px-5 sm:py-4'
+                    }`}
+                  >
+                    {/* Copy button — assistant messages only */}
+                    {msg.role === 'assistant' && !msg.isLoading && msg.content && (
+                      <button
+                        onClick={() => copyMessage(msg.id, msg.content)}
+                        className="absolute -top-2 -right-2 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] p-1 opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
+                        aria-label="Copy message"
                       >
-                        {formatContent(msg.content)}
+                        {copiedId === msg.id ? (
+                          <Check className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <Copy className="h-3 w-3 text-[var(--color-muted-foreground)]" />
+                        )}
+                      </button>
+                    )}
+
+                    {/* Content */}
+                    {msg.isLoading && !msg.content ? (
+                      <div className="flex items-center gap-2">
+                        <span className="flex gap-1">
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--color-muted-foreground)] [animation-delay:0ms]" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--color-muted-foreground)] [animation-delay:150ms]" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--color-muted-foreground)] [animation-delay:300ms]" />
+                        </span>
                       </div>
-                      {/* Action approval cards */}
-                      {msg.actions && msg.actions.length > 0 && (
-                        <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
-                          <p className="flex items-center gap-1 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                            <Zap className="h-3 w-3" /> Suggested Actions
-                          </p>
-                          {msg.actions.map((action, idx) => renderActionCard(action, msg.id, idx))}
+                    ) : (
+                      <>
+                        <div
+                          className={`space-y-1 text-sm leading-relaxed ${msg.role === 'user' ? 'text-[var(--color-primary-foreground)]' : 'text-[var(--color-foreground)]'}`}
+                        >
+                          {formatContent(msg.content)}
+                          {msg.isLoading && (
+                            <span className="ml-0.5 inline-block h-4 w-1 animate-pulse rounded-full bg-[var(--color-primary)] align-middle" />
+                          )}
                         </div>
-                      )}
-                    </>
+                        {!msg.isLoading && msg.actions && msg.actions.length > 0 && (
+                          <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
+                            <p className="flex items-center gap-1 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                              <Zap className="h-3 w-3" /> Suggested Actions
+                            </p>
+                            {msg.actions.map((action, idx) =>
+                              renderActionCard(action, msg.id, idx)
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-muted)] sm:h-8 sm:w-8">
+                      <User className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] sm:h-4 sm:w-4" />
+                    </div>
                   )}
                 </div>
-                {msg.role === 'user' && (
-                  <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-muted)]">
-                    <User className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                  </div>
-                )}
+                {/* Timestamp */}
+                <p
+                  className={`mt-1 text-[10px] text-[var(--color-muted-foreground)] ${
+                    msg.role === 'user' ? 'mr-10 text-right sm:mr-11' : 'ml-10 sm:ml-11'
+                  }`}
+                >
+                  {msg.timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </p>
               </div>
             ))}
+
+            {/* Follow-up suggestions */}
+            {showFollowUps && (
+              <div className="ml-10 flex flex-wrap gap-1.5 sm:ml-11">
+                {FOLLOW_UP_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    onClick={() => sendMessage(prompt)}
+                    className="rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-8 py-4">
+      <div className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8 md:py-4">
         <div className="mx-auto max-w-3xl">
-          <div className="flex items-end gap-3">
-            <Button
-              variant="outline"
-              size="icon"
+          <div className="relative flex-1">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your ad performance..."
+              className="max-h-[120px] min-h-[44px] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] py-3 pr-12 pl-12 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none sm:pr-12 sm:pl-12"
+              rows={1}
+              disabled={isLoading}
+            />
+            <button
               onClick={fetchData}
               disabled={dataLoading}
               title="Refresh data"
+              className="absolute top-1/2 left-3 -translate-y-1/2 rounded-md p-1 text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${dataLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <Button
+              size="icon"
+              className="absolute top-1/2 right-2 h-8 w-8 -translate-y-1/2 rounded-lg"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || isLoading}
+            >
+              <Send className="h-4 w-4" />
             </Button>
-            <div className="relative flex-1">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask: Why are conversions low today? / What should I scale? / Give me a health check..."
-                className="max-h-[120px] min-h-[44px] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 pr-12 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                rows={1}
-                disabled={isLoading}
-              />
-              <Button
-                size="icon"
-                className="absolute right-2 bottom-1.5 h-8 w-8 rounded-lg"
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim() || isLoading}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
-          <p className="mt-2 text-center text-xs text-[var(--color-muted-foreground)]">
-            Powered by Claude · Comparing today vs yesterday + hourly data + audience breakdowns
+          <p className="mt-2 hidden text-center text-[10px] text-[var(--color-muted-foreground)] sm:block">
+            Powered by Claude · Live Meta Ads data
           </p>
         </div>
       </div>

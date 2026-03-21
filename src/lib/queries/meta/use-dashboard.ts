@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { apiFetch, apiPost } from '@/lib/queries/api-fetch';
 import { getPriorPeriodDates } from '@/lib/theme';
@@ -23,6 +23,7 @@ export function useDashboardInsights(datePreset: string) {
         `/api/meta/insights?date_preset=${datePreset}&time_increment=1`
       ),
     select: (res) => res.data,
+    placeholderData: keepPreviousData,
   });
 }
 

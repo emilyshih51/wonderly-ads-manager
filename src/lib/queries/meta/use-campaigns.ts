@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queries/keys';
 import { apiFetch } from '@/lib/queries/api-fetch';
 
@@ -58,6 +58,7 @@ export function useCampaigns(datePreset: string, options: { withInsights?: boole
     queryKey: queryKeys.meta.campaigns(datePreset),
     queryFn: () => apiFetch<CampaignsResponse>(`/api/meta/campaigns?${params}`),
     select: (res) => res.data,
+    placeholderData: keepPreviousData,
   });
 }
 

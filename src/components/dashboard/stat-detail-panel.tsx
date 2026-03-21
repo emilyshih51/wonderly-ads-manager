@@ -1,23 +1,77 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import { SlidePanel } from '@/components/data/slide-panel';
 import { AreaChart } from '@/components/data/chart';
-import { formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
-import type { CampaignRow } from '@/lib/queries/meta/use-campaigns';
+import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS, cn } from '@/lib/utils';
+import { useAppStore } from '@/stores/app-store';
+import { useCampaigns, type CampaignRow } from '@/lib/queries/meta/use-campaigns';
+import { useDashboardInsights } from '@/lib/queries/meta/use-dashboard';
+import { Loader2, Check, ChevronDown, Filter } from 'lucide-react';
 
 type MetricKey = 'spend' | 'results' | 'ctr' | 'cpm' | 'cpc' | 'cpr';
 
 const METRIC_CONFIG: Record<
   MetricKey,
-  { label: string; format: 'currency' | 'percent' | 'number'; color: string }
+  { label: string; format: 'currency' | 'percent' | 'number'; color: string; accent: string }
 > = {
-  spend: { label: 'Spend', format: 'currency', color: '#2563eb' },
-  results: { label: 'Results', format: 'number', color: '#10b981' },
-  ctr: { label: 'CTR', format: 'percent', color: '#f59e0b' },
-  cpm: { label: 'CPM', format: 'currency', color: '#8b5cf6' },
-  cpc: { label: 'CPC', format: 'currency', color: '#06b6d4' },
-  cpr: { label: 'Cost per Result', format: 'currency', color: '#ef4444' },
+  spend: { label: 'Spend', format: 'currency', color: '#2563eb', accent: '#10b981' },
+  results: { label: 'Results', format: 'number', color: '#10b981', accent: '#f43f5e' },
+  ctr: { label: 'CTR', format: 'percent', color: '#f59e0b', accent: '#8b5cf6' },
+  cpm: { label: 'CPM', format: 'currency', color: '#8b5cf6', accent: '#3b82f6' },
+  cpc: { label: 'CPC', format: 'currency', color: '#06b6d4', accent: '#f59e0b' },
+  cpr: { label: 'Cost per Result', format: 'currency', color: '#ef4444', accent: '#6366f1' },
 };
+
+const ENGAGEMENT_TYPES = new Set([
+  'link_click',
+  'landing_page_view',
+  'page_engagement',
+  'post_engagement',
+  'post',
+  'comment',
+  'like',
+  'photo_view',
+  'video_view',
+  'post_reaction',
+  'onsite_conversion.post_save',
+  'outbound_click',
+  'social_click',
+]);
+
+function getResultsFromActions(
+  actions?: Array<{ action_type: string; value: string }>,
+  resultActionType?: string | null
+): number {
+  if (!actions) return 0;
+
+  if (resultActionType) {
+    const found = actions.find((a) => a.action_type === resultActionType);
+
+    return found ? parseInt(found.value, 10) : 0;
+  }
+
+  const conversion = actions.find(
+    (a) =>
+      (a.action_type.startsWith('offsite_conversion.') ||
+        a.action_type.startsWith('onsite_conversion.')) &&
+      !ENGAGEMENT_TYPES.has(a.action_type)
+  );
+
+  if (conversion) return parseInt(conversion.value, 10);
+
+  const linkClick = actions.find(
+    (a) => a.action_type === 'link_click' || a.action_type === 'landing_page_view'
+  );
+
+  if (linkClick) return parseInt(linkClick.value, 10);
+
+  const anyAction = actions.find(
+    (a) => a.action_type !== 'impressions' && a.action_type !== 'reach'
+  );
+
+  return anyAction ? parseInt(anyAction.value, 10) : 0;
+}
 
 function getMetricValue(campaign: CampaignRow, metric: MetricKey): number {
   const ins = campaign.insights;
@@ -28,13 +82,8 @@ function getMetricValue(campaign: CampaignRow, metric: MetricKey): number {
     case 'spend':
       return parseFloat(ins.spend ?? '0');
 
-    case 'results': {
-      const conv = ins.actions?.find(
-        (a) => a.action_type === 'offsite_conversion.fb_pixel_purchase'
-      );
-
-      return conv ? parseInt(conv.value, 10) : 0;
-    }
+    case 'results':
+      return getResultsFromActions(ins.actions, campaign.result_action_type);
 
     case 'ctr':
       return parseFloat(ins.ctr ?? '0');
@@ -45,10 +94,7 @@ function getMetricValue(campaign: CampaignRow, metric: MetricKey): number {
 
     case 'cpr': {
       const spend = parseFloat(ins.spend ?? '0');
-      const conv = ins.actions?.find(
-        (a) => a.action_type === 'offsite_conversion.fb_pixel_purchase'
-      );
-      const results = conv ? parseInt(conv.value, 10) : 0;
+      const results = getResultsFromActions(ins.actions, campaign.result_action_type);
 
       return results > 0 ? spend / results : 0;
     }
@@ -62,6 +108,36 @@ function formatMetric(value: number, format: 'currency' | 'percent' | 'number'):
   return formatNumber(value);
 }
 
+function computeTimeSeriesMetric(
+  row: {
+    spend: string;
+    impressions: string;
+    clicks: string;
+    actions?: Array<{ action_type: string; value: string }>;
+  },
+  metric: MetricKey
+): number {
+  const spend = parseFloat(row.spend || '0');
+  const impressions = parseInt(row.impressions || '0');
+  const clicks = parseInt(row.clicks || '0');
+  const results = getResultsFromActions(row.actions, null);
+
+  switch (metric) {
+    case 'spend':
+      return spend;
+    case 'cpm':
+      return impressions > 0 ? (spend / impressions) * 1000 : 0;
+    case 'ctr':
+      return impressions > 0 ? (clicks / impressions) * 100 : 0;
+    case 'cpc':
+      return clicks > 0 ? spend / clicks : 0;
+    case 'results':
+      return results;
+    case 'cpr':
+      return results > 0 ? spend / results : 0;
+  }
+}
+
 export interface StatDetailPanelProps {
   metric: MetricKey;
   campaigns: CampaignRow[];
@@ -73,81 +149,455 @@ export interface StatDetailPanelProps {
  * Slide-over panel showing per-campaign breakdown for a selected metric.
  *
  * @param metric - The metric to display ('spend', 'results', etc.)
- * @param campaigns - Current period campaign data
+ * @param campaigns - Current period campaign data from the dashboard
  * @param open - Whether the panel is visible
  * @param onClose - Close handler
  */
 export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetailPanelProps) {
   const config = METRIC_CONFIG[metric];
+  const globalDatePreset = useAppStore((s) => s.datePreset);
+  const [localDatePreset, setLocalDatePreset] = useState<string | null>(null);
+  const [showCount, setShowCount] = useState<number>(20);
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<Set<string>>(new Set());
+  const [campaignFilterOpen, setCampaignFilterOpen] = useState(false);
 
-  const rows = campaigns
-    .map((c) => ({ name: c.name, value: getMetricValue(c, metric) }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 20);
+  const datePreset = localDatePreset ?? globalDatePreset;
 
-  // Build sparkline-style data for the chart (campaign values as a distribution)
+  const {
+    data: fetchedCampaigns,
+    isFetching: campaignsFetching,
+    isPlaceholderData,
+  } = useCampaigns(datePreset, { withInsights: true });
+  const { data: timeSeries = [], isFetching: insightsFetching } = useDashboardInsights(datePreset);
+
+  const isFetching = campaignsFetching || insightsFetching;
+  const isStale = isPlaceholderData || (localDatePreset !== null && isFetching);
+
+  const activeCampaigns = fetchedCampaigns ?? campaigns;
+  const hasCampaignInsights = activeCampaigns.some((c) => c.insights !== null);
+
+  const filteredCampaigns = useMemo(
+    () =>
+      selectedCampaignIds.size > 0
+        ? activeCampaigns.filter((c) => selectedCampaignIds.has(c.id))
+        : activeCampaigns,
+    [activeCampaigns, selectedCampaignIds]
+  );
+
+  const timeSeriesTotal = useMemo(() => {
+    if (hasCampaignInsights || timeSeries.length === 0) return null;
+
+    let total = 0;
+
+    for (const row of timeSeries) {
+      total += computeTimeSeriesMetric(row, metric);
+    }
+
+    // For rate metrics (ctr, cpm, cpc, cpr), compute from totals not sum
+    if (['ctr', 'cpm', 'cpc', 'cpr'].includes(metric)) {
+      let spend = 0,
+        impressions = 0,
+        clicks = 0,
+        results = 0;
+
+      for (const row of timeSeries) {
+        spend += parseFloat(row.spend || '0');
+        impressions += parseInt(row.impressions || '0');
+        clicks += parseInt(row.clicks || '0');
+        results += getResultsFromActions(row.actions, null);
+      }
+
+      switch (metric) {
+        case 'cpm':
+          return impressions > 0 ? (spend / impressions) * 1000 : 0;
+        case 'ctr':
+          return impressions > 0 ? (clicks / impressions) * 100 : 0;
+        case 'cpc':
+          return clicks > 0 ? spend / clicks : 0;
+        case 'cpr':
+          return results > 0 ? spend / results : 0;
+      }
+    }
+
+    return total;
+  }, [hasCampaignInsights, timeSeries, metric]);
+
+  const allRows = useMemo(
+    () =>
+      filteredCampaigns
+        .map((c) => ({
+          name: c.name,
+          value: getMetricValue(c, metric),
+          status: c.status,
+        }))
+        .sort((a, b) => b.value - a.value),
+    [filteredCampaigns, metric]
+  );
+
+  const rows = allRows.slice(0, showCount);
+  const maxValue = rows.length > 0 ? Math.max(...rows.map((r) => r.value)) : 1;
+  const zeroCount = allRows.filter((r) => r.value === 0).length;
+  const activeCount = allRows.filter((r) => r.status === 'ACTIVE').length;
+  const pausedCount = allRows.length - activeCount;
+
   const chartData = rows.map((r) => ({
     name: r.name.length > 20 ? r.name.slice(0, 20) + '…' : r.name,
     [metric]: r.value,
   }));
 
-  const total = rows.reduce((sum, r) => sum + r.value, 0);
+  const campaignTotal = allRows.reduce((sum, r) => sum + r.value, 0);
+  const total = campaignTotal > 0 ? campaignTotal : (timeSeriesTotal ?? 0);
+
+  // For additive metrics (spend, results), show % share per campaign
+  const isAdditive = metric === 'spend' || metric === 'results';
+
+  const toggleCampaign = (id: string) => {
+    setSelectedCampaignIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+
+      return next;
+    });
+  };
+
+  const filterLabel =
+    selectedCampaignIds.size === 0
+      ? 'All campaigns'
+      : selectedCampaignIds.size === 1
+        ? (activeCampaigns.find((c) => selectedCampaignIds.has(c.id))?.name ?? '1 campaign')
+        : `${selectedCampaignIds.size} campaigns`;
+
+  const dateLabel = DATE_PRESETS.find((p) => p.value === datePreset)?.label ?? datePreset;
 
   return (
     <SlidePanel
       open={open}
       onOpenChange={(v) => !v && onClose()}
       title={config.label}
-      description={`Breakdown across ${campaigns.length} campaigns`}
+      description={dateLabel}
     >
-      {/* Summary */}
-      <div className="mb-6 rounded-xl bg-[var(--color-muted)] p-4">
-        <p className="text-xs text-[var(--color-muted-foreground)]">Total</p>
-        <p className="mt-1 text-2xl font-bold text-[var(--color-foreground)]">
-          {formatMetric(total, config.format)}
-        </p>
-      </div>
-
-      {/* Mini chart */}
-      {chartData.length > 1 && (
-        <div className="mb-6">
-          <p className="mb-2 text-xs font-medium text-[var(--color-muted-foreground)]">
-            Distribution
-          </p>
-          <AreaChart
-            data={chartData}
-            xKey="name"
-            series={[{ key: metric, label: config.label, color: config.color }]}
-            format={config.format}
-            height={160}
-          />
-        </div>
-      )}
-
-      {/* Campaign breakdown table */}
-      <div>
-        <p className="mb-3 text-xs font-medium text-[var(--color-muted-foreground)]">By Campaign</p>
-        <div className="space-y-2">
-          {rows.map((r, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-4 rounded-lg p-2 hover:bg-[var(--color-muted)]"
-            >
-              <span className="flex-1 truncate text-sm text-[var(--color-foreground)]">
-                {r.name}
-              </span>
-              <span className="shrink-0 text-sm font-medium text-[var(--color-foreground)]">
-                {formatMetric(r.value, config.format)}
-              </span>
-            </div>
-          ))}
-          {rows.length === 0 && (
-            <p className="py-4 text-center text-sm text-[var(--color-muted-foreground)]">
-              No data available
-            </p>
+      {/* Controls row: date + campaign filter */}
+      <div className="mb-6 space-y-3">
+        {/* Date selector — horizontal scroll, no wrap */}
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5">
+            {DATE_PRESETS.map((preset) => (
+              <button
+                key={preset.value}
+                onClick={() =>
+                  setLocalDatePreset(preset.value === globalDatePreset ? null : preset.value)
+                }
+                className={cn(
+                  'shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap transition-colors',
+                  preset.value === datePreset
+                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                    : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          {isFetching && (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--color-muted-foreground)]" />
           )}
         </div>
+
+        {/* Campaign filter */}
+        {hasCampaignInsights && (
+          <div className="relative">
+            <button
+              onClick={() => setCampaignFilterOpen((v) => !v)}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors',
+                selectedCampaignIds.size > 0
+                  ? 'border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5'
+                  : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
+              )}
+            >
+              <Filter className="h-3 w-3 shrink-0 text-[var(--color-muted-foreground)]" />
+              <span className="flex-1 truncate text-[var(--color-foreground)]">{filterLabel}</span>
+              {selectedCampaignIds.size > 0 && (
+                <span className="shrink-0 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary-foreground)]">
+                  {selectedCampaignIds.size}
+                </span>
+              )}
+              <ChevronDown
+                className={cn(
+                  'h-3 w-3 shrink-0 text-[var(--color-muted-foreground)] transition-transform duration-200',
+                  campaignFilterOpen && 'rotate-180'
+                )}
+              />
+            </button>
+            {campaignFilterOpen && (
+              <div className="absolute z-10 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setSelectedCampaignIds(new Set());
+                    setCampaignFilterOpen(false);
+                  }}
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-2 text-xs transition-colors',
+                    selectedCampaignIds.size === 0
+                      ? 'bg-[var(--color-primary)]/5 font-medium text-[var(--color-primary)]'
+                      : 'text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                  )}
+                >
+                  <span>All campaigns</span>
+                  {selectedCampaignIds.size === 0 && (
+                    <Check className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+                  )}
+                </button>
+                <div className="mx-3 my-1 border-t border-[var(--color-border)]" />
+                {activeCampaigns.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => toggleCampaign(c.id)}
+                    className={cn(
+                      'flex w-full items-center justify-between px-3 py-2 text-xs transition-colors',
+                      selectedCampaignIds.has(c.id)
+                        ? 'bg-[var(--color-primary)]/5 text-[var(--color-foreground)]'
+                        : 'text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                    )}
+                  >
+                    <span className="truncate pr-2">{c.name}</span>
+                    {selectedCampaignIds.has(c.id) && (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Content area — dims when stale */}
+      <div className={cn('transition-opacity duration-200', isStale && 'opacity-50')}>
+        {/* Summary card with accent */}
+        <div
+          className="relative mb-6 overflow-hidden rounded-xl p-5"
+          style={{ backgroundColor: `${config.accent}10` }}
+        >
+          <div
+            className="absolute top-0 left-0 h-full w-1"
+            style={{ backgroundColor: config.accent }}
+          />
+          <div className="mb-3">
+            <p className="mb-1 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+              Total {config.label}
+            </p>
+            <p className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]">
+              {formatMetric(total, config.format)}
+            </p>
+          </div>
+          {hasCampaignInsights && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--color-muted-foreground)]">
+              <span>
+                {filteredCampaigns.length} campaign{filteredCampaigns.length !== 1 ? 's' : ''}
+              </span>
+              {activeCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {activeCount} active
+                </span>
+              )}
+              {pausedCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {pausedCount} paused
+                </span>
+              )}
+              {zeroCount > 0 && (
+                <span>
+                  {zeroCount} with no {config.label.toLowerCase()}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Quick stats — best, worst, average */}
+        {hasCampaignInsights && allRows.length > 1 && (
+          <div className="mb-6 grid grid-cols-3 gap-2">
+            <div className="rounded-lg bg-[var(--color-muted)] p-3">
+              <p className="text-[10px] font-medium tracking-wide text-emerald-500 uppercase">
+                Best
+              </p>
+              <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-foreground)]">
+                {allRows[0].name}
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-[var(--color-foreground)] tabular-nums">
+                {formatMetric(allRows[0].value, config.format)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[var(--color-muted)] p-3">
+              <p className="text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                Avg
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">&nbsp;</p>
+              <p className="mt-0.5 text-sm font-bold text-[var(--color-foreground)] tabular-nums">
+                {formatMetric(campaignTotal / allRows.length, config.format)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[var(--color-muted)] p-3">
+              <p className="text-[10px] font-medium tracking-wide text-red-400 uppercase">Worst</p>
+              <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-foreground)]">
+                {allRows[allRows.length - 1].name}
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-[var(--color-foreground)] tabular-nums">
+                {formatMetric(allRows[allRows.length - 1].value, config.format)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Trend over time — always show when time-series data exists */}
+        {timeSeries.length > 1 && (
+          <div className="mb-6">
+            <p className="mb-3 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+              Trend over time
+            </p>
+            <AreaChart
+              data={timeSeries.map((row) => ({
+                name: row.date_start?.split('T')[0]?.slice(5) || '',
+                [metric]: computeTimeSeriesMetric(row, metric),
+              }))}
+              xKey="name"
+              series={[{ key: metric, label: config.label, color: config.accent }]}
+              format={config.format}
+              height={130}
+            />
+          </div>
+        )}
+
+        {/* Distribution by campaign */}
+        {hasCampaignInsights && chartData.length > 1 && (
+          <div className="mb-6">
+            <p className="mb-3 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+              Distribution by campaign
+            </p>
+            <AreaChart
+              data={chartData}
+              xKey="name"
+              series={[{ key: metric, label: config.label, color: config.accent }]}
+              format={config.format}
+              height={130}
+            />
+          </div>
+        )}
+
+        {/* Campaign breakdown */}
+        {hasCampaignInsights && (
+          <div>
+            <div className="mb-3 flex items-baseline justify-between">
+              <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                Campaign breakdown
+              </p>
+              {/* Count selector */}
+              <div className="flex items-center rounded-md border border-[var(--color-border)]">
+                {[5, 10, 20]
+                  .filter((n) => n <= allRows.length || n === 5)
+                  .map((n, i, arr) => (
+                    <button
+                      key={n}
+                      onClick={() => setShowCount(n)}
+                      className={cn(
+                        'px-2 py-1 text-[11px] font-medium transition-colors',
+                        i < arr.length - 1 && 'border-r border-[var(--color-border)]',
+                        showCount === n
+                          ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                          : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                {allRows.length > 20 && (
+                  <button
+                    onClick={() => setShowCount(Infinity)}
+                    className={cn(
+                      'px-2 py-1 text-[11px] font-medium transition-colors',
+                      showCount > 20
+                        ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                        : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                    )}
+                  >
+                    All
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              {rows.map((r, i) => {
+                const barWidth = maxValue > 0 ? (r.value / maxValue) * 100 : 0;
+                const share =
+                  isAdditive && campaignTotal > 0
+                    ? ((r.value / campaignTotal) * 100).toFixed(1)
+                    : null;
+
+                return (
+                  <div
+                    key={i}
+                    className="group relative overflow-hidden rounded-lg p-3 transition-colors hover:bg-[var(--color-accent)]/50"
+                  >
+                    {/* Background bar */}
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-lg opacity-[0.07]"
+                      style={{
+                        width: `${barWidth}%`,
+                        backgroundColor: config.accent,
+                      }}
+                    />
+                    <div className="relative flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: `${config.accent}18`,
+                            color: config.accent,
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span
+                          className={cn(
+                            'inline-block h-1.5 w-1.5 shrink-0 rounded-full',
+                            r.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-amber-500'
+                          )}
+                          title={r.status}
+                        />
+                        <span className="truncate text-sm text-[var(--color-foreground)]">
+                          {r.name}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {share && (
+                          <span className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
+                            {share}%
+                          </span>
+                        )}
+                        <span className="text-sm font-semibold text-[var(--color-foreground)] tabular-nums">
+                          {formatMetric(r.value, config.format)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {rows.length === 0 && (
+                <p className="py-8 text-center text-sm text-[var(--color-muted-foreground)]">
+                  No data available
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {/* end stale-state wrapper */}
     </SlidePanel>
   );
 }

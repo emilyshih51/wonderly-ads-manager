@@ -6,25 +6,26 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
-        destructive: 'bg-red-500 text-white hover:bg-red-600 shadow-sm',
+        default:
+          'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:opacity-90 shadow-sm',
+        destructive: 'bg-[var(--color-destructive)] text-white hover:opacity-90 shadow-sm',
         outline:
           'border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-accent)] text-[var(--color-foreground)]',
         secondary:
           'bg-[var(--color-accent)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/80',
         ghost: 'hover:bg-[var(--color-accent)] text-[var(--color-foreground)]',
-        link: 'text-blue-600 underline-offset-4 hover:underline',
+        link: 'text-[var(--color-primary)] underline-offset-4 hover:underline',
         success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm',
       },
       size: {
-        default: 'h-10 px-4 py-2',
+        default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
-        lg: 'h-12 rounded-lg px-8 text-base',
-        icon: 'h-10 w-10',
+        lg: 'h-11 rounded-lg px-6',
+        icon: 'h-9 w-9',
       },
     },
     defaultVariants: {

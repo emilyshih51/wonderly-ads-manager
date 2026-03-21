@@ -33,6 +33,10 @@ import { DataTablePagination } from '@/components/data/data-table-pagination';
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  /** Title shown in the table header bar. */
+  title?: string;
+  /** Action element rendered on the right side of the header bar (e.g. a back button). */
+  headerAction?: React.ReactNode;
   searchKey?: string;
   searchPlaceholder?: string;
   isLoading?: boolean;
@@ -65,6 +69,8 @@ interface DataTableProps<TData, TValue> {
 export function DataTable<TData, TValue>({
   columns,
   data,
+  title,
+  headerAction,
   searchKey,
   searchPlaceholder,
   isLoading = false,
@@ -141,6 +147,12 @@ export function DataTable<TData, TValue>({
 
   return (
     <Card className={cn('overflow-hidden', className)}>
+      {(title || headerAction) && (
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3 md:px-5">
+          {title && <h3 className="text-sm font-medium text-[var(--color-foreground)]">{title}</h3>}
+          {headerAction && <div className="ml-auto">{headerAction}</div>}
+        </div>
+      )}
       <DataTableToolbar table={table} searchKey={searchKey} searchPlaceholder={searchPlaceholder} />
 
       <Table>
@@ -152,7 +164,7 @@ export function DataTable<TData, TValue>({
                 const sorted = header.column.getIsSorted();
 
                 return (
-                  <TableHead key={header.id} style={{ width: header.getSize() }}>
+                  <TableHead key={header.id} style={{ minWidth: header.column.columnDef.minSize }}>
                     {header.isPlaceholder ? null : canSort ? (
                       <button
                         className="flex items-center gap-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase hover:text-[var(--color-foreground)]"
@@ -192,7 +204,7 @@ export function DataTable<TData, TValue>({
               <React.Fragment key={row.id}>
                 <TableRow
                   data-state={row.getIsSelected() && 'selected'}
-                  className={cn(onRowClick && 'cursor-pointer')}
+                  className={cn('group/row', onRowClick && 'cursor-pointer')}
                   onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (

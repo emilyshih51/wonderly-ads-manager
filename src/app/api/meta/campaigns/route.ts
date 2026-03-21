@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { MetaService } from '@/services/meta';
 import { attachInsights } from '@/lib/utils';
+import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Meta:Campaigns');
@@ -40,10 +41,32 @@ export async function GET(request: NextRequest) {
             ? meta.getInsightsForDateRange(since, until, 'campaign')
             : meta.getCampaignLevelInsights(datePreset);
 
-        const [bulkInsights, optimizationMap] = await Promise.all([
+        // Fetch insights and optimization map independently so one failure
+        // doesn't discard the other's data (optimization map is non-critical).
+        const [bulkInsightsResult, optimizationMapResult] = await Promise.allSettled([
           insightsPromise,
           meta.getCampaignOptimizationMap(),
         ]);
+
+        const bulkInsights =
+          bulkInsightsResult.status === 'fulfilled' ? bulkInsightsResult.value : null;
+        const optimizationMap =
+          optimizationMapResult.status === 'fulfilled' ? optimizationMapResult.value : {};
+
+        if (optimizationMapResult.status === 'rejected') {
+          logger.error('Optimization map error (non-fatal)', optimizationMapResult.reason);
+        }
+
+        if (!bulkInsights) {
+          // Insights themselves failed — return campaigns without insights
+          if (bulkInsightsResult.status === 'rejected') {
+            logger.error('Bulk campaign insights error', bulkInsightsResult.reason);
+          }
+
+          return NextResponse.json({
+            data: campaigns.map((c) => ({ ...c, insights: null, result_action_type: null })),
+          });
+        }
 
         const campaignsWithInsights = attachInsights(
           campaigns,
@@ -59,7 +82,7 @@ export async function GET(request: NextRequest) {
         logger.error('Bulk campaign insights error', insightsError);
 
         return NextResponse.json({
-          data: campaigns.map((c) => ({ ...c, insights: null })),
+          data: campaigns.map((c) => ({ ...c, insights: null, result_action_type: null })),
         });
       }
     }
@@ -68,6 +91,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Campaign fetch error', error);
 
-    return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 });
+    return metaErrorResponse(error, 'Failed to fetch campaigns');
   }
 }

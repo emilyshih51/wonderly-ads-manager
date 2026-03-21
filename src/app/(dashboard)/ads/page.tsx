@@ -255,9 +255,9 @@ export default function TopPerformingAdsPage() {
                     </td>
 
                     <td className="px-6 py-4">
-                      {ad.creative?.thumbnail_url || ad.creative?.image_url ? (
+                      {ad.creative?.image_url || ad.creative?.thumbnail_url ? (
                         <NextImage
-                          src={ad.creative.thumbnail_url || ad.creative.image_url || ''}
+                          src={ad.creative.image_url || ad.creative.thumbnail_url || ''}
                           alt={ad.name}
                           width={40}
                           height={40}

@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   /* Font variables are resolved here so Tailwind's font-sans utility works.
      The actual active font is set via --font-active on :root (overridden SSR in layout.tsx). */
@@ -46,21 +48,206 @@ body {
   color: var(--color-foreground);
 }
 
-/* Subtle theme-switch transitions on all elements */
-*,
-*::before,
-*::after {
-  transition-property: background-color, border-color, color, fill, stroke;
+/* Pointer cursor on all interactive elements */
+a,
+button,
+select,
+label,
+summary,
+[role='button'],
+[role='tab'],
+[role='checkbox'],
+[role='radio'],
+[role='switch'],
+[role='menuitem'],
+[role='option'],
+[type='checkbox'],
+[type='radio'],
+[type='submit'],
+[type='reset'],
+[tabindex]:not([tabindex='-1']) {
+  cursor: pointer;
+}
+
+/* Custom scrollbar — global */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted-foreground) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-muted-foreground);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-foreground);
+}
+
+/* Sidebar scrollbar — lighter to match dark background */
+.sidebar-scroll {
+  scrollbar-color: rgba(255 255 255 / 0.15) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255 255 255 / 0.15);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255 255 255 / 0.3);
+}
+
+/* Hide scrollbar completely (e.g. carousels) */
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Theme-switch transitions — only active when .theme-transition is on <html>.
+   Added/removed by ThemeProvider on toggle to avoid flicker on page load. */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition-property: background-color, border-color, color;
   transition-duration: 150ms;
   transition-timing-function: ease;
 }
 
-/* Preserve animation-driven classes that should not be clobbered */
-.animate-spin,
-.animate-pulse,
-[data-state='open'],
-[data-state='closed'] {
-  transition: none;
+/* Slide panel — full-width on mobile, custom width on sm+ */
+@media (min-width: 640px) {
+  .slide-panel {
+    width: var(--slide-panel-w, 480px) !important;
+  }
+}
+
+/* Dropdown menu animations */
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dropdown-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+}
+
+/* Sidebar dropdown animations */
+@keyframes sidebar-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sidebar-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sidebar-dropdown-down {
+  animation: sidebar-slide-down 150ms ease-out;
+}
+
+.sidebar-dropdown-up {
+  animation: sidebar-slide-up 150ms ease-out;
+}
+
+/* Slide panel animations */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes overlay-show {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-hide {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 /* React Flow overrides */

@@ -21,6 +21,8 @@ interface ActionPayload {
  * `resume_ad_set`, `resume_ad`, `adjust_budget`. Body: `{ action: ActionPayload }`.
  */
 export async function POST(request: NextRequest) {
+  const start = Date.now();
+
   try {
     const session = await getSession();
 
@@ -29,6 +31,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { action } = (await request.json()) as { action: ActionPayload };
+
+    logger.info('POST /api/chat/actions', { type: action?.type, id: action?.id });
 
     if (!action?.type || !action?.id) {
       return NextResponse.json({ error: 'Missing action type or ID' }, { status: 400 });
@@ -88,6 +92,8 @@ export async function POST(request: NextRequest) {
         : actionType === 'resume'
           ? `✅ Resumed "${label}"`
           : `✅ Set daily budget of "${label}" to $${Math.round(action.budget!).toFixed(2)}`;
+
+    logger.info('Action executed', { result, durationMs: Date.now() - start });
 
     return NextResponse.json({ success: true, result });
   } catch (error) {

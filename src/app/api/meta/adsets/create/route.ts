@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
   if (result instanceof NextResponse) return result;
   const session = result;
 
+  logger.info('POST /api/meta/adsets/create');
+
   try {
     const body = await request.json();
     const {

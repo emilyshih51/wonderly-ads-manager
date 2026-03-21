@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
   const datePreset = request.nextUrl.searchParams.get('date_preset') || 'today';
   const timeIncrement = request.nextUrl.searchParams.get('time_increment') || undefined;
 
+  logger.info('GET /api/meta/insights', { datePreset, timeIncrement });
+
   const meta = MetaService.fromSession(session);
 
   try {

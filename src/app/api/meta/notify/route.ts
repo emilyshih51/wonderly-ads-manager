@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { SlackService, createSlackService } from '@/services/slack';
+import { createSlackService } from '@/services/slack';
 import { metaErrorResponse } from '@/lib/meta-error-response';
 import { createLogger } from '@/services/logger';
 
@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
 
+  logger.info('POST /api/meta/notify');
+
   try {
     const body = await request.json();
     const { type } = body;
@@ -40,23 +42,15 @@ export async function POST(request: NextRequest) {
       const budgetDisplay = budget ? `$${parseFloat(budget).toFixed(2)}/day` : 'no budget set';
       const statusLabel = status === 'ACTIVE' ? 'Active' : 'Paused (draft)';
 
-      let text: string;
-
-      if (custom_message) {
-        text = SlackService.sanitizeMentions(custom_message)
-          .replace(/\{adset_name\}/g, SlackService.sanitizeMentions(adset_name || ''))
-          .replace(/\{budget\}/g, budgetDisplay)
-          .replace(/\{ad_count\}/g, String(ad_count || 0))
-          .replace(/\{status\}/g, statusLabel);
-      } else {
-        text =
-          `🚀 *[Wonderly]* ${adset_name} launched with ${budgetDisplay}\n` +
-          `${ad_count} ad${ad_count !== 1 ? 's' : ''} created as ${statusLabel}`;
-      }
-
       const slack = createSlackService();
 
-      await slack.postMessage(channel, text);
+      await slack.sendLaunchNotification(channel, {
+        adsetName: adset_name || '',
+        budget: budgetDisplay,
+        adCount: ad_count || 0,
+        status: statusLabel,
+        customMessage: custom_message,
+      });
 
       return NextResponse.json({ success: true, slack_sent: true });
     }

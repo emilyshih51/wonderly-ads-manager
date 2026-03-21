@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
   const until = request.nextUrl.searchParams.get('until');
   const withInsights = request.nextUrl.searchParams.get('with_insights') === 'true';
 
+  logger.info('GET /api/meta/campaigns', { datePreset, withInsights });
+
   const meta = MetaService.fromSession(session);
 
   try {

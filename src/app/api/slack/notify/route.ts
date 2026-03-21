@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
 
   if (result instanceof NextResponse) return result;
 
+  logger.info('POST /api/slack/notify');
+
   try {
     const cookieStore = await cookies();
     const slackCookie = cookieStore.get('wonderly_slack');

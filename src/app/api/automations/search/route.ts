@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const type = searchParams.get('type') || 'campaigns';
+
+  logger.info('GET /api/automations/search', { type });
   const query = (searchParams.get('q') || '').toLowerCase();
   const campaignId = searchParams.get('campaign_id') ?? undefined;
 
@@ -131,8 +133,8 @@ export async function GET(request: NextRequest) {
 
       try {
         optimizationMap = await meta.getCampaignOptimizationMap();
-      } catch {
-        /* continue without */
+      } catch (e) {
+        logger.warn('Optimization map unavailable, continuing without', e);
       }
 
       const matchingAds = insightsData

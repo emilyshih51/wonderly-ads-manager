@@ -14,8 +14,10 @@ import {
   Type,
   Palette,
   ChevronRight,
+  Bot,
 } from 'lucide-react';
 import { MetaLogo } from '@/components/ui/meta-logo';
+import { useAssistantStore } from '@/stores/assistant-store';
 import { useSlackStatus } from '@/lib/queries/slack/use-slack';
 import { useTranslations } from 'next-intl';
 import { setLocale } from '@/i18n/actions';
@@ -242,6 +244,8 @@ export function SettingsClient({
               ))}
             </div>
           </div>
+          {/* AI Assistant */}
+          <AssistantToggle />
         </Card>
 
         {/* ── Integrations ── */}
@@ -379,6 +383,43 @@ export function SettingsClient({
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** Toggle row for showing/hiding the Shiba Inu AI assistant overlay. */
+function AssistantToggle() {
+  const { assistantEnabled, setAssistantEnabled } = useAssistantStore();
+
+  return (
+    <div className="flex items-center justify-between px-5 py-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
+          <Bot className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-[var(--color-foreground)]">AI Assistant</p>
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            Show Winnie, the floating Shiba Inu chat assistant
+          </p>
+        </div>
+      </div>
+      <button
+        role="switch"
+        aria-checked={assistantEnabled}
+        onClick={() => setAssistantEnabled(!assistantEnabled)}
+        className={cn(
+          'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
+          assistantEnabled ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-muted)]'
+        )}
+      >
+        <span
+          className={cn(
+            'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform',
+            assistantEnabled ? 'translate-x-4' : 'translate-x-0'
+          )}
+        />
+      </button>
     </div>
   );
 }

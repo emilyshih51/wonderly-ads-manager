@@ -437,7 +437,11 @@
       "promoteLowCpa5": "Promote ad: CPA ≤ $20, results ≥ 5",
       "promoteLowCpa5Desc": "Pause + duplicate to Winners ad set with more results"
     },
-    "adsWouldBeAffected": "{count, plural, =0 {ads would be affected} =1 {ad would be affected} other {ads would be affected}}"
+    "adsWouldBeAffected": "{count, plural, =0 {ads would be affected} =1 {ad would be affected} other {ads would be affected}}",
+    "runComplete": "Run Complete",
+    "runCompleteDesc": "Results from executing your automation rule",
+    "noActionsTaken": "No actions were taken",
+    "adsAffected": "{count, plural, one {ad was affected} other {ads were affected}}"
   },
   "settings": {
     "title": "Settings",

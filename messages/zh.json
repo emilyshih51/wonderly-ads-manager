@@ -437,7 +437,11 @@
       "promoteLowCpa5": "推广广告：CPA ≤ $20，结果 ≥ 5",
       "promoteLowCpa5Desc": "暂停并复制到优胜广告组（更多结果）"
     },
-    "adsWouldBeAffected": "个广告会受到影响"
+    "adsWouldBeAffected": "个广告会受到影响",
+    "runComplete": "执行完成",
+    "runCompleteDesc": "自动化规则的执行结果",
+    "noActionsTaken": "未执行任何操作",
+    "adsAffected": "{count, plural, other {个广告受到影响}}"
   },
   "settings": {
     "title": "设置",

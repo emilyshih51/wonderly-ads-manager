@@ -437,7 +437,11 @@
       "promoteLowCpa5": "광고 프로모션: CPA ≤ $20, 결과 ≥ 5",
       "promoteLowCpa5Desc": "더 많은 결과로 일시정지 + Winners 광고 세트로 복제"
     },
-    "adsWouldBeAffected": "개의 광고가 영향을 받습니다"
+    "adsWouldBeAffected": "개의 광고가 영향을 받습니다",
+    "runComplete": "실행 완료",
+    "runCompleteDesc": "자동화 규칙 실행 결과",
+    "noActionsTaken": "수행된 작업이 없습니다",
+    "adsAffected": "{count, plural, other {개 광고가 영향을 받았습니다}}"
   },
   "settings": {
     "title": "설정",

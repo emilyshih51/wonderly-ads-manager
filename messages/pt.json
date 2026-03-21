@@ -437,7 +437,11 @@
       "promoteLowCpa5": "Promover anúncio: CPA ≤ $20, resultados ≥ 5",
       "promoteLowCpa5Desc": "Pausar + duplicar para conjunto Winners com mais resultados"
     },
-    "adsWouldBeAffected": "{count, plural, =0 {anúncios seriam afetados} =1 {anúncio seria afetado} other {anúncios seriam afetados}}"
+    "adsWouldBeAffected": "{count, plural, =0 {anúncios seriam afetados} =1 {anúncio seria afetado} other {anúncios seriam afetados}}",
+    "runComplete": "Execução concluída",
+    "runCompleteDesc": "Resultados da execução da sua regra de automação",
+    "noActionsTaken": "Nenhuma ação foi realizada",
+    "adsAffected": "{count, plural, one {anúncio foi afetado} other {anúncios foram afetados}}"
   },
   "settings": {
     "title": "Configurações",

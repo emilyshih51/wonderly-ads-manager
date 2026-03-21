@@ -437,7 +437,11 @@
       "promoteLowCpa5": "広告を昇格：CPA ≤ $20、成果 ≥ 5件",
       "promoteLowCpa5Desc": "より多くの成果でWinners広告セットに一時停止＋複製"
     },
-    "adsWouldBeAffected": "件の広告が影響を受けます"
+    "adsWouldBeAffected": "件の広告が影響を受けます",
+    "runComplete": "実行完了",
+    "runCompleteDesc": "自動化ルールの実行結果",
+    "noActionsTaken": "アクションは実行されませんでした",
+    "adsAffected": "{count, plural, other {件の広告が影響を受けました}}"
   },
   "settings": {
     "title": "設定",

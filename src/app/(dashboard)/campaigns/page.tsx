@@ -274,11 +274,11 @@ export default function CampaignsPage() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
               <StatCard
-                label="Total"
+                label={tCommon('total')}
                 value={summary.total.toString()}
                 icon={Layers}
                 accent="#6366f1"
-                detail={`${summary.active} active, ${summary.paused} paused`}
+                detail={t('activePaused', { active: summary.active, paused: summary.paused })}
               />
               <StatCard
                 label={tMetrics('spend')}
@@ -325,8 +325,7 @@ export default function CampaignsPage() {
           <DialogHeader>
             <DialogTitle>{t('duplicateCampaign')}</DialogTitle>
             <DialogDescription>
-              Create a copy of &ldquo;{selectedCampaign?.name}&rdquo; with all the same settings.
-              The copy will be created in PAUSED status.
+              {t('duplicateDesc', { name: selectedCampaign?.name || '' })}
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 space-y-4">

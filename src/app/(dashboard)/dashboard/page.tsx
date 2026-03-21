@@ -614,7 +614,7 @@ export default function DashboardPage() {
                   value: adSet.daily_budget ? String(parseInt(adSet.daily_budget) / 100) : '',
                 });
               }}
-              title="Click to edit budget"
+              title={t('clickToEditBudget')}
             >
               {adSet.daily_budget ? `$${(parseInt(adSet.daily_budget) / 100).toFixed(2)}` : '—'}
             </button>

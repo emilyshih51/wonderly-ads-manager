@@ -64,15 +64,15 @@ export interface RuleConfig {
 /* ─────────── Constants ─────────── */
 
 export const METRIC_OPTIONS = [
-  { label: 'Spend ($)', value: 'spend' },
-  { label: 'Results', value: 'results' },
-  { label: 'Cost per Result (CPA)', value: 'cost_per_result' },
-  { label: 'Impressions', value: 'impressions' },
-  { label: 'Clicks', value: 'clicks' },
-  { label: 'CTR (%)', value: 'ctr' },
-  { label: 'CPC ($)', value: 'cpc' },
-  { label: 'CPM ($)', value: 'cpm' },
-  { label: 'Frequency', value: 'frequency' },
+  { labelKey: 'spendDollar', value: 'spend' },
+  { labelKey: 'results', value: 'results' },
+  { labelKey: 'cpaFull', value: 'cost_per_result' },
+  { labelKey: 'impressions', value: 'impressions' },
+  { labelKey: 'clicks', value: 'clicks' },
+  { labelKey: 'ctrPercent2', value: 'ctr' },
+  { labelKey: 'cpcDollar', value: 'cpc' },
+  { labelKey: 'cpmDollar', value: 'cpm' },
+  { labelKey: 'frequency', value: 'frequency' },
 ];
 
 /* ─────────── Config → Nodes/Edges ─────────── */
@@ -104,7 +104,7 @@ export function configToNodes(config: RuleConfig) {
       type: 'condition',
       position: { x: 300, y: 200 + i * 150 },
       data: {
-        label: `${METRIC_OPTIONS.find((m) => m.value === cond.metric)?.label || cond.metric} ${cond.operator} ${cond.threshold}`,
+        label: `${METRIC_OPTIONS.find((m) => m.value === cond.metric)?.labelKey || cond.metric} ${cond.operator} ${cond.threshold}`,
         config: {
           metric: cond.metric,
           operator: cond.operator,

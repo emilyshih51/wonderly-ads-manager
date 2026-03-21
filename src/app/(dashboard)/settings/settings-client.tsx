@@ -36,33 +36,33 @@ const LOCALE_NAMES: Record<Locale, string> = {
   pt: 'Português',
 };
 
-const FONT_META: Record<FontChoice, { name: string; descKey: string; preview: string }> = {
+const FONT_META: Record<FontChoice, { name: string; descKey: string; previewKey: string }> = {
   'noto-sans': {
     name: 'Noto Sans',
     descKey: 'fontRecommended',
-    preview: 'The quick brown fox',
+    previewKey: 'fontPreview',
   },
-  inter: { name: 'Inter', descKey: 'fontInter', preview: 'The quick brown fox' },
+  inter: { name: 'Inter', descKey: 'fontInter', previewKey: 'fontPreview' },
   'jetbrains-mono': {
     name: 'JetBrains Mono',
     descKey: 'fontJetBrainsMono',
-    preview: 'The quick brown fox',
+    previewKey: 'fontPreview',
   },
-  geist: { name: 'Geist', descKey: 'fontGeist', preview: 'The quick brown fox' },
+  geist: { name: 'Geist', descKey: 'fontGeist', previewKey: 'fontPreview' },
   'geist-mono': {
     name: 'Geist Mono',
     descKey: 'fontGeistMono',
-    preview: 'The quick brown fox',
+    previewKey: 'fontPreview',
   },
   'dm-sans': {
     name: 'DM Sans',
     descKey: 'fontDmSans',
-    preview: 'The quick brown fox',
+    previewKey: 'fontPreview',
   },
   'space-grotesk': {
     name: 'Space Grotesk',
     descKey: 'fontSpaceGrotesk',
-    preview: 'The quick brown fox',
+    previewKey: 'fontPreview',
   },
 };
 
@@ -232,7 +232,7 @@ export function SettingsClient({
                       className="mt-1 text-xs text-[var(--color-muted-foreground)]"
                       style={{ fontFamily: FONT_FAMILY_MAP[font] }}
                     >
-                      {FONT_META[font].preview}
+                      {t(FONT_META[font].previewKey)}
                     </p>
                   </div>
                   {font === currentFont && (

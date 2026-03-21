@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/ui/dropdown';
 import { useAppStore } from '@/stores/app-store';
 import { DATE_PRESETS } from '@/lib/utils';
@@ -11,6 +12,7 @@ interface HeaderProps {
 }
 
 export function Header({ title, description, children }: HeaderProps) {
+  const tCommon = useTranslations('common');
   const { datePreset, setDatePreset } = useAppStore();
 
   return (
@@ -29,7 +31,7 @@ export function Header({ title, description, children }: HeaderProps) {
         <Select
           value={datePreset}
           onChange={setDatePreset}
-          options={DATE_PRESETS}
+          options={DATE_PRESETS.map((p) => ({ label: tCommon(p.labelKey), value: p.value }))}
           className="h-8 shrink-0 text-xs sm:text-sm"
         />
         {children}

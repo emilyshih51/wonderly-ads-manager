@@ -161,7 +161,7 @@ export default function LaunchPage() {
   /* ---------- Sync query error to local fetchError state ---------- */
   useEffect(() => {
     if (adSetsError) setFetchError(t('failedToLoadData'));
-  }, [adSetsError]);
+  }, [adSetsError, t]);
 
   /* ---------- Build source options (filtered by search) ---------- */
   const sourceOptions = useMemo(() => {

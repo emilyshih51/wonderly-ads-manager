@@ -738,56 +738,56 @@ function buildRichContext(data: ChatData): string {
 const SUGGESTED_PROMPTS = [
   {
     icon: AlertTriangle,
-    label: 'Why are conversions low?',
+    labelKey: 'promptLowConversions',
     color: 'red',
     prompt:
       'Why are my conversions low today compared to yesterday? Break it down by campaign and tell me exactly what changed.',
   },
   {
     icon: TrendingDown,
-    label: 'Lead quality drop',
+    labelKey: 'promptLeadQuality',
     color: 'orange',
     prompt:
       'Are we getting fewer or worse leads today vs yesterday? Which ad sets are underperforming and why?',
   },
   {
     icon: TrendingUp,
-    label: 'Performance overview',
+    labelKey: 'promptOverview',
     color: 'blue',
     prompt:
       'Give me a comprehensive performance overview — today vs yesterday, including key metrics changes and what stands out.',
   },
   {
     icon: DollarSign,
-    label: 'Cost analysis',
+    labelKey: 'promptCostAnalysis',
     color: 'green',
     prompt:
       'Analyze my cost efficiency. Where am I wasting budget? Which campaigns have the best and worst cost per result?',
   },
   {
     icon: Target,
-    label: 'What to scale',
+    labelKey: 'promptScale',
     color: 'purple',
     prompt:
       'Based on the hourly data today vs yesterday, which campaigns/ad sets should I scale up and which should I pause? Be specific.',
   },
   {
     icon: Lightbulb,
-    label: 'Optimization plan',
+    labelKey: 'promptOptimization',
     color: 'indigo',
     prompt:
       'Give me a prioritized list of 5 specific actions I should take right now to improve my ad performance, based on the data.',
   },
   {
     icon: BarChart3,
-    label: 'Audience insights',
+    labelKey: 'promptAudience',
     color: 'teal',
     prompt:
       'Analyze my audience breakdown — which age groups, genders, devices, and platforms are performing best? Any surprises?',
   },
   {
     icon: Zap,
-    label: 'Quick diagnosis',
+    labelKey: 'promptDiagnosis',
     color: 'yellow',
     prompt:
       'Run a quick health check on my ad account. Flag anything unusual — rising costs, dropping CTR, spending without results, etc.',
@@ -830,15 +830,15 @@ function parseActionsFromReply(raw: string): { content: string; actions: ParsedA
   return { content, actions };
 }
 
-function actionLabel(a: ActionPayload): string {
+function actionLabel(a: ActionPayload, t: (key: string) => string): string {
   const labels: Record<string, string> = {
-    pause_campaign: 'Pause Campaign',
-    resume_campaign: 'Resume Campaign',
-    pause_ad_set: 'Pause Ad Set',
-    resume_ad_set: 'Resume Ad Set',
-    pause_ad: 'Pause Ad',
-    resume_ad: 'Resume Ad',
-    adjust_budget: 'Adjust Budget',
+    pause_campaign: t('actionPauseCampaign'),
+    resume_campaign: t('actionResumeCampaign'),
+    pause_ad_set: t('actionPauseAdSet'),
+    resume_ad_set: t('actionResumeAdSet'),
+    pause_ad: t('actionPauseAd'),
+    resume_ad: t('actionResumeAd'),
+    adjust_budget: t('actionAdjustBudget'),
   };
 
   return labels[a.type] || a.type;
@@ -861,10 +861,10 @@ function actionColor(type: string): { border: string; bg: string } {
 }
 
 const FOLLOW_UP_PROMPTS = [
-  'What should I do about this?',
-  'Break it down by ad set',
-  'Which ads should I pause?',
-  'Compare to last 7 days',
+  { labelKey: 'followUpAdvice', prompt: 'What should I do about this?' },
+  { labelKey: 'followUpBreakdown', prompt: 'Break it down by ad set' },
+  { labelKey: 'followUpPause', prompt: 'Which ads should I pause?' },
+  { labelKey: 'followUpCompare', prompt: 'Compare to last 7 days' },
 ];
 
 /* ───── main component ───── */
@@ -1239,7 +1239,7 @@ export default function ChatPage() {
   const renderActionCard = (action: ParsedAction, msgId: string, idx: number) => {
     const Icon = actionIcon(action.payload.type);
     const colors = actionColor(action.payload.type);
-    const label = actionLabel(action.payload);
+    const label = actionLabel(action.payload, t);
     const name = action.payload.name || action.payload.id;
     const budgetStr = action.payload.budget ? ` → $${action.payload.budget.toFixed(2)}/day` : '';
 
@@ -1273,7 +1273,7 @@ export default function ChatPage() {
         {action.status === 'pending' && (
           <div className="flex flex-shrink-0 gap-1.5">
             <Button size="sm" onClick={() => executeAction(msgId, idx)}>
-              <Check className="mr-1 h-3 w-3" /> Approve
+              <Check className="mr-1 h-3 w-3" /> {t('approve')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => dismissAction(msgId, idx)}>
               <X className="h-3 w-3" />
@@ -1321,7 +1321,7 @@ export default function ChatPage() {
         {messages.length > 0 && (
           <Button variant="outline" size="sm" onClick={resetChat} className="shrink-0">
             <MessageSquarePlus className="mr-1.5 h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New Chat</span>
+            <span className="hidden sm:inline">{t('newChat')}</span>
           </Button>
         )}
       </div>
@@ -1331,20 +1331,19 @@ export default function ChatPage() {
           /* Empty state */
           <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-8 md:py-12">
             <div className="mb-10 text-center">
-              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 md:h-16 md:w-16">
+              <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500 to-purple-600 md:h-16 md:w-16">
                 <Sparkles className="h-7 w-7 text-white md:h-8 md:w-8" />
               </div>
               <h2 className="mb-2 text-xl font-bold text-[var(--color-foreground)] md:text-2xl">
-                Ask anything about your ads
+                {t('askAnything')}
               </h2>
               <p className="mx-auto max-w-lg text-sm text-[var(--color-muted-foreground)] md:text-base">
-                Powered by Claude with access to your live Meta Ads data — today vs yesterday,
-                hourly data, and audience breakdowns.
+                {t('poweredBy')}
               </p>
 
               {dataLoading && (
                 <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading account data...
+                  <Loader2 className="h-4 w-4 animate-spin" /> {t('loadingAccountData')}
                 </div>
               )}
               {dataError && (
@@ -1354,19 +1353,23 @@ export default function ChatPage() {
               )}
               {!dataLoading && dataStats && (
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-[var(--color-muted-foreground)]">
-                  <span>{dataStats.campaigns} campaigns</span>
+                  <span>{t('nCampaigns', { count: dataStats.campaigns })}</span>
                   <span className="hidden sm:inline">·</span>
-                  <span>{dataStats.adSets} ad sets</span>
+                  <span>{t('nAdSets', { count: dataStats.adSets })}</span>
                   <span className="hidden sm:inline">·</span>
-                  <span>{dataStats.ads} ads</span>
+                  <span>{t('nAds', { count: dataStats.ads })}</span>
                   {dataStats.hasYesterday && (
-                    <span className="text-green-600 dark:text-green-400">✓ yesterday</span>
+                    <span className="text-green-600 dark:text-green-400">
+                      ✓ {t('yesterdayCheck')}
+                    </span>
                   )}
                   {dataStats.hasHourly && (
-                    <span className="text-green-600 dark:text-green-400">✓ hourly</span>
+                    <span className="text-green-600 dark:text-green-400">✓ {t('hourlyCheck')}</span>
                   )}
                   {dataStats.hasBreakdowns && (
-                    <span className="text-green-600 dark:text-green-400">✓ breakdowns</span>
+                    <span className="text-green-600 dark:text-green-400">
+                      ✓ {t('breakdownsCheck')}
+                    </span>
                   )}
                 </div>
               )}
@@ -1392,7 +1395,7 @@ export default function ChatPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--color-foreground)]">
-                        {prompt.label}
+                        {t(prompt.labelKey)}
                       </p>
                       <p className="mt-0.5 line-clamp-2 text-xs text-[var(--color-muted-foreground)]">
                         {prompt.prompt}
@@ -1410,7 +1413,7 @@ export default function ChatPage() {
               <div key={msg.id}>
                 <div className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                   {msg.role === 'assistant' && (
-                    <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 sm:h-8 sm:w-8">
+                    <div className="mt-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-blue-500 to-purple-600 sm:h-8 sm:w-8">
                       <Bot className="h-3.5 w-3.5 text-white sm:h-4 sm:w-4" />
                     </div>
                   )}
@@ -1426,7 +1429,7 @@ export default function ChatPage() {
                       <button
                         onClick={() => copyMessage(msg.id, msg.content)}
                         className="absolute -top-2 -right-2 rounded-md border border-[var(--color-border)] bg-[var(--color-card)] p-1 opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
-                        aria-label="Copy message"
+                        aria-label={t('copyMessage')}
                       >
                         {copiedId === msg.id ? (
                           <Check className="h-3 w-3 text-green-600" />
@@ -1458,7 +1461,7 @@ export default function ChatPage() {
                         {!msg.isLoading && msg.actions && msg.actions.length > 0 && (
                           <div className="mt-4 space-y-2 border-t border-[var(--color-border)] pt-3">
                             <p className="flex items-center gap-1 text-xs font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                              <Zap className="h-3 w-3" /> Suggested Actions
+                              <Zap className="h-3 w-3" /> {t('suggestedActions')}
                             </p>
                             {msg.actions.map((action, idx) =>
                               renderActionCard(action, msg.id, idx)
@@ -1488,13 +1491,13 @@ export default function ChatPage() {
             {/* Follow-up suggestions */}
             {showFollowUps && (
               <div className="ml-10 flex flex-wrap gap-1.5 sm:ml-11">
-                {FOLLOW_UP_PROMPTS.map((prompt) => (
+                {FOLLOW_UP_PROMPTS.map((p) => (
                   <button
-                    key={prompt}
-                    onClick={() => sendMessage(prompt)}
+                    key={p.labelKey}
+                    onClick={() => sendMessage(p.prompt)}
                     className="rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-xs text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                   >
-                    {prompt}
+                    {t(p.labelKey)}
                   </button>
                 ))}
               </div>
@@ -1514,7 +1517,7 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your ad performance..."
+              placeholder={t('inputPlaceholder')}
               className="max-h-[120px] min-h-[44px] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] py-3 pr-12 pl-12 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none sm:pr-12 sm:pl-12"
               rows={1}
               disabled={isLoading}
@@ -1522,7 +1525,7 @@ export default function ChatPage() {
             <button
               onClick={fetchData}
               disabled={dataLoading}
-              title="Refresh data"
+              title={t('refreshData')}
               className="absolute top-3 left-3 rounded-md p-1 text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-foreground)] disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${dataLoading ? 'animate-spin' : ''}`} />

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 
 const badgeVariants = cva(
@@ -26,6 +27,7 @@ function Badge({ className, variant, ...props }: BadgeProps) {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const tCommon = useTranslations('common');
   const variant =
     status === 'ACTIVE'
       ? 'active'
@@ -35,7 +37,13 @@ export function StatusBadge({ status }: { status: string }) {
           ? 'deleted'
           : 'secondary';
 
-  return <Badge variant={variant}>{status}</Badge>;
+  const STATUS_LABELS: Record<string, string> = {
+    ACTIVE: tCommon('statusActive'),
+    PAUSED: tCommon('statusPaused'),
+    DELETED: tCommon('statusDeleted'),
+  };
+
+  return <Badge variant={variant}>{STATUS_LABELS[status] || status}</Badge>;
 }
 
 export { Badge, badgeVariants };

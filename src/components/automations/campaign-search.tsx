@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Search, X, Loader2, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useTranslations } from 'next-intl';
 
 interface Campaign {
   id: string;
@@ -18,6 +20,7 @@ interface CampaignSearchProps {
 }
 
 export function CampaignSearch({ value, displayName, onChange, placeholder }: CampaignSearchProps) {
+  const t = useTranslations('automations');
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Campaign[]>([]);
@@ -72,19 +75,21 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
           value={open ? query : displayName || query}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={handleFocus}
-          placeholder={placeholder || 'Search campaigns...'}
+          placeholder={placeholder || t('searchCampaigns')}
           className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] pr-8 pl-9 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
         {value && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => {
               onChange('', '');
               setQuery('');
             }}
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 hover:bg-[var(--color-muted)]"
+            className="absolute top-1/2 right-2.5 h-auto w-auto -translate-y-1/2 p-0.5"
           >
             <X className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
-          </button>
+          </Button>
         )}
       </div>
       {open && (
@@ -95,29 +100,31 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
             </div>
           ) : results.length === 0 ? (
             <div className="px-4 py-3 text-sm text-[var(--color-muted-foreground)]">
-              No campaigns found
+              {t('noCampaignsFound')}
             </div>
           ) : (
             results.map((c) => (
-              <button
+              <Button
                 key={c.id}
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   onChange(c.id, c.name);
                   setQuery(c.name);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between border-b border-[var(--color-border)] px-4 py-2.5 text-left last:border-0 hover:bg-[var(--color-muted)] ${
+                className={`h-auto w-full justify-between border-b border-[var(--color-border)] px-4 py-2.5 last:border-0 ${
                   c.id === value ? 'bg-blue-500/10' : ''
                 }`}
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 text-left">
                   <p className="truncate text-sm text-[var(--color-foreground)]">{c.name}</p>
                   <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
                     {c.objective} · {c.status}
                   </p>
                 </div>
                 {c.id === value && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
-              </button>
+              </Button>
             ))
           )}
         </div>

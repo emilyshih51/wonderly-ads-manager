@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   CheckCircle2,
@@ -35,32 +36,32 @@ const LOCALE_NAMES: Record<Locale, string> = {
   pt: 'Português',
 };
 
-const FONT_META: Record<FontChoice, { name: string; desc: string; preview: string }> = {
+const FONT_META: Record<FontChoice, { name: string; descKey: string; preview: string }> = {
   'noto-sans': {
     name: 'Noto Sans',
-    desc: 'Recommended — supports Latin + CJK',
+    descKey: 'fontRecommended',
     preview: 'The quick brown fox',
   },
-  inter: { name: 'Inter', desc: 'Clean geometric — Latin only', preview: 'The quick brown fox' },
+  inter: { name: 'Inter', descKey: 'fontInter', preview: 'The quick brown fox' },
   'jetbrains-mono': {
     name: 'JetBrains Mono',
-    desc: 'Monospace — for data-heavy views',
+    descKey: 'fontJetBrainsMono',
     preview: 'The quick brown fox',
   },
-  geist: { name: 'Geist', desc: 'Modern geometric — by Vercel', preview: 'The quick brown fox' },
+  geist: { name: 'Geist', descKey: 'fontGeist', preview: 'The quick brown fox' },
   'geist-mono': {
     name: 'Geist Mono',
-    desc: 'Monospace companion to Geist',
+    descKey: 'fontGeistMono',
     preview: 'The quick brown fox',
   },
   'dm-sans': {
     name: 'DM Sans',
-    desc: 'Friendly geometric sans-serif',
+    descKey: 'fontDmSans',
     preview: 'The quick brown fox',
   },
   'space-grotesk': {
     name: 'Space Grotesk',
-    desc: 'Proportional — techy feel',
+    descKey: 'fontSpaceGrotesk',
     preview: 'The quick brown fox',
   },
 };
@@ -162,15 +163,13 @@ export function SettingsClient({
 
       <div className="mt-8 space-y-6">
         {/* ── Appearance ── */}
-        <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
-          <div className="border-b border-[var(--color-border)] px-5 py-4">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-[var(--color-border)] px-5 py-4">
             <div className="flex items-center gap-2.5">
               <Palette className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-              <h2 className="text-sm font-medium text-[var(--color-foreground)]">
-                {t('appearance')}
-              </h2>
+              <CardTitle className="text-sm font-medium">{t('appearance')}</CardTitle>
             </div>
-          </div>
+          </CardHeader>
 
           {/* Language */}
           <div className="border-b border-[var(--color-border)] px-5 py-4">
@@ -227,7 +226,7 @@ export function SettingsClient({
                       {FONT_META[font].name}
                     </p>
                     <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                      {FONT_META[font].desc}
+                      {t(FONT_META[font].descKey)}
                     </p>
                     <p
                       className="mt-1 text-xs text-[var(--color-muted-foreground)]"
@@ -243,13 +242,13 @@ export function SettingsClient({
               ))}
             </div>
           </div>
-        </section>
+        </Card>
 
         {/* ── Integrations ── */}
-        <section className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
-          <div className="border-b border-[var(--color-border)] px-5 py-4">
-            <h2 className="text-sm font-medium text-[var(--color-foreground)]">Integrations</h2>
-          </div>
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-[var(--color-border)] px-5 py-4">
+            <CardTitle className="text-sm font-medium">{t('integrations')}</CardTitle>
+          </CardHeader>
 
           {/* Slack */}
           <div className="border-b border-[var(--color-border)] px-5 py-4">
@@ -286,7 +285,7 @@ export function SettingsClient({
                   <div className="space-y-4">
                     <ol className="list-inside list-decimal space-y-1.5 text-xs text-[var(--color-muted-foreground)]">
                       <li>
-                        Create a Slack app at{' '}
+                        {t('slackSetup1')}{' '}
                         <a
                           href="https://api.slack.com/apps"
                           target="_blank"
@@ -296,18 +295,18 @@ export function SettingsClient({
                           api.slack.com/apps
                         </a>
                       </li>
-                      <li>Enable Socket Mode and save the app-level token</li>
-                      <li>Enable Event Subscriptions with the URL below</li>
+                      <li>{t('slackSetup2')}</li>
+                      <li>{t('slackSetup3')}</li>
                       <li>
-                        Subscribe to{' '}
+                        {t('slackSetup4subscribe')}{' '}
                         <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono text-[10px]">
                           app_mention
                         </code>{' '}
-                        events
+                        {t('slackSetup4events')}
                       </li>
-                      <li>Enable Interactivity with the URL below</li>
+                      <li>{t('slackSetup5')}</li>
                       <li>
-                        Add scopes:{' '}
+                        {t('slackSetup6scopes')}{' '}
                         <code className="rounded bg-[var(--color-muted)] px-1 py-0.5 font-mono text-[10px]">
                           chat:write
                         </code>{' '}
@@ -315,7 +314,7 @@ export function SettingsClient({
                           app_mentions:read
                         </code>
                       </li>
-                      <li>Install to workspace and set env vars</li>
+                      <li>{t('slackSetup7')}</li>
                     </ol>
 
                     <div className="space-y-2">
@@ -360,15 +359,15 @@ export function SettingsClient({
               {t('metaAccountInfo')}
             </p>
           </div>
-        </section>
+        </Card>
 
         {/* ── Danger zone ── */}
-        <section className="overflow-hidden rounded-xl border border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20">
-          <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="overflow-hidden border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20">
+          <CardContent className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-red-700 dark:text-red-400">{t('signOut')}</p>
               <p className="mt-0.5 text-xs text-red-600/60 dark:text-red-400/50">
-                Disconnect your Meta account and end this session.
+                {t('signOutDesc')}
               </p>
             </div>
             <form action="/api/auth/logout" method="POST" className="shrink-0">
@@ -377,8 +376,8 @@ export function SettingsClient({
                 {t('signOut')}
               </Button>
             </form>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

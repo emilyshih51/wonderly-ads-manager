@@ -3,8 +3,10 @@
 import * as React from 'react';
 import NextImage from 'next/image';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { useTranslations } from 'next-intl';
 import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { getResultCount } from '@/lib/automation-utils';
 import { ChevronLeft, ChevronRight, Image as ImageIcon, TrendingUp, X } from 'lucide-react';
@@ -56,6 +58,8 @@ const SCROLL_AMOUNT = CARD_WIDTH + 16; // card width + gap
  * @param ads - Ranked ads to display
  */
 export function AdsGallery({ ads }: AdsGalleryProps) {
+  const tMetrics = useTranslations('metrics');
+  const tCommon = useTranslations('common');
   const [selected, setSelected] = React.useState<RankedAd | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
@@ -92,24 +96,28 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
     <>
       <div className="relative">
         {/* Left arrow */}
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => scroll('left')}
           disabled={!canScrollLeft}
-          className="absolute top-1/2 -left-3 z-10 hidden -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card)] p-2 shadow-lg transition-all hover:scale-110 hover:bg-[var(--color-muted)] disabled:pointer-events-none disabled:opacity-0 sm:flex"
-          aria-label="Scroll left"
+          className="absolute top-1/2 -left-3 z-10 hidden -translate-y-1/2 rounded-full p-2 shadow-lg transition-all hover:scale-110 disabled:opacity-0 sm:flex"
+          aria-label={tCommon('scrollLeft')}
         >
-          <ChevronLeft className="h-5 w-5 text-[var(--color-foreground)]" />
-        </button>
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
 
         {/* Right arrow */}
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => scroll('right')}
           disabled={!canScrollRight}
-          className="absolute top-1/2 -right-3 z-10 hidden -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-card)] p-2 shadow-lg transition-all hover:scale-110 hover:bg-[var(--color-muted)] disabled:pointer-events-none disabled:opacity-0 sm:flex"
-          aria-label="Scroll right"
+          className="absolute top-1/2 -right-3 z-10 hidden -translate-y-1/2 rounded-full p-2 shadow-lg transition-all hover:scale-110 disabled:opacity-0 sm:flex"
+          aria-label={tCommon('scrollRight')}
         >
-          <ChevronRight className="h-5 w-5 text-[var(--color-foreground)]" />
-        </button>
+          <ChevronRight className="h-5 w-5" />
+        </Button>
 
         {/* Scroll container */}
         <div
@@ -173,23 +181,26 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
                     <div className="mb-1.5 flex w-fit items-center gap-1 self-start rounded-full bg-green-100 px-2 py-0.5 dark:bg-green-900/30">
                       <TrendingUp className="h-3 w-3 text-green-700 dark:text-green-400" />
                       <span className="text-xs font-bold text-green-700 dark:text-green-400">
-                        {formatNumber(ad.results)} results
+                        {formatNumber(ad.results)} {tMetrics('results').toLowerCase()}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                      <CardMetric label="Spend" value={spend > 0 ? formatCurrency(spend) : '—'} />
                       <CardMetric
-                        label="Cost / Result"
+                        label={tMetrics('spend')}
+                        value={spend > 0 ? formatCurrency(spend) : '—'}
+                      />
+                      <CardMetric
+                        label={tMetrics('costPerResult')}
                         value={ad.cpa != null ? formatCurrency(ad.cpa) : '—'}
                       />
                       <CardMetric
-                        label="Impressions"
+                        label={tMetrics('impressions')}
                         value={
                           ad.insights?.impressions ? formatNumber(ad.insights.impressions) : '—'
                         }
                       />
                       <CardMetric
-                        label="CTR"
+                        label={tMetrics('ctr')}
                         value={ad.insights?.ctr ? formatPercent(ad.insights.ctr) : '—'}
                       />
                     </div>
@@ -210,7 +221,7 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
               />
             </div>
             <span className="shrink-0 text-xs text-[var(--color-muted-foreground)] tabular-nums">
-              {ads.length} {ads.length === 1 ? 'ad' : 'ads'}
+              {ads.length} {ads.length === 1 ? tCommon('ad') : tCommon('ads')}
             </span>
           </div>
         )}
@@ -264,6 +275,7 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
 
 /** Full ad detail rendered inside the modal — two-column on desktop, stacked on mobile. */
 function AdDetail({ ad }: { ad: RankedAd }) {
+  const tMetrics = useTranslations('metrics');
   const imgSrc = ad.creative?.image_url || ad.creative?.thumbnail_url;
   const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
   const results = getResultCount(
@@ -333,7 +345,7 @@ function AdDetail({ ad }: { ad: RankedAd }) {
         <div className="grid grid-cols-2 gap-3">
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xs text-[var(--color-muted-foreground)]">Results</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{tMetrics('results')}</p>
               <p className="text-lg font-bold text-green-600 tabular-nums dark:text-green-400">
                 {formatNumber(results)}
               </p>
@@ -341,7 +353,9 @@ function AdDetail({ ad }: { ad: RankedAd }) {
           </Card>
           <Card>
             <CardContent className="p-3 text-center">
-              <p className="text-xs text-[var(--color-muted-foreground)]">Cost / Result</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                {tMetrics('costPerResult')}
+              </p>
               <p className="text-lg font-bold text-[var(--color-foreground)] tabular-nums">
                 {results > 0 && spend > 0 ? formatCurrency(spend / results) : '—'}
               </p>
@@ -352,21 +366,21 @@ function AdDetail({ ad }: { ad: RankedAd }) {
         {/* All performance metrics */}
         <Card>
           <CardContent className="divide-y divide-[var(--color-border)] p-4">
-            <MetricRow label="Spend" value={spend > 0 ? formatCurrency(spend) : '—'} />
+            <MetricRow label={tMetrics('spend')} value={spend > 0 ? formatCurrency(spend) : '—'} />
             <MetricRow
-              label="Impressions"
+              label={tMetrics('impressions')}
               value={ad.insights?.impressions ? formatNumber(ad.insights.impressions) : '—'}
             />
             <MetricRow
-              label="Clicks"
+              label={tMetrics('clicks')}
               value={ad.insights?.clicks ? formatNumber(ad.insights.clicks) : '—'}
             />
             <MetricRow
-              label="CTR"
+              label={tMetrics('ctr')}
               value={ad.insights?.ctr ? formatPercent(ad.insights.ctr) : '—'}
             />
             <MetricRow
-              label="CPC"
+              label={tMetrics('cpc')}
               value={ad.insights?.cpc ? formatCurrency(ad.insights.cpc) : '—'}
             />
           </CardContent>

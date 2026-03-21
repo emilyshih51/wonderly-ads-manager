@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
+import { Button } from '@/components/ui/button';
 import { SlidePanel } from '@/components/data/slide-panel';
 import { AreaChart } from '@/components/data/chart';
 import { formatCurrency, formatPercent, formatNumber, DATE_PRESETS, cn } from '@/lib/utils';
@@ -154,6 +156,7 @@ export interface StatDetailPanelProps {
  * @param onClose - Close handler
  */
 export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetailPanelProps) {
+  const tCommon = useTranslations('common');
   const config = METRIC_CONFIG[metric];
   const globalDatePreset = useAppStore((s) => s.datePreset);
   const [localDatePreset, setLocalDatePreset] = useState<string | null>(null);
@@ -264,10 +267,11 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
 
   const filterLabel =
     selectedCampaignIds.size === 0
-      ? 'All campaigns'
+      ? tCommon('allCampaigns')
       : selectedCampaignIds.size === 1
-        ? (activeCampaigns.find((c) => selectedCampaignIds.has(c.id))?.name ?? '1 campaign')
-        : `${selectedCampaignIds.size} campaigns`;
+        ? (activeCampaigns.find((c) => selectedCampaignIds.has(c.id))?.name ??
+          tCommon('oneCampaign'))
+        : tCommon('nCampaigns', { count: selectedCampaignIds.size });
 
   const dateLabel = DATE_PRESETS.find((p) => p.value === datePreset)?.label ?? datePreset;
 
@@ -284,20 +288,22 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5">
             {DATE_PRESETS.map((preset) => (
-              <button
+              <Button
                 key={preset.value}
+                variant="ghost"
+                size="sm"
                 onClick={() =>
                   setLocalDatePreset(preset.value === globalDatePreset ? null : preset.value)
                 }
                 className={cn(
-                  'shrink-0 rounded-md px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap transition-colors',
+                  'h-auto shrink-0 px-2.5 py-1.5 text-[11px] whitespace-nowrap',
                   preset.value === datePreset
-                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                    : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]'
+                    : 'text-[var(--color-muted-foreground)]'
                 )}
               >
                 {preset.label}
-              </button>
+              </Button>
             ))}
           </div>
           {isFetching && (
@@ -308,13 +314,15 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
         {/* Campaign filter */}
         {hasCampaignInsights && (
           <div className="relative">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setCampaignFilterOpen((v) => !v)}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-xs transition-colors',
+                'w-full justify-start gap-2 px-3 py-2',
                 selectedCampaignIds.size > 0
                   ? 'border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5'
-                  : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
+                  : ''
               )}
             >
               <Filter className="h-3 w-3 shrink-0 text-[var(--color-muted-foreground)]" />
@@ -330,43 +338,45 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
                   campaignFilterOpen && 'rotate-180'
                 )}
               />
-            </button>
+            </Button>
             {campaignFilterOpen && (
               <div className="absolute z-10 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] py-1 shadow-lg">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setSelectedCampaignIds(new Set());
                     setCampaignFilterOpen(false);
                   }}
                   className={cn(
-                    'flex w-full items-center justify-between px-3 py-2 text-xs transition-colors',
+                    'w-full justify-between px-3',
                     selectedCampaignIds.size === 0
                       ? 'bg-[var(--color-primary)]/5 font-medium text-[var(--color-primary)]'
-                      : 'text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                      : ''
                   )}
                 >
-                  <span>All campaigns</span>
+                  <span>{tCommon('allCampaigns')}</span>
                   {selectedCampaignIds.size === 0 && (
                     <Check className="h-3.5 w-3.5 text-[var(--color-primary)]" />
                   )}
-                </button>
+                </Button>
                 <div className="mx-3 my-1 border-t border-[var(--color-border)]" />
                 {activeCampaigns.map((c) => (
-                  <button
+                  <Button
                     key={c.id}
+                    variant="ghost"
+                    size="sm"
                     onClick={() => toggleCampaign(c.id)}
                     className={cn(
-                      'flex w-full items-center justify-between px-3 py-2 text-xs transition-colors',
-                      selectedCampaignIds.has(c.id)
-                        ? 'bg-[var(--color-primary)]/5 text-[var(--color-foreground)]'
-                        : 'text-[var(--color-foreground)] hover:bg-[var(--color-accent)]'
+                      'w-full justify-between px-3',
+                      selectedCampaignIds.has(c.id) ? 'bg-[var(--color-primary)]/5' : ''
                     )}
                   >
                     <span className="truncate pr-2">{c.name}</span>
                     {selectedCampaignIds.has(c.id) && (
                       <Check className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]" />
                     )}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -387,7 +397,8 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           />
           <div className="mb-3">
             <p className="mb-1 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-              Total {config.label}
+              {tCommon('total') + ' '}
+              {config.label}
             </p>
             <p className="text-3xl font-bold tracking-tight text-[var(--color-foreground)]">
               {formatMetric(total, config.format)}
@@ -396,23 +407,24 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           {hasCampaignInsights && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--color-muted-foreground)]">
               <span>
-                {filteredCampaigns.length} campaign{filteredCampaigns.length !== 1 ? 's' : ''}
+                {filteredCampaigns.length}{' '}
+                {filteredCampaigns.length !== 1 ? tCommon('campaigns') : tCommon('campaign')}
               </span>
               {activeCount > 0 && (
                 <span className="flex items-center gap-1">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  {activeCount} active
+                  {activeCount} {tCommon('active')}
                 </span>
               )}
               {pausedCount > 0 && (
                 <span className="flex items-center gap-1">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  {pausedCount} paused
+                  {pausedCount} {tCommon('paused')}
                 </span>
               )}
               {zeroCount > 0 && (
                 <span>
-                  {zeroCount} with no {config.label.toLowerCase()}
+                  {zeroCount} {tCommon('withNo')} {config.label.toLowerCase()}
                 </span>
               )}
             </div>
@@ -424,7 +436,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           <div className="mb-6 grid grid-cols-3 gap-2">
             <div className="rounded-lg bg-[var(--color-muted)] p-3">
               <p className="text-[10px] font-medium tracking-wide text-emerald-500 uppercase">
-                Best
+                {tCommon('best')}
               </p>
               <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-foreground)]">
                 {allRows[0].name}
@@ -435,7 +447,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
             </div>
             <div className="rounded-lg bg-[var(--color-muted)] p-3">
               <p className="text-[10px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                Avg
+                {tCommon('avg')}
               </p>
               <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">&nbsp;</p>
               <p className="mt-0.5 text-sm font-bold text-[var(--color-foreground)] tabular-nums">
@@ -443,7 +455,9 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
               </p>
             </div>
             <div className="rounded-lg bg-[var(--color-muted)] p-3">
-              <p className="text-[10px] font-medium tracking-wide text-red-400 uppercase">Worst</p>
+              <p className="text-[10px] font-medium tracking-wide text-red-400 uppercase">
+                {tCommon('worst')}
+              </p>
               <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-foreground)]">
                 {allRows[allRows.length - 1].name}
               </p>
@@ -458,7 +472,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
         {timeSeries.length > 1 && (
           <div className="mb-6">
             <p className="mb-3 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-              Trend over time
+              {tCommon('trendOverTime')}
             </p>
             <AreaChart
               data={timeSeries.map((row) => ({
@@ -477,7 +491,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
         {hasCampaignInsights && chartData.length > 1 && (
           <div className="mb-6">
             <p className="mb-3 text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-              Distribution by campaign
+              {tCommon('distributionByCampaign')}
             </p>
             <AreaChart
               data={chartData}
@@ -494,39 +508,43 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
           <div>
             <div className="mb-3 flex items-baseline justify-between">
               <p className="text-[11px] font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
-                Campaign breakdown
+                {tCommon('campaignBreakdown')}
               </p>
               {/* Count selector */}
               <div className="flex items-center rounded-md border border-[var(--color-border)]">
                 {[5, 10, 20]
                   .filter((n) => n <= allRows.length || n === 5)
                   .map((n, i, arr) => (
-                    <button
+                    <Button
                       key={n}
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setShowCount(n)}
                       className={cn(
-                        'px-2 py-1 text-[11px] font-medium transition-colors',
+                        'h-auto rounded-none px-2 py-1 text-[11px]',
                         i < arr.length - 1 && 'border-r border-[var(--color-border)]',
                         showCount === n
-                          ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                          : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                          ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]'
+                          : 'text-[var(--color-muted-foreground)]'
                       )}
                     >
                       {n}
-                    </button>
+                    </Button>
                   ))}
                 {allRows.length > 20 && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setShowCount(Infinity)}
                     className={cn(
-                      'px-2 py-1 text-[11px] font-medium transition-colors',
+                      'h-auto rounded-none px-2 py-1 text-[11px]',
                       showCount > 20
-                        ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                        : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]'
+                        ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]'
+                        : 'text-[var(--color-muted-foreground)]'
                     )}
                   >
-                    All
-                  </button>
+                    {tCommon('all')}
+                  </Button>
                 )}
               </div>
             </div>
@@ -590,7 +608,7 @@ export function StatDetailPanel({ metric, campaigns, open, onClose }: StatDetail
               })}
               {rows.length === 0 && (
                 <p className="py-8 text-center text-sm text-[var(--color-muted-foreground)]">
-                  No data available
+                  {tCommon('noDataAvailable')}
                 </p>
               )}
             </div>

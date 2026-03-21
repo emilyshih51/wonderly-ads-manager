@@ -568,7 +568,7 @@ export function Sidebar() {
             >
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
-                {!collapsed && <span>{LOCALE_SHORT[currentLocale]}</span>}
+                {!collapsed && <span suppressHydrationWarning>{LOCALE_SHORT[currentLocale]}</span>}
               </div>
               {!collapsed && (
                 <ChevronDown

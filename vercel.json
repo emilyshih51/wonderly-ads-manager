@@ -5,8 +5,16 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/slack/digest?type=daily",
+      "schedule": "0 9 * * 1-5"
+    },
+    {
       "path": "/api/slack/digest?type=weekly",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/slack/digest?type=monthly",
+      "schedule": "0 9 1 * *"
     }
   ]
 }

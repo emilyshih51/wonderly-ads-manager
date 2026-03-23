@@ -120,7 +120,7 @@ function Select({
             className
           )}
         >
-          <span className={cn(!selected && 'text-[var(--color-muted-foreground)]')}>
+          <span className={cn('text-left', !selected && 'text-[var(--color-muted-foreground)]')}>
             {selected ? selected.label : placeholder}
           </span>
           <ChevronDown className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />

@@ -19,7 +19,12 @@ const buttonVariants = cva(
           'bg-[var(--color-accent)] text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/80',
         ghost: 'hover:bg-[var(--color-accent)] text-[var(--color-foreground)]',
         link: 'text-[var(--color-primary)] underline-offset-4 hover:underline',
-        success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm',
+        success:
+          'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm dark:bg-emerald-500 dark:hover:bg-emerald-600',
+        'outline-success':
+          'border border-emerald-300/60 bg-transparent text-emerald-600 hover:border-emerald-400/80 hover:bg-emerald-500/10 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-500/10',
+        'outline-danger':
+          'border border-red-300/60 bg-transparent text-red-500 hover:border-red-400/80 hover:bg-red-500/10 dark:border-red-500/40 dark:text-red-400 dark:hover:border-red-500/60 dark:hover:bg-red-500/10',
       },
       size: {
         default: 'h-9 px-4 py-2',

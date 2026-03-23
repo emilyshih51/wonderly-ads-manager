@@ -826,16 +826,14 @@ export default function AutomationsPage() {
                               </div>
                             </div>
                             <div className="mt-auto pt-3">
-                              <button
+                              <Button
+                                variant={isProtect ? 'outline-danger' : 'outline-success'}
+                                size="sm"
+                                className="w-full"
                                 onClick={() => applyTemplate(tmpl)}
-                                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border bg-transparent px-3 py-2 text-xs font-medium transition-colors ${
-                                  isProtect
-                                    ? 'border-red-300/60 text-red-500 hover:border-red-400/80 hover:bg-red-500/10 dark:border-red-500/40 dark:text-red-400 dark:hover:border-red-500/60 dark:hover:bg-red-500/10'
-                                    : 'border-emerald-300/60 text-emerald-600 hover:border-emerald-400/80 hover:bg-emerald-500/10 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-500/10'
-                                }`}
                               >
                                 {t('useTemplate')} <ArrowRight className="h-3 w-3" />
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         ))}

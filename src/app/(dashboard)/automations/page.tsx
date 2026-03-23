@@ -812,8 +812,8 @@ export default function AutomationsPage() {
                             key={tmpl.id}
                             className="group flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm transition-all hover:border-[var(--color-primary)]/40 hover:shadow-md"
                           >
-                            <div className="mb-3 flex items-start gap-4">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-muted)] text-lg">
+                            <div className="mb-3 flex items-start gap-5">
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-muted)] text-xl">
                                 {tmpl.icon}
                               </span>
                               <div className="min-w-0">

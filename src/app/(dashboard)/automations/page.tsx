@@ -1415,7 +1415,7 @@ export default function AutomationsPage() {
                                     slack_message: (config.slack_message || '') + v.var,
                                   })
                                 }
-                                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                                className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-accent)]"
                               >
                                 <Plus className="h-2.5 w-2.5" />
                                 {v.label}

@@ -15,6 +15,16 @@ interface ActionNodeProps {
 export function ActionNode({ data, selected }: ActionNodeProps) {
   const t = useTranslations('automations');
 
+  let actionTypeLabel: string | undefined;
+  if (data.config?.action_type === 'adjust_budget') {
+    const dir = data.config.adjust_direction as string | undefined;
+    const amtType = data.config.adjust_amount_type as string | undefined;
+    const amt = data.config.adjust_amount as number | undefined;
+    const dirLabel = dir === 'increase' ? t('increaseBudgetBy') : t('decreaseBudgetBy');
+    const amtLabel = amt !== undefined ? (amtType === 'percent' ? `${amt}%` : `$${amt}`) : '';
+    actionTypeLabel = `${dirLabel}${amtLabel ? ' ' + amtLabel : ''}`;
+  }
+
   return (
     <div
       className={`min-w-[220px] rounded-xl border-2 bg-[var(--color-card)] px-4 py-3 shadow-sm ${selected ? 'border-blue-500 shadow-blue-100' : 'border-emerald-300'}`}
@@ -43,7 +53,7 @@ export function ActionNode({ data, selected }: ActionNodeProps) {
               ? t('activateAdAdSet')
               : data.config.action_type === 'slack_notify'
                 ? t('sendSlackNotification')
-                : String(data.config.action_type)}
+                : actionTypeLabel ?? String(data.config.action_type)}
           {data.config.also_notify_slack ? ' ' + t('plusSlack') : ''}
         </p>
       ) : null}

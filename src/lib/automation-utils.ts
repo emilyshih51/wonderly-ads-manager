@@ -12,6 +12,48 @@ import type { MetaInsightsRow } from '@/types';
 
 export const COST_PER_RESULT_NO_DATA = 99999;
 
+/** Minimum allowed daily budget in dollars after any adjustment. */
+export const MIN_DAILY_BUDGET_DOLLARS = 1;
+
+/** Maximum multiplier for a single budget adjustment step (prevents runaway increases). */
+export const MAX_BUDGET_STEP_MULTIPLIER = 10;
+
+/**
+ * Calculate a new daily budget in cents after an adjust_budget automation action.
+ *
+ * Applies the direction and amount type to the current budget, then clamps
+ * the result to safe bounds: minimum `MIN_DAILY_BUDGET_DOLLARS` and maximum
+ * `MAX_BUDGET_STEP_MULTIPLIER`× the current budget per step.
+ *
+ * @param currentBudgetCents - Current daily budget in the account currency's smallest unit
+ * @param direction - Whether to increase or decrease the budget
+ * @param amountType - Whether `amount` is a percentage or a fixed dollar value
+ * @param amount - Magnitude of the adjustment (e.g. 10 for 10% or $10)
+ * @returns New daily budget in cents, clamped to safe bounds
+ */
+export function calculateNewBudget(
+  currentBudgetCents: number,
+  direction: 'increase' | 'decrease',
+  amountType: 'percent' | 'fixed',
+  amount: number
+): number {
+  const currentDollars = currentBudgetCents / 100;
+
+  let newDollars: number;
+
+  if (amountType === 'percent') {
+    const factor = direction === 'increase' ? 1 + amount / 100 : 1 - amount / 100;
+    newDollars = currentDollars * factor;
+  } else {
+    newDollars = direction === 'increase' ? currentDollars + amount : currentDollars - amount;
+  }
+
+  newDollars = Math.max(MIN_DAILY_BUDGET_DOLLARS, newDollars);
+  newDollars = Math.min(newDollars, currentDollars * MAX_BUDGET_STEP_MULTIPLIER);
+
+  return Math.round(newDollars * 100);
+}
+
 export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==';
 
 export function evaluateCondition(actual: number, operator: string, threshold: number): boolean {

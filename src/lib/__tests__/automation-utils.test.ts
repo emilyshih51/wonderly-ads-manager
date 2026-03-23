@@ -1,5 +1,51 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateCondition, getResultCount, getCostPerResult } from '@/lib/automation-utils';
+import {
+  evaluateCondition,
+  getResultCount,
+  getCostPerResult,
+  calculateNewBudget,
+  MIN_DAILY_BUDGET_DOLLARS,
+  MAX_BUDGET_STEP_MULTIPLIER,
+} from '@/lib/automation-utils';
+
+describe('calculateNewBudget()', () => {
+  it('increases by percent', () => {
+    // $100 + 10% = $110 = 11000 cents
+    expect(calculateNewBudget(10000, 'increase', 'percent', 10)).toBe(11000);
+  });
+
+  it('decreases by percent', () => {
+    // $100 - 20% = $80 = 8000 cents
+    expect(calculateNewBudget(10000, 'decrease', 'percent', 20)).toBe(8000);
+  });
+
+  it('increases by fixed amount', () => {
+    // $100 + $50 = $150 = 15000 cents
+    expect(calculateNewBudget(10000, 'increase', 'fixed', 50)).toBe(15000);
+  });
+
+  it('decreases by fixed amount', () => {
+    // $100 - $30 = $70 = 7000 cents
+    expect(calculateNewBudget(10000, 'decrease', 'fixed', 30)).toBe(7000);
+  });
+
+  it(`clamps to minimum $${MIN_DAILY_BUDGET_DOLLARS}/day`, () => {
+    // $10 - 99% would be $0.10 — should clamp to $1 = 100 cents
+    expect(calculateNewBudget(1000, 'decrease', 'percent', 99)).toBe(100);
+  });
+
+  it(`clamps to ${MAX_BUDGET_STEP_MULTIPLIER}x maximum per step`, () => {
+    // $100 + 2000% would be $2100 — capped at 10x = $1000 = 100000 cents
+    expect(calculateNewBudget(10000, 'increase', 'percent', 2000)).toBe(100000);
+  });
+
+  it('rounds to nearest cent', () => {
+    // $100 + 1% = $101.00 = 10100 cents (exact)
+    expect(calculateNewBudget(10000, 'increase', 'percent', 1)).toBe(10100);
+    // $100 + 33.33% ≈ $133.33 = 13333 cents
+    expect(calculateNewBudget(10000, 'increase', 'percent', 33.33)).toBe(13333);
+  });
+});
 
 describe('evaluateCondition()', () => {
   it('evaluates > correctly', () => {

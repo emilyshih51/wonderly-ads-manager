@@ -14,6 +14,7 @@
 
 import crypto from 'crypto';
 import { createLogger } from '@/services/logger';
+import { formatCurrency } from '@/lib/utils';
 import {
   SLACK_ENDPOINTS,
   SLACK_BLOCK_MAX_CHARS,
@@ -29,6 +30,7 @@ import type {
   ActionBlockType,
   AutomationNotification,
   BudgetNotification,
+  BudgetRunSummary,
   LaunchNotification,
 } from './types';
 
@@ -363,6 +365,47 @@ export class SlackService {
       [bodyText],
       SlackService.timestampFooter()
     );
+
+    return this.postMessage(channelId, fallbackText, blocks);
+  }
+
+  /**
+   * Post a grouped budget change summary after a cron run.
+   *
+   * Sends a single message listing all entities whose budgets were adjusted
+   * in one direction during the run, formatted as:
+   * ```
+   * [1:58 AM][Wonderly] Increasing spend
+   * Entity A to $750
+   * Entity B to $800
+   * ```
+   *
+   * @param channelId - Slack channel ID to post to
+   * @param summary - Budget run summary with direction and list of changes
+   * @returns The posted message metadata, or `null` on failure
+   */
+  async sendBudgetRunSummary(
+    channelId: string,
+    summary: BudgetRunSummary
+  ): Promise<SlackMessage | null> {
+    const { direction, changes, runTime = new Date() } = summary;
+
+    const hours = runTime.getUTCHours();
+    const minutes = runTime.getUTCMinutes().toString().padStart(2, '0');
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHour = hours % 12 || 12;
+    const timeStr = `${displayHour}:${minutes} ${period}`;
+
+    const verb = direction === 'increase' ? 'Increasing' : 'Decreasing';
+    const header = `*[${timeStr}][Wonderly]* ${verb} spend`;
+
+    const changeLines = changes
+      .map((c) => `${c.entityName} to ${formatCurrency(c.newBudget)}`)
+      .join('\n');
+
+    const fallbackText = `[${timeStr}][Wonderly] ${verb} spend\n${changeLines}`;
+
+    const blocks = SlackService.buildNotificationBlocks(header, [changeLines]);
 
     return this.postMessage(channelId, fallbackText, blocks);
   }

@@ -4,6 +4,7 @@ import { getRedisClient } from '@/lib/redis';
 import {
   evaluateCondition,
   parseInsightMetrics,
+  calculateNewBudget,
   COST_PER_RESULT_NO_DATA,
 } from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
@@ -117,6 +118,54 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Send grouped budget change summary per channel per direction
+  const budgetResults = results.filter(
+    (r) => r.action === 'budget_increased' || r.action === 'budget_decreased'
+  );
+
+  if (budgetResults.length > 0) {
+    const slack = createSlackService();
+    const summaryChannel =
+      process.env.SLACK_BUDGET_SUMMARY_CHANNEL ||
+      budgetResults.find((r) => r.slack_channel)?.slack_channel;
+
+    if (summaryChannel) {
+      // Group by channel, then direction
+      const byChannel: Record<string, typeof budgetResults> = {};
+
+      for (const r of budgetResults) {
+        const ch = r.slack_channel ?? summaryChannel;
+        if (!byChannel[ch]) byChannel[ch] = [];
+        byChannel[ch].push(r);
+      }
+
+      const runTime = new Date();
+
+      for (const [ch, channelResults] of Object.entries(byChannel)) {
+        const increases = channelResults.filter((r) => r.action === 'budget_increased');
+        const decreases = channelResults.filter((r) => r.action === 'budget_decreased');
+
+        for (const [direction, group] of [
+          ['increase', increases],
+          ['decrease', decreases],
+        ] as const) {
+          if (group.length === 0) continue;
+
+          await slack
+            .sendBudgetRunSummary(ch, {
+              direction,
+              changes: group.map((r) => ({
+                entityName: r.entity_name ?? r.entity_id ?? '',
+                newBudget: r.new_budget ?? 0,
+              })),
+              runTime,
+            })
+            .catch((e: unknown) => logger.error('Slack budget run summary failed', e));
+        }
+      }
+    }
+  }
+
   logger.info('Evaluation complete', {
     evaluated: activeRules.length,
     accounts: Object.keys(rulesByAccount).length,
@@ -204,6 +253,9 @@ interface NodeConfig {
   metric?: string;
   operator?: string;
   threshold?: string;
+  adjust_direction?: 'increase' | 'decrease';
+  adjust_amount_type?: 'percent' | 'fixed';
+  adjust_amount?: number | string;
 }
 
 interface EvaluateResult {
@@ -221,6 +273,9 @@ interface EvaluateResult {
   skipped?: string;
   account?: string;
   error?: string;
+  previous_budget?: number;
+  new_budget?: number;
+  skip_reason?: string;
 }
 
 interface EvaluateRuleOptions {
@@ -396,33 +451,90 @@ async function evaluateRule(
         }
 
         if (actionCap) actionCap.executed++;
+      } else if (actionType === 'adjust_budget') {
+        if (entityType === 'ad') {
+          actionResult.skipped = 'unsupported_entity';
+          actionResult.skip_reason = 'adjust_budget is not supported for ad entities';
+        } else {
+          const direction = actionConfig.adjust_direction ?? 'increase';
+          const amountType = actionConfig.adjust_amount_type ?? 'percent';
+          const amount =
+            typeof actionConfig.adjust_amount === 'string'
+              ? parseFloat(actionConfig.adjust_amount)
+              : (actionConfig.adjust_amount ?? 0);
+
+          if (!amount || !Number.isFinite(amount) || amount <= 0) {
+            actionResult.skipped = 'invalid_config';
+            actionResult.skip_reason = 'adjust_amount must be a positive number';
+          } else {
+            const currentBudgetCents = await meta.getBudget(entityId);
+
+            if (currentBudgetCents === null) {
+              actionResult.skipped = 'lifetime_budget';
+              actionResult.skip_reason =
+                'Entity uses a lifetime budget — daily budget adjustment not supported';
+            } else {
+              const newBudgetCents = calculateNewBudget(
+                currentBudgetCents,
+                direction,
+                amountType,
+                amount
+              );
+
+              if (!dryRun) {
+                try {
+                  await meta.updateBudget(entityId, newBudgetCents);
+                } catch (budgetError) {
+                  actionResult.error = String(budgetError);
+                  results.push(actionResult);
+                  continue;
+                }
+              }
+
+              actionResult.action = direction === 'increase' ? 'budget_increased' : 'budget_decreased';
+              actionResult.previous_budget = currentBudgetCents / 100;
+              actionResult.new_budget = newBudgetCents / 100;
+              if (actionCap) actionCap.executed++;
+            }
+          }
+        }
       }
 
-      if (
-        actionConfig.slack_channel &&
-        (actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true)
-      ) {
+      const notifySlack =
+        actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true;
+
+      if (actionConfig.slack_channel && notifySlack) {
         if (!dryRun || sendSlack) {
-          await slack
-            .sendAutomationNotification(actionConfig.slack_channel, {
-              ruleName: rule.name,
-              actionType: actionType as 'pause' | 'activate' | 'promote',
-              entityType,
-              entityId,
-              entityName,
-              adAccountId,
-              metrics: {
-                spend: metrics.spend,
-                results: metrics.results,
-                cost_per_result: metrics.cost_per_result,
-                clicks: metrics.clicks,
-                ctr: metrics.ctr,
-              },
-              duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
-              customMessage: actionConfig.slack_message,
-              prefix: dryRun ? '🧪 *[TEST]* ' : '',
-            })
-            .catch((e: unknown) => logger.error('Slack notification failed', e));
+          if (actionType === 'adjust_budget' && actionResult.action && actionResult.new_budget !== undefined) {
+            await slack
+              .sendBudgetNotification(actionConfig.slack_channel, {
+                entityName,
+                newBudget: actionResult.new_budget,
+                previousBudget: actionResult.previous_budget,
+              })
+              .catch((e: unknown) => logger.error('Slack budget notification failed', e));
+          } else {
+            await slack
+              .sendAutomationNotification(actionConfig.slack_channel, {
+                ruleName: rule.name,
+                actionType: actionType as 'pause' | 'activate' | 'promote',
+                entityType,
+                entityId,
+                entityName,
+                adAccountId,
+                metrics: {
+                  spend: metrics.spend,
+                  results: metrics.results,
+                  cost_per_result: metrics.cost_per_result,
+                  clicks: metrics.clicks,
+                  ctr: metrics.ctr,
+                },
+                duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
+                customMessage: actionConfig.slack_message,
+                prefix: dryRun ? '🧪 *[TEST]* ' : '',
+              })
+              .catch((e: unknown) => logger.error('Slack notification failed', e));
+          }
 
           actionResult.slack_sent = true;
         }

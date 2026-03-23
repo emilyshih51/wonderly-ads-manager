@@ -1085,7 +1085,7 @@ export default function AutomationsPage() {
                           AND
                         </span>
                       )}
-                      <div className="grid flex-1 grid-cols-[1fr_auto_auto] gap-2">
+                      <div className="flex flex-1 gap-2">
                         <Select
                           value={cond.metric}
                           onChange={(value) => updateCondition(cond.id, { metric: value })}
@@ -1093,6 +1093,7 @@ export default function AutomationsPage() {
                             label: tCommon(o.labelKey),
                             value: o.value,
                           }))}
+                          className="flex-1"
                         />
                         <Select
                           value={cond.operator}
@@ -1101,14 +1102,14 @@ export default function AutomationsPage() {
                             label: t(o.labelKey),
                             value: o.value,
                           }))}
-                          className="w-[180px]"
+                          className="w-48 shrink-0"
                         />
                         <Input
                           type="number"
                           value={cond.threshold}
                           onChange={(e) => updateCondition(cond.id, { threshold: e.target.value })}
                           placeholder={t('value')}
-                          className="h-9 w-24"
+                          className="h-9 w-20 shrink-0"
                         />
                       </div>
                       <button

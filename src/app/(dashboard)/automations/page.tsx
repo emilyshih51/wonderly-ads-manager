@@ -667,13 +667,6 @@ export default function AutomationsPage() {
                 ) : (
                   rules.map((rule) => {
                     const cfg = getRuleSummary(rule);
-                    const condSummary = cfg.conditions
-                      .map((c) => {
-                        const labelKey = METRIC_OPTIONS.find((m) => m.value === c.metric)?.labelKey;
-
-                        return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
-                      })
-                      .join(' AND ');
 
                     return (
                       <Card
@@ -719,10 +712,32 @@ export default function AutomationsPage() {
                               </>
                             )}
                           </div>
-                          {condSummary && (
-                            <p className="mt-1 truncate text-xs text-[var(--color-muted-foreground)]">
-                              {t('if')}: {condSummary}
-                            </p>
+                          {cfg.conditions.length > 0 && (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {cfg.conditions.map((c, i) => {
+                                const labelKey = METRIC_OPTIONS.find(
+                                  (m) => m.value === c.metric
+                                )?.labelKey;
+                                const metricLabel = labelKey ? tCommon(labelKey) : c.metric;
+
+                                return (
+                                  <span key={c.id} className="flex items-center gap-1.5">
+                                    {i > 0 && (
+                                      <span className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                                        AND
+                                      </span>
+                                    )}
+                                    <span className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-foreground)]">
+                                      {metricLabel}{' '}
+                                      <span className="font-mono text-[var(--color-muted-foreground)]">
+                                        {c.operator}
+                                      </span>{' '}
+                                      <span className="font-medium">{c.threshold}</span>
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
                         <div className="flex items-center gap-2 sm:shrink-0">

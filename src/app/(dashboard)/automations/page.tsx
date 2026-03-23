@@ -799,13 +799,7 @@ export default function AutomationsPage() {
                   return (
                     <div key={category}>
                       <div className="mb-4 flex items-center gap-2">
-                        <span
-                          className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${
-                            isProtect
-                              ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
-                              : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
-                          }`}
-                        >
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-muted)] text-xs">
                           {isProtect ? '🛡️' : '🚀'}
                         </span>
                         <h2 className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
@@ -819,13 +813,7 @@ export default function AutomationsPage() {
                             className="group flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm transition-all hover:border-[var(--color-primary)]/40 hover:shadow-md"
                           >
                             <div className="mb-3 flex items-start gap-3">
-                              <span
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg ${
-                                  isProtect
-                                    ? 'bg-red-100/60 dark:bg-red-500/15'
-                                    : 'bg-emerald-100/60 dark:bg-emerald-500/15'
-                                }`}
-                              >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-muted)] text-lg">
                                 {tmpl.icon}
                               </span>
                               <div className="min-w-0">
@@ -840,10 +828,10 @@ export default function AutomationsPage() {
                             <div className="mt-auto pt-3">
                               <button
                                 onClick={() => applyTemplate(tmpl)}
-                                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border bg-transparent px-3 py-2 text-xs font-medium transition-colors ${
                                   isProtect
-                                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20'
-                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20'
+                                    ? 'border-red-300/60 text-red-500 hover:border-red-400/80 hover:bg-red-500/10 dark:border-red-500/40 dark:text-red-400 dark:hover:border-red-500/60 dark:hover:bg-red-500/10'
+                                    : 'border-emerald-300/60 text-emerald-600 hover:border-emerald-400/80 hover:bg-emerald-500/10 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-500/10'
                                 }`}
                               >
                                 {t('useTemplate')} <ArrowRight className="h-3 w-3" />

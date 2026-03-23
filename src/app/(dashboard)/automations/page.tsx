@@ -34,6 +34,8 @@ import {
   ArrowRight,
   Wand2,
   RotateCcw,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import {
   useRules,
@@ -555,10 +557,14 @@ export default function AutomationsPage() {
   const isStep2Complete =
     config.conditions.length > 0 && config.conditions.every((c) => c.threshold !== '');
   const isStep3Complete =
-    !!config.action_type && (config.action_type !== 'promote' || !!config.target_adset_id);
+    !!config.action_type &&
+    (config.action_type !== 'promote' || !!config.target_adset_id) &&
+    (config.action_type !== 'adjust_budget' || (config.adjust_amount ?? 0) > 0);
 
   /* ─── Rule summary for list ─── */
   const getRuleSummary = (rule: Rule) => nodesToConfig(rule.nodes);
+
+  const adjustAmountType = config.adjust_amount_type ?? 'percent';
 
   /* ─────────── RENDER ─────────── */
   return (
@@ -1311,6 +1317,17 @@ export default function AutomationsPage() {
                           icon: <Bell className="h-4 w-4" />,
                           desc: t('justSendSlack'),
                         },
+                        {
+                          value: 'adjust_budget',
+                          label: t('adjustBudget'),
+                          icon:
+                            config.adjust_direction === 'decrease' ? (
+                              <TrendingDown className="h-4 w-4" />
+                            ) : (
+                              <TrendingUp className="h-4 w-4" />
+                            ),
+                          desc: t('adjustBudgetDescription'),
+                        },
                       ].map((action) => (
                         <button
                           key={action.value}
@@ -1352,6 +1369,86 @@ export default function AutomationsPage() {
                           }
                           placeholder={t('searchForWinnersAdSet')}
                         />
+                      </div>
+                    </div>
+                  )}
+
+                  {config.action_type === 'adjust_budget' && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                          {t('direction')}
+                        </label>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {(['increase', 'decrease'] as const).map((dir) => (
+                            <button
+                              key={dir}
+                              onClick={() => updateConfig({ adjust_direction: dir })}
+                              className={`flex items-center justify-center gap-2 rounded-lg border p-2.5 text-sm font-medium transition-colors ${
+                                (config.adjust_direction ?? 'increase') === dir
+                                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                                  : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)]/50'
+                              }`}
+                            >
+                              {dir === 'increase' ? (
+                                <TrendingUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <TrendingDown className="h-3.5 w-3.5" />
+                              )}
+                              {dir === 'increase' ? t('increase') : t('decrease')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                          {t('amountType')}
+                        </label>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'percent', label: t('percent') },
+                            { value: 'fixed', label: t('fixedAmount') },
+                          ] as const).map((opt) => (
+                            <button
+                              key={opt.value}
+                              onClick={() => updateConfig({ adjust_amount_type: opt.value })}
+                              className={`rounded-lg border p-2.5 text-sm font-medium transition-colors ${
+                                adjustAmountType === opt.value
+                                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                                  : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)]/50'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                          {adjustAmountType === 'percent' ? t('percentAmount') : t('dollarAmount')}
+                        </label>
+                        <div className="relative mt-1">
+                          {adjustAmountType === 'fixed' && (
+                            <span className="absolute top-1/2 left-3 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+                              $
+                            </span>
+                          )}
+                          <Input
+                            type="number"
+                            min={0}
+                            value={config.adjust_amount ?? ''}
+                            onChange={(e) =>
+                              updateConfig({ adjust_amount: parseFloat(e.target.value) || 0 })
+                            }
+                            className={cn('mt-1 h-9', adjustAmountType === 'fixed' && 'pl-6')}
+                            placeholder={t('budgetAmountPlaceholder')}
+                          />
+                          {adjustAmountType === 'percent' && (
+                            <span className="absolute top-1/2 right-3 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+                              %
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

@@ -445,6 +445,25 @@ export class MetaService {
   }
 
   /**
+   * Fetch the current daily budget for a campaign or ad set.
+   *
+   * Returns the budget in the account currency's smallest unit (cents for USD),
+   * or `null` if the entity uses a lifetime budget instead of a daily budget.
+   *
+   * @param entityId - Campaign or ad set ID
+   * @returns Daily budget in cents, or null if the entity has a lifetime budget
+   */
+  async getBudget(entityId: string): Promise<number | null> {
+    const data = await this.request<{ daily_budget?: string }>(`/${entityId}`, {
+      params: { fields: 'daily_budget' },
+    });
+    if (!data.daily_budget) return null;
+    const cents = parseInt(data.daily_budget, 10);
+    if (Number.isNaN(cents)) return null;
+    return cents;
+  }
+
+  /**
    * Execute a single automation action on a Meta object.
    *
    * Unified entry point for pause/resume/budget actions — used by both the

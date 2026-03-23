@@ -105,3 +105,24 @@ export interface LaunchNotification {
   /** Optional custom message template with `{adset_name}`, `{budget}`, `{ad_count}`, `{status}` placeholders. */
   customMessage?: string;
 }
+
+/** A single entity entry in a budget run summary. */
+export interface BudgetChangeSummaryItem {
+  /** Display name of the campaign or ad set. */
+  entityName: string;
+  /** New daily budget in dollars after the adjustment. */
+  newBudget: number;
+}
+
+/**
+ * Payload for a grouped end-of-cron-run budget change summary.
+ * Used by `sendBudgetRunSummary()` to post a batched budget change message.
+ */
+export interface BudgetRunSummary {
+  /** Whether all changes in this batch were increases or decreases. */
+  direction: 'increase' | 'decrease';
+  /** All entities whose budgets changed in this direction during the run. */
+  changes: BudgetChangeSummaryItem[];
+  /** The time the cron run completed. Defaults to now. */
+  runTime?: Date;
+}

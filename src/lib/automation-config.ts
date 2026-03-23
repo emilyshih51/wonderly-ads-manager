@@ -24,6 +24,9 @@ export interface ActionNodeConfig {
   also_notify_slack?: string | boolean;
   slack_channel?: string;
   slack_message?: string;
+  adjust_direction?: 'increase' | 'decrease';
+  adjust_amount_type?: 'percent' | 'fixed';
+  adjust_amount?: number;
 }
 
 export interface ConditionNodeConfig {
@@ -59,6 +62,9 @@ export interface RuleConfig {
   also_notify_slack: boolean;
   slack_channel: string;
   slack_message: string;
+  adjust_direction?: 'increase' | 'decrease';
+  adjust_amount_type?: 'percent' | 'fixed';
+  adjust_amount?: number;
 }
 
 /* ─────────── Constants ─────────── */
@@ -124,7 +130,9 @@ export function configToNodes(config: RuleConfig) {
           ? 'Promote to Winners'
           : config.action_type === 'pause'
             ? 'Pause Ad'
-            : 'Activate Ad',
+            : config.action_type === 'adjust_budget'
+              ? 'Adjust Budget'
+              : 'Activate Ad',
       config: {
         action_type: config.action_type,
         target_adset_id: config.target_adset_id,
@@ -132,6 +140,9 @@ export function configToNodes(config: RuleConfig) {
         also_notify_slack: String(config.also_notify_slack),
         slack_channel: config.slack_channel,
         slack_message: config.slack_message,
+        adjust_direction: config.adjust_direction,
+        adjust_amount_type: config.adjust_amount_type,
+        adjust_amount: config.adjust_amount,
       } satisfies ActionNodeConfig,
     },
   });
@@ -182,6 +193,9 @@ export function nodesToConfig(nodes: AutomationNode[]): RuleConfig {
     also_notify_slack: ac.also_notify_slack === 'true' || ac.also_notify_slack === true,
     slack_channel: ac.slack_channel || '',
     slack_message: ac.slack_message || '',
+    adjust_direction: ac.adjust_direction,
+    adjust_amount_type: ac.adjust_amount_type,
+    adjust_amount: ac.adjust_amount,
   };
 }
 

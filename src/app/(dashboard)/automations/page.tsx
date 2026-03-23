@@ -678,7 +678,7 @@ export default function AutomationsPage() {
                     return (
                       <Card
                         key={rule.id}
-                        className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
+                        className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-5"
                       >
                         <Switch
                           checked={rule.is_active}
@@ -686,14 +686,14 @@ export default function AutomationsPage() {
                           aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <p
-                              className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
+                              className={`text-sm font-semibold ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
                             >
                               {rule.name}
                             </p>
                             <span
-                              className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-medium ${
                                 rule.is_active
                                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
                                   : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
@@ -702,7 +702,7 @@ export default function AutomationsPage() {
                               {rule.is_active ? t('ruleActive') : t('ruleOff')}
                             </span>
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
                             {cfg.campaign_name && (
                               <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
                             )}
@@ -720,16 +720,16 @@ export default function AutomationsPage() {
                             )}
                           </div>
                           {condSummary && (
-                            <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
+                            <p className="mt-1 truncate text-xs text-[var(--color-muted-foreground)]">
                               {t('if')}: {condSummary}
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 sm:shrink-0">
+                        <div className="flex items-center gap-2 sm:shrink-0">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs"
+                            className="h-8 text-xs"
                             onClick={() => setConfirmRunRule(rule)}
                             disabled={runningRuleId === rule.id}
                           >
@@ -745,20 +745,20 @@ export default function AutomationsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
+                            className="h-8 w-8"
                             onClick={() => editRule(rule)}
                             title={t('editRule')}
                           >
-                            <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+                            <Settings2 className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
+                            className="h-8 w-8"
                             onClick={() => handleDelete(rule.id)}
                             title={t('deleteRule')}
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
+                            <Trash2 className="h-4 w-4 text-[var(--color-muted-foreground)] hover:text-red-400" />
                           </Button>
                         </div>
                       </Card>

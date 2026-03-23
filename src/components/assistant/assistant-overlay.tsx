@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useState, useRef, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { AssistantTooltip } from './assistant-tooltip';
 import { AssistantPanel } from './assistant-panel';
@@ -20,6 +21,7 @@ const AssistantCharacter = dynamic(
  */
 export function AssistantOverlay() {
   const { assistantEnabled, assistantPanelOpen, toggleAssistantPanel } = useAssistantStore();
+  const pathname = usePathname();
   const [hovered, setHovered] = useState(false);
   const [animState, setAnimState] = useState<AnimationState>('idle');
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,7 +48,9 @@ export function AssistantOverlay() {
     scheduleIdle(600);
   }, [toggleAssistantPanel, scheduleIdle]);
 
-  if (!assistantEnabled) return null;
+  const hiddenRoutes = ['/chat'];
+
+  if (!assistantEnabled || hiddenRoutes.includes(pathname)) return null;
 
   return (
     <>

@@ -16,8 +16,10 @@ import {
   type ExpandedState,
 } from '@tanstack/react-table';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
   Table,
@@ -30,6 +32,58 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { DataTableToolbar } from '@/components/data/data-table-toolbar';
 import { DataTablePagination } from '@/components/data/data-table-pagination';
+
+/** A single action shown in the row actions menu. */
+export interface RowAction<TData> {
+  /** Unique key for the action. */
+  id: string;
+  label: string;
+  icon?: LucideIcon;
+  onClick: (row: TData) => void;
+  /** When true the action is styled as destructive (red). */
+  destructive?: boolean;
+}
+
+interface RowActionsProps<TData> {
+  row: TData;
+  actions: RowAction<TData>[];
+}
+
+/**
+ * Renders a row of ghost icon-buttons that fade in on row hover.
+ * Place in the `actions` column cell of a DataTable.
+ *
+ * @param row - The row data passed to each action's onClick
+ * @param actions - Array of action definitions
+ */
+export function RowActions<TData>({ row, actions }: RowActionsProps<TData>) {
+  return (
+    <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
+      {actions.map((action) => {
+        const Icon = action.icon;
+
+        return (
+          <Button
+            key={action.id}
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-7 gap-1 px-2 text-xs text-[var(--color-muted-foreground)]',
+              action.destructive && 'hover:text-red-500'
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              action.onClick(row);
+            }}
+          >
+            {Icon && <Icon className="h-3 w-3" />}
+            <span className="hidden sm:inline">{action.label}</span>
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];

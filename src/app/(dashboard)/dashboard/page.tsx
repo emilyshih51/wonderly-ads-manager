@@ -19,7 +19,8 @@ import {
 import { type ColumnDef } from '@tanstack/react-table';
 import { Header } from '@/components/layout/header';
 import { Card } from '@/components/ui/card';
-import { DataTable } from '@/components/data/data-table';
+import { DataTable, RowActions } from '@/components/data/data-table';
+import { SlidePanel } from '@/components/data/slide-panel';
 import { Select } from '@/components/ui/dropdown';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
@@ -51,6 +52,8 @@ import {
   RefreshCw,
   Plus,
   RotateCcw,
+  Info,
+  TableProperties,
 } from 'lucide-react';
 import { createLogger } from '@/services/logger';
 import { useTranslations } from 'next-intl';
@@ -195,10 +198,13 @@ export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const tMetrics = useTranslations('metrics');
   const tCommon = useTranslations('common');
+  const tCampaigns = useTranslations('campaigns');
   const { datePreset } = useAppStore();
   const { widgets, setWidgets, addWidget, resetWidgets } = useDashboardStore();
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const [detailCampaign, setDetailCampaign] = useState<CampaignRow | null>(null);
+  const [detailAdSet, setDetailAdSet] = useState<AdSetRow | null>(null);
 
   const {
     data: campaigns = [],
@@ -541,6 +547,31 @@ export default function DashboardPage() {
         meta: { align: 'right' },
         enableSorting: true,
       },
+      {
+        id: 'actions',
+        header: '',
+        size: 120,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <RowActions
+            row={row.original}
+            actions={[
+              {
+                id: 'viewDetails',
+                label: tCampaigns('viewDetails'),
+                icon: Info,
+                onClick: (campaign) => setDetailCampaign(campaign),
+              },
+              {
+                id: 'viewAdSets',
+                label: t('viewAdSets'),
+                icon: TableProperties,
+                onClick: (campaign) => setSelectedCampaign(campaign.id),
+              },
+            ]}
+          />
+        ),
+      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- translation fns are stable refs
     [selectedCampaign]
@@ -655,6 +686,25 @@ export default function DashboardPage() {
         cell: ({ row }) => formatCurrency(row.original.insights?.cost_per_inline_link_click),
         meta: { align: 'right' },
         enableSorting: true,
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 80,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <RowActions
+            row={row.original}
+            actions={[
+              {
+                id: 'viewDetails',
+                label: tCampaigns('viewDetails'),
+                icon: Info,
+                onClick: (adSet) => setDetailAdSet(adSet),
+              },
+            ]}
+          />
+        ),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- translation fns are stable refs
@@ -786,18 +836,28 @@ export default function DashboardPage() {
 
         {/* Ad Set Drill-down */}
         {selectedCampaign !== 'all' && (
-          <DataTable
-            columns={adSetColumns}
-            data={drillAdSets}
-            title={t('adSetsFor', {
-              name: campaigns.find((c) => c.id === selectedCampaign)?.name ?? '',
-            })}
-            isLoading={drillLoading}
-            emptyMessage={t('noAdSetsFound')}
-            searchKey="name"
-            searchPlaceholder={t('adSet')}
-            pagination={false}
-          />
+          <div className="relative overflow-hidden rounded-xl">
+            {drillLoading && (
+              <div
+                className="absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[3px]"
+                style={{ background: 'color-mix(in srgb, var(--color-card) 80%, transparent)' }}
+              >
+                <RefreshCw className="h-6 w-6 animate-spin text-[var(--color-primary)]" />
+              </div>
+            )}
+            <DataTable
+              columns={adSetColumns}
+              data={drillAdSets}
+              title={t('adSetsFor', {
+                name: campaigns.find((c) => c.id === selectedCampaign)?.name ?? '',
+              })}
+              isLoading={false}
+              emptyMessage={t('noAdSetsFound')}
+              searchKey="name"
+              searchPlaceholder={t('adSet')}
+              pagination={false}
+            />
+          </div>
         )}
 
         {/* Ad Performance — uses the AdsGallery carousel with click-to-detail modal */}
@@ -829,6 +889,183 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Campaign detail panel */}
+      <SlidePanel
+        open={!!detailCampaign}
+        onOpenChange={(open) => !open && setDetailCampaign(null)}
+        title={detailCampaign?.name ?? ''}
+        description={detailCampaign?.objective
+          ?.replace('OUTCOME_', '')
+          .replace(/_/g, ' ')
+          .toLowerCase()}
+      >
+        {detailCampaign && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('status')}
+                </p>
+                <StatusBadge status={detailCampaign.status} />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('budget')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {detailCampaign.daily_budget
+                    ? `${formatCurrency(parseFloat(detailCampaign.daily_budget))} / day`
+                    : detailCampaign.lifetime_budget
+                      ? `${formatCurrency(parseFloat(detailCampaign.lifetime_budget))} lifetime`
+                      : '—'}
+                </p>
+              </div>
+            </div>
+            {detailCampaign.insights && (
+              <div>
+                <p className="mb-3 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('performance')}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      label: tMetrics('spend'),
+                      value: formatCurrency(parseFloat(detailCampaign.insights.spend || '0')),
+                    },
+                    {
+                      label: tMetrics('impressions'),
+                      value: formatNumber(parseInt(detailCampaign.insights.impressions || '0', 10)),
+                    },
+                    {
+                      label: tMetrics('clicks'),
+                      value: formatNumber(parseInt(detailCampaign.insights.clicks || '0', 10)),
+                    },
+                    {
+                      label: tMetrics('ctr'),
+                      value: formatPercent(parseFloat(detailCampaign.insights.ctr || '0')),
+                    },
+                    {
+                      label: tMetrics('cpc'),
+                      value: formatCurrency(parseFloat(detailCampaign.insights.cpc || '0')),
+                    },
+                    {
+                      label: tMetrics('cpm'),
+                      value: formatCurrency(parseFloat(detailCampaign.insights.cpm || '0')),
+                    },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-lg bg-[var(--color-accent)]/40 px-3 py-2.5">
+                      <p className="text-xs text-[var(--color-muted-foreground)]">{label}</p>
+                      <p className="mt-0.5 text-sm font-medium text-[var(--color-foreground)]">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4 border-t border-[var(--color-border)] pt-4">
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('created')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {detailCampaign.created_time
+                    ? new Date(detailCampaign.created_time).toLocaleDateString()
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('updated')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {detailCampaign.updated_time
+                    ? new Date(detailCampaign.updated_time).toLocaleDateString()
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </SlidePanel>
+
+      {/* Ad set detail panel */}
+      <SlidePanel
+        open={!!detailAdSet}
+        onOpenChange={(open) => !open && setDetailAdSet(null)}
+        title={detailAdSet?.name ?? ''}
+        description={detailAdSet?.campaign?.name}
+      >
+        {detailAdSet && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('status')}
+                </p>
+                <StatusBadge status={detailAdSet.status} />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('budget')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {detailAdSet.daily_budget
+                    ? `${formatCurrency(parseInt(detailAdSet.daily_budget) / 100)} / day`
+                    : detailAdSet.lifetime_budget
+                      ? `${formatCurrency(parseInt(detailAdSet.lifetime_budget) / 100)} lifetime`
+                      : '—'}
+                </p>
+              </div>
+            </div>
+            {detailAdSet.insights && (
+              <div>
+                <p className="mb-3 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('performance')}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      label: tMetrics('spend'),
+                      value: formatCurrency(parseFloat(detailAdSet.insights.spend || '0')),
+                    },
+                    {
+                      label: tMetrics('impressions'),
+                      value: formatNumber(parseInt(detailAdSet.insights.impressions || '0', 10)),
+                    },
+                    {
+                      label: tMetrics('clicks'),
+                      value: formatNumber(parseInt(detailAdSet.insights.clicks || '0', 10)),
+                    },
+                    {
+                      label: tMetrics('ctr'),
+                      value: formatPercent(parseFloat(detailAdSet.insights.ctr || '0')),
+                    },
+                    {
+                      label: tMetrics('cpc'),
+                      value: formatCurrency(
+                        parseFloat(detailAdSet.insights.cost_per_inline_link_click || '0')
+                      ),
+                    },
+                    {
+                      label: tMetrics('cpm'),
+                      value: formatCurrency(parseFloat(detailAdSet.insights.cpm || '0')),
+                    },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-lg bg-[var(--color-accent)]/40 px-3 py-2.5">
+                      <p className="text-xs text-[var(--color-muted-foreground)]">{label}</p>
+                      <p className="mt-0.5 text-sm font-medium text-[var(--color-foreground)]">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </SlidePanel>
 
       {/* Stat detail slide panel */}
       {selectedMetric && (

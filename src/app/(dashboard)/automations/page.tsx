@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
-import { SelectNative } from '@/components/ui/select-native';
+import { Select } from '@/components/ui/dropdown';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
@@ -124,6 +124,7 @@ const DATE_PRESET_OPTIONS = [
 ];
 
 const SCHEDULE_OPTIONS = [
+  { labelKey: 'schedules.5min', value: '5min' },
   { labelKey: 'schedules.15min', value: '15min' },
   { labelKey: 'schedules.hourly', value: 'hourly' },
   { labelKey: 'schedules.6hours', value: '6hours' },
@@ -131,6 +132,7 @@ const SCHEDULE_OPTIONS = [
 ];
 
 const SCHEDULE_LABEL_KEYS: Record<string, string> = {
+  '5min': 'scheduleLabels.5min',
   '15min': 'scheduleLabels.15min',
   hourly: 'scheduleLabels.hourly',
   '6hours': 'scheduleLabels.6hours',
@@ -1121,14 +1123,14 @@ export default function AutomationsPage() {
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('checkFrequency')}
                     </label>
-                    <SelectNative
+                    <Select
                       value={config.schedule}
-                      onChange={(e) => updateConfig({ schedule: e.target.value })}
+                      onChange={(value) => updateConfig({ schedule: value })}
                       options={SCHEDULE_OPTIONS.map((o) => ({
                         label: t(o.labelKey),
                         value: o.value,
                       }))}
-                      className="mt-2"
+                      className="mt-2 w-full"
                     />
                   </div>
 
@@ -1137,14 +1139,14 @@ export default function AutomationsPage() {
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('performancePeriod')}
                     </label>
-                    <SelectNative
+                    <Select
                       value={config.date_preset}
-                      onChange={(e) => updateConfig({ date_preset: e.target.value })}
+                      onChange={(value) => updateConfig({ date_preset: value })}
                       options={DATE_PRESET_OPTIONS.map((o) => ({
                         label: t(o.labelKey),
                         value: o.value,
                       }))}
-                      className="mt-2"
+                      className="mt-2 w-full"
                     />
                     <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
                       {t('timeRangeDesc')}
@@ -1199,25 +1201,17 @@ export default function AutomationsPage() {
                         </span>
                       )}
                       <div className="grid flex-1 grid-cols-[1fr_auto_auto] gap-2">
-                        <SelectNative
+                        <Select
                           value={cond.metric}
-                          onChange={(e) =>
-                            updateCondition(cond.id, {
-                              metric: e.target.value,
-                            })
-                          }
+                          onChange={(value) => updateCondition(cond.id, { metric: value })}
                           options={METRIC_OPTIONS.map((o) => ({
                             label: tCommon(o.labelKey),
                             value: o.value,
                           }))}
                         />
-                        <SelectNative
+                        <Select
                           value={cond.operator}
-                          onChange={(e) =>
-                            updateCondition(cond.id, {
-                              operator: e.target.value,
-                            })
-                          }
+                          onChange={(value) => updateCondition(cond.id, { operator: value })}
                           options={OPERATOR_OPTIONS.map((o) => ({
                             label: t(o.labelKey),
                             value: o.value,

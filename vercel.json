@@ -3,6 +3,10 @@
     {
       "path": "/api/automations/evaluate",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/slack/digest?type=weekly",
+      "schedule": "0 9 * * 1"
     }
   ]
 }

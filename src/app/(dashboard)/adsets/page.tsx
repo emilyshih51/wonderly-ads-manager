@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SelectNative } from '@/components/ui/select-native';
+import { Select } from '@/components/ui/dropdown';
 import { CALL_TO_ACTION_TYPES } from '@/lib/utils';
 import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
 import { useAdSets } from '@/lib/queries/meta/use-adsets';
@@ -741,23 +741,17 @@ export default function LaunchPage() {
                         <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
                         {t('targetCampaign')}
                       </label>
-                      <select
+                      <Select
                         value={state.targetCampaign}
-                        onChange={(e) =>
-                          setState((prev) => ({
-                            ...prev,
-                            targetCampaign: e.target.value,
-                          }))
+                        onChange={(value) =>
+                          setState((prev) => ({ ...prev, targetCampaign: value }))
                         }
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none"
-                      >
-                        <option value="">{t('sameAsSource')}</option>
-                        {campaigns.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { label: t('sameAsSource'), value: '' },
+                          ...campaigns.map((c) => ({ label: c.name, value: c.id })),
+                        ]}
+                        className="w-full"
+                      />
                     </div>
                   )}
                 </div>
@@ -860,14 +854,9 @@ export default function LaunchPage() {
                     <label className="mb-1.5 block text-sm font-medium text-[var(--color-foreground)]">
                       {t('callToAction')}
                     </label>
-                    <SelectNative
+                    <Select
                       value={state.callToAction}
-                      onChange={(e) =>
-                        setState((prev) => ({
-                          ...prev,
-                          callToAction: e.target.value,
-                        }))
-                      }
+                      onChange={(value) => setState((prev) => ({ ...prev, callToAction: value }))}
                       options={CALL_TO_ACTION_TYPES.map((cta) => ({
                         label: cta.replace(/_/g, ' '),
                         value: cta,

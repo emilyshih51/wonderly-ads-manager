@@ -53,6 +53,8 @@
     "toggleTheme": "テーマを切り替え",
     "ad": "広告",
     "ads": "広告",
+    "created": "作成日",
+    "updated": "更新日",
     "scrollLeft": "左にスクロール",
     "scrollRight": "右にスクロール",
     "presets": "プリセット",
@@ -120,7 +122,8 @@
     "budget": "予算",
     "cpa": "CPA",
     "reach": "リーチ",
-    "adName": "広告名"
+    "adName": "広告名",
+    "performance": "パフォーマンス"
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -141,7 +144,8 @@
     "dragToReorder": "ドラッグしてグラフの順序を変更",
     "addChart": "グラフを追加",
     "resetLayout": "リセット",
-    "clickToEditBudget": "クリックして予算を編集"
+    "clickToEditBudget": "クリックして予算を編集",
+    "viewAdSets": "広告セットを表示"
   },
   "campaigns": {
     "title": "キャンペーン",
@@ -151,6 +155,7 @@
     "duplicate": "複製",
     "duplicating": "複製中…",
     "viewAds": "広告を表示",
+    "viewDetails": "詳細を表示",
     "noCampaignsFound": "この期間のキャンペーンが見つかりません。",
     "duplicateDesc": "\"{name}\" のコピーを同じ設定で作成します。コピーは一時停止状態で作成されます。",
     "activePaused": "{active}件有効、{paused}件一時停止"
@@ -395,12 +400,14 @@
       "last30d": "過去30日間"
     },
     "schedules": {
+      "5min": "5分ごと",
       "15min": "15分ごと",
       "hourly": "1時間ごと",
       "6hours": "6時間ごと",
       "daily": "毎日"
     },
     "scheduleLabels": {
+      "5min": "5分ごと",
       "15min": "15分ごと",
       "hourly": "1時間ごと",
       "6hours": "6時間ごと",

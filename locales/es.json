@@ -53,6 +53,8 @@
     "toggleTheme": "Alternar tema",
     "ad": "anuncio",
     "ads": "anuncios",
+    "created": "Creado",
+    "updated": "Actualizado",
     "scrollLeft": "Desplazar a la izquierda",
     "scrollRight": "Desplazar a la derecha",
     "presets": "Preajustes",
@@ -120,7 +122,8 @@
     "budget": "Presupuesto",
     "cpa": "CPA",
     "reach": "Alcance",
-    "adName": "Nombre del anuncio"
+    "adName": "Nombre del anuncio",
+    "performance": "Rendimiento"
   },
   "dashboard": {
     "title": "Panel",
@@ -141,7 +144,8 @@
     "dragToReorder": "Arrastra para reordenar gráficos",
     "addChart": "Agregar gráfico",
     "resetLayout": "Restablecer",
-    "clickToEditBudget": "Clic para editar presupuesto"
+    "clickToEditBudget": "Clic para editar presupuesto",
+    "viewAdSets": "Ver conjuntos de anuncios"
   },
   "campaigns": {
     "title": "Campañas",
@@ -151,6 +155,7 @@
     "duplicate": "Duplicar",
     "duplicating": "Duplicando…",
     "viewAds": "Ver anuncios",
+    "viewDetails": "Ver detalles",
     "noCampaignsFound": "No se encontraron campañas para este período.",
     "duplicateDesc": "Crear una copia de \"{name}\" con la misma configuración. La copia se creará en estado PAUSADO.",
     "activePaused": "{active} activas, {paused} pausadas"
@@ -395,12 +400,14 @@
       "last30d": "Últimos 30 días"
     },
     "schedules": {
+      "5min": "Cada 5 minutos",
       "15min": "Cada 15 minutos",
       "hourly": "Cada hora",
       "6hours": "Cada 6 horas",
       "daily": "Diariamente"
     },
     "scheduleLabels": {
+      "5min": "Cada 5 min",
       "15min": "Cada 15 min",
       "hourly": "Cada hora",
       "6hours": "Cada 6 horas",

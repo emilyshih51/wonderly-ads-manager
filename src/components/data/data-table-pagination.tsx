@@ -4,6 +4,7 @@ import { type Table } from '@tanstack/react-table';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/dropdown';
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>;
@@ -30,17 +31,15 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
       </p>
 
       <div className="flex items-center gap-1">
-        <select
-          value={pageSize}
-          onChange={(e) => table.setPageSize(Number(e.target.value))}
-          className="h-8 rounded-md border border-[var(--color-input)] bg-[var(--color-card)] px-2 text-xs text-[var(--color-foreground)] focus:outline-none"
-        >
-          {[10, 25, 50].map((size) => (
-            <option key={size} value={size}>
-              {`${size} ${tCommon('perPage')}`}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={String(pageSize)}
+          onChange={(value) => table.setPageSize(Number(value))}
+          options={[10, 25, 50].map((size) => ({
+            label: `${size} ${tCommon('perPage')}`,
+            value: String(size),
+          }))}
+          className="h-8 text-xs"
+        />
 
         <Button
           variant="ghost"

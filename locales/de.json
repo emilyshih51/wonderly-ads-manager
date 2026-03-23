@@ -449,7 +449,22 @@
     "runComplete": "Ausführung abgeschlossen",
     "runCompleteDesc": "Ergebnisse der Ausführung Ihrer Automatisierungsregel",
     "noActionsTaken": "Es wurden keine Aktionen durchgeführt",
-    "adsAffected": "{count, plural, one {Anzeige wurde betroffen} other {Anzeigen wurden betroffen}}"
+    "adsAffected": "{count, plural, one {Anzeige wurde betroffen} other {Anzeigen wurden betroffen}}",
+    "tabs": {
+      "rules": "Regeln",
+      "templates": "Vorlagen",
+      "activityLog": "Aktivitätsprotokoll"
+    },
+    "stepTarget": "Ziel",
+    "stepConditions": "Bedingungen",
+    "stepAction": "Aktion",
+    "back": "Zurück",
+    "entityBadge": {
+      "ad": "Anzeigenebene",
+      "adset": "Anzeigengruppen-Ebene",
+      "campaign": "Kampagnenebene"
+    },
+    "duplicatedToWinners": "In Gewinner-Anzeigengruppe dupliziert"
   },
   "settings": {
     "title": "Einstellungen",

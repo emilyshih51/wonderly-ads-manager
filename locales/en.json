@@ -449,7 +449,22 @@
     "runComplete": "Run Complete",
     "runCompleteDesc": "Results from executing your automation rule",
     "noActionsTaken": "No actions were taken",
-    "adsAffected": "{count, plural, one {ad was affected} other {ads were affected}}"
+    "adsAffected": "{count, plural, one {ad was affected} other {ads were affected}}",
+    "tabs": {
+      "rules": "Rules",
+      "templates": "Templates",
+      "activityLog": "Activity Log"
+    },
+    "stepTarget": "Target",
+    "stepConditions": "Conditions",
+    "stepAction": "Action",
+    "back": "Back",
+    "entityBadge": {
+      "ad": "Ad level",
+      "adset": "Ad set level",
+      "campaign": "Campaign level"
+    },
+    "duplicatedToWinners": "Duplicated to winners ad set"
   },
   "settings": {
     "title": "Settings",

@@ -449,7 +449,22 @@
     "runComplete": "執行完成",
     "runCompleteDesc": "自動化規則的執行結果",
     "noActionsTaken": "未執行任何操作",
-    "adsAffected": "{count, plural, other {個廣告受到影響}}"
+    "adsAffected": "{count, plural, other {個廣告受到影響}}",
+    "tabs": {
+      "rules": "規則",
+      "templates": "範本",
+      "activityLog": "活動記錄"
+    },
+    "stepTarget": "目標",
+    "stepConditions": "條件",
+    "stepAction": "動作",
+    "back": "返回",
+    "entityBadge": {
+      "ad": "廣告層級",
+      "adset": "廣告組層級",
+      "campaign": "廣告活動層級"
+    },
+    "duplicatedToWinners": "已複製至獲勝廣告組"
   },
   "settings": {
     "title": "設定",

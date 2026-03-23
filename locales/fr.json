@@ -449,7 +449,22 @@
     "runComplete": "Exécution terminée",
     "runCompleteDesc": "Résultats de l'exécution de votre règle d'automatisation",
     "noActionsTaken": "Aucune action n'a été effectuée",
-    "adsAffected": "{count, plural, one {annonce a été affectée} other {annonces ont été affectées}}"
+    "adsAffected": "{count, plural, one {annonce a été affectée} other {annonces ont été affectées}}",
+    "tabs": {
+      "rules": "Règles",
+      "templates": "Modèles",
+      "activityLog": "Journal d'activité"
+    },
+    "stepTarget": "Cible",
+    "stepConditions": "Conditions",
+    "stepAction": "Action",
+    "back": "Retour",
+    "entityBadge": {
+      "ad": "Niveau annonce",
+      "adset": "Niveau ensemble d'annonces",
+      "campaign": "Niveau campagne"
+    },
+    "duplicatedToWinners": "Dupliqué dans l'ensemble d'annonces gagnant"
   },
   "settings": {
     "title": "Paramètres",

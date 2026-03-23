@@ -449,7 +449,22 @@
     "runComplete": "실행 완료",
     "runCompleteDesc": "자동화 규칙 실행 결과",
     "noActionsTaken": "수행된 작업이 없습니다",
-    "adsAffected": "{count, plural, other {개 광고가 영향을 받았습니다}}"
+    "adsAffected": "{count, plural, other {개 광고가 영향을 받았습니다}}",
+    "tabs": {
+      "rules": "규칙",
+      "templates": "템플릿",
+      "activityLog": "활동 로그"
+    },
+    "stepTarget": "대상",
+    "stepConditions": "조건",
+    "stepAction": "작업",
+    "back": "뒤로",
+    "entityBadge": {
+      "ad": "광고 수준",
+      "adset": "광고 세트 수준",
+      "campaign": "캠페인 수준"
+    },
+    "duplicatedToWinners": "위너 광고 세트에 복제됨"
   },
   "settings": {
     "title": "설정",

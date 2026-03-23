@@ -449,7 +449,22 @@
     "runComplete": "実行完了",
     "runCompleteDesc": "自動化ルールの実行結果",
     "noActionsTaken": "アクションは実行されませんでした",
-    "adsAffected": "{count, plural, other {件の広告が影響を受けました}}"
+    "adsAffected": "{count, plural, other {件の広告が影響を受けました}}",
+    "tabs": {
+      "rules": "ルール",
+      "templates": "テンプレート",
+      "activityLog": "アクティビティログ"
+    },
+    "stepTarget": "対象",
+    "stepConditions": "条件",
+    "stepAction": "アクション",
+    "back": "戻る",
+    "entityBadge": {
+      "ad": "広告レベル",
+      "adset": "広告セットレベル",
+      "campaign": "キャンペーンレベル"
+    },
+    "duplicatedToWinners": "ウィナー広告セットに複製"
   },
   "settings": {
     "title": "設定",

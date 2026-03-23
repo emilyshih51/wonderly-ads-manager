@@ -449,7 +449,22 @@
     "runComplete": "执行完成",
     "runCompleteDesc": "自动化规则的执行结果",
     "noActionsTaken": "未执行任何操作",
-    "adsAffected": "{count, plural, other {个广告受到影响}}"
+    "adsAffected": "{count, plural, other {个广告受到影响}}",
+    "tabs": {
+      "rules": "规则",
+      "templates": "模板",
+      "activityLog": "活动日志"
+    },
+    "stepTarget": "目标",
+    "stepConditions": "条件",
+    "stepAction": "动作",
+    "back": "返回",
+    "entityBadge": {
+      "ad": "广告层级",
+      "adset": "广告组层级",
+      "campaign": "广告系列层级"
+    },
+    "duplicatedToWinners": "已复制到获胜广告组"
   },
   "settings": {
     "title": "设置",

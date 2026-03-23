@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/dropdown';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SlidePanel } from '@/components/data/slide-panel';
 import {
   Dialog,
   DialogContent,
@@ -23,8 +24,6 @@ import {
   Pause,
   ArrowLeft,
   X,
-  ChevronDown,
-  ChevronUp,
   Eye,
   Loader2,
   Settings2,
@@ -54,6 +53,7 @@ import {
 } from '@/lib/automation-config';
 import type { RuleConfig, Condition } from '@/lib/automation-config';
 import type { AutomationNode, AutomationEdge } from '@/types';
+import { cn } from '@/lib/utils';
 
 import { useTranslations } from 'next-intl';
 
@@ -238,54 +238,6 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-/* ─────────── Step Component ─────────── */
-
-function StepHeader({
-  number,
-  title,
-  subtitle,
-  isOpen,
-  onToggle,
-  isComplete,
-}: {
-  number: number;
-  title: string;
-  subtitle?: string;
-  isOpen: boolean;
-  onToggle: () => void;
-  isComplete: boolean;
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-[var(--color-muted)]"
-    >
-      <div
-        className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-          isComplete
-            ? 'bg-emerald-100 text-emerald-700'
-            : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-        }`}
-      >
-        {isComplete ? <Check className="h-4 w-4" /> : number}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-[var(--color-foreground)]">{title}</p>
-        {subtitle && (
-          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">{subtitle}</p>
-        )}
-      </div>
-      {isOpen ? (
-        <ChevronUp className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
-      ) : (
-        <ChevronDown className="h-4 w-4 flex-shrink-0 text-[var(--color-muted-foreground)]" />
-      )}
-    </button>
-  );
-}
-
-/* ─────────── Main Component ─────────── */
-
 /* ─────────── Copilot Card Component ─────────── */
 
 function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
@@ -296,7 +248,6 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
   const handleSubmit = () => {
     if (!input.trim()) return;
     setIsSubmitting(true);
-    // Simulate brief processing
     setTimeout(() => {
       onSubmit(input);
       setInput('');
@@ -312,9 +263,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
 
   return (
     <Card className="relative overflow-hidden p-6">
-      {/* Background accent */}
       <div className="absolute top-0 right-0 -mt-20 -mr-20 h-40 w-40 rounded-full bg-[var(--color-primary)]/5" />
-
       <div className="relative z-10">
         <div className="mb-4 flex items-center gap-2">
           <Wand2 className="h-5 w-5 text-[var(--color-primary)]" />
@@ -323,9 +272,7 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
             {t('aiBeta')}
           </span>
         </div>
-
         <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">{t('copilotHelp')}</p>
-
         <div className="space-y-3">
           <textarea
             value={input}
@@ -335,7 +282,6 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
             disabled={isSubmitting}
             className="h-24 w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           />
-
           <div className="flex justify-end">
             <Button
               onClick={handleSubmit}
@@ -361,6 +307,8 @@ function CopilotCard({ onSubmit }: { onSubmit: (input: string) => void }) {
   );
 }
 
+/* ─────────── Main Component ─────────── */
+
 export default function AutomationsPage() {
   const t = useTranslations('automations');
   const tCommon = useTranslations('common');
@@ -372,12 +320,16 @@ export default function AutomationsPage() {
   const toggleRule = useToggleRule();
   const logHistory = useLogHistory();
 
-  const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
+  // List view tab
+  const [listTab, setListTab] = useState<'rules' | 'templates' | 'activityLog'>('rules');
+
+  // Editor panel
+  const [editorOpen, setEditorOpen] = useState(false);
   const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
   const [ruleName, setRuleName] = useState('');
   const [config, setConfig] = useState<RuleConfig>({ ...DEFAULT_CONFIG });
 
-  // Step accordion
+  // Step state
   const [openStep, setOpenStep] = useState<number>(1);
 
   // Preview state
@@ -411,7 +363,7 @@ export default function AutomationsPage() {
         nodes,
         edges,
       });
-      setViewMode('list');
+      setEditorOpen(false);
     } catch (err) {
       logger.error('Save failed', err);
     }
@@ -434,46 +386,28 @@ export default function AutomationsPage() {
     }
   };
 
-  const applyTemplate = (template: Template) => {
-    setSelectedRule(null);
-    setRuleName(t(template.nameKey));
-    setConfig({ ...template.config });
+  const openEditor = (opts: { rule?: Rule; config?: RuleConfig; name?: string }) => {
+    setSelectedRule(opts.rule ?? null);
+    setRuleName(opts.name ?? t('newAutomation'));
+    setConfig(opts.config ?? { ...DEFAULT_CONFIG });
     setOpenStep(1);
     setPreviewLoaded(false);
     setPreviewAds([]);
-    setViewMode('editor');
+    setEditorOpen(true);
   };
 
-  const editRule = (rule: Rule) => {
-    setSelectedRule(rule);
-    setRuleName(rule.name);
-    setConfig(nodesToConfig(rule.nodes));
-    setOpenStep(1);
-    setPreviewLoaded(false);
-    setPreviewAds([]);
-    setViewMode('editor');
-  };
+  const applyTemplate = (template: Template) =>
+    openEditor({ config: { ...template.config }, name: t(template.nameKey) });
 
-  const newBlank = () => {
-    setSelectedRule(null);
-    setRuleName(t('newAutomation'));
-    setConfig({ ...DEFAULT_CONFIG });
-    setOpenStep(1);
-    setPreviewLoaded(false);
-    setPreviewAds([]);
-    setViewMode('editor');
-  };
+  const editRule = (rule: Rule) =>
+    openEditor({ rule, config: nodesToConfig(rule.nodes), name: rule.name });
+
+  const newBlank = () => openEditor({});
 
   const useCopilot = (input: string) => {
     const { config: parsedConfig, ruleName: parsedName } = parseCopilotInput(input);
 
-    setSelectedRule(null);
-    setRuleName(parsedName);
-    setConfig({ ...DEFAULT_CONFIG, ...parsedConfig });
-    setOpenStep(1);
-    setPreviewLoaded(false);
-    setPreviewAds([]);
-    setViewMode('editor');
+    openEditor({ config: { ...DEFAULT_CONFIG, ...parsedConfig }, name: parsedName });
   };
 
   /* ─── Preview Matching Ads ─── */
@@ -525,8 +459,6 @@ export default function AutomationsPage() {
 
       setTestResults(data);
       setTestDialogOpen(true);
-
-      // Log to activity history
       await logHistory.mutateAsync({
         rule_name: ruleName,
         type: 'test',
@@ -552,22 +484,15 @@ export default function AutomationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rule: {
-            name: rule.name,
-            is_active: true,
-            nodes: rule.nodes,
-            edges: rule.edges,
-          },
+          rule: { name: rule.name, is_active: true, nodes: rule.nodes, edges: rule.edges },
           send_slack: true,
-          live: true, // Actually execute actions
+          live: true,
         }),
       });
       const data = await res.json();
 
       setRunResults(data);
       setRunDialogOpen(true);
-
-      // Log to activity history
       await logHistory.mutateAsync({
         rule_name: rule.name,
         type: 'live',
@@ -640,119 +565,215 @@ export default function AutomationsPage() {
     <div className="flex h-screen flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 sm:px-6 md:px-8">
-        <div className="flex items-center gap-2">
-          {viewMode === 'editor' && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setViewMode('list')}
-              className="h-8 w-8 shrink-0"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          )}
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold text-[var(--color-foreground)] sm:text-lg">
-              {viewMode === 'list' ? t('title') : selectedRule ? t('saveRule') : t('newRule')}
-            </h1>
-            <p className="mt-0.5 hidden text-xs text-[var(--color-muted-foreground)] sm:block">
-              {viewMode === 'list' ? t('description') : t('conditions')}
-            </p>
-          </div>
+        <div className="min-w-0">
+          <h1 className="truncate text-base font-semibold text-[var(--color-foreground)] sm:text-lg">
+            {t('title')}
+          </h1>
+          <p className="mt-0.5 hidden text-xs text-[var(--color-muted-foreground)] sm:block">
+            {t('description')}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {viewMode === 'editor' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTestWorkflow}
-                disabled={testing}
-                className="h-8"
-              >
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{testing ? t('testing') : t('testRule')}</span>
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={saveRule.isPending} className="h-8">
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {saveRule.isPending ? t('saving') : t('saveRule')}
-                </span>
-              </Button>
-            </>
-          )}
-          {viewMode === 'list' && (
-            <Button size="sm" onClick={newBlank} className="h-8">
-              <Plus className="mr-1 h-3.5 w-3.5" /> {t('newRule')}
-            </Button>
-          )}
-        </div>
+        <Button size="sm" onClick={newBlank} className="h-8 shrink-0">
+          <Plus className="mr-1 h-3.5 w-3.5" /> {t('newRule')}
+        </Button>
       </div>
 
-      {/* ─── LIST VIEW ─── */}
-      {viewMode === 'list' && (
-        <div className="flex-1 overflow-y-auto">
-          {rulesLoading ? (
-            <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
-              <div className="space-y-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="h-8 w-8 rounded-lg" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-4 w-48" />
-                        <Skeleton className="h-3 w-72" />
-                      </div>
+      {/* Tab bar */}
+      <div className="flex shrink-0 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 sm:px-6 md:px-8">
+        {(['rules', 'templates', 'activityLog'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setListTab(tab)}
+            className={cn(
+              '-mb-px border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+              listTab === tab
+                ? 'border-[var(--color-foreground)] text-[var(--color-foreground)]'
+                : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+            )}
+          >
+            {t(`tabs.${tab}`)}
+          </button>
+        ))}
+      </div>
+
+      {/* List content */}
+      <div className="flex-1 overflow-y-auto">
+        {rulesLoading ? (
+          <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
+            <div className="space-y-8">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-72" />
                     </div>
-                    <Skeleton className="mt-4 h-10 w-full rounded-lg" />
-                  </CardContent>
-                </Card>
-                <div>
-                  <Skeleton className="mb-4 h-3 w-24" />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <Card key={i} className="flex items-start gap-3 p-4">
-                        <Skeleton className="mt-0.5 h-5 w-5 rounded" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-full" />
-                        </div>
-                      </Card>
-                    ))}
                   </div>
-                </div>
-                <div>
-                  <Skeleton className="mb-4 h-3 w-32" />
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Card key={i} className="mb-2 flex items-center gap-4 p-4">
-                      <Skeleton className="h-7 w-7 rounded-full" />
+                  <Skeleton className="mt-4 h-10 w-full rounded-lg" />
+                </CardContent>
+              </Card>
+              <div>
+                <Skeleton className="mb-4 h-3 w-24" />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Card key={i} className="flex items-start gap-3 p-4">
+                      <Skeleton className="mt-0.5 h-5 w-5 rounded" />
                       <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Skeleton className="h-4 w-36" />
-                          <Skeleton className="h-4 w-12 rounded" />
-                        </div>
-                        <Skeleton className="h-3 w-56" />
-                      </div>
-                      <div className="flex gap-1">
-                        <Skeleton className="h-7 w-16 rounded-md" />
-                        <Skeleton className="h-7 w-7 rounded-md" />
-                        <Skeleton className="h-7 w-7 rounded-md" />
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-full" />
                       </div>
                     </Card>
                   ))}
                 </div>
               </div>
+              <div>
+                <Skeleton className="mb-4 h-3 w-32" />
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Card key={i} className="mb-2 flex items-center gap-4 p-4">
+                    <Skeleton className="h-7 w-7 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-4 w-12 rounded" />
+                      </div>
+                      <Skeleton className="h-3 w-56" />
+                    </div>
+                    <div className="flex gap-1">
+                      <Skeleton className="h-7 w-16 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                      <Skeleton className="h-7 w-7 rounded-md" />
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
-              <div className="space-y-8">
-                {/* Copilot */}
-                <CopilotCard onSubmit={useCopilot} />
+          </div>
+        ) : (
+          <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 md:px-8">
+            {/* ─── RULES TAB ─── */}
+            {listTab === 'rules' && (
+              <div className="space-y-2">
+                {rules.length === 0 ? (
+                  <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
+                    <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                    <p className="text-sm text-[var(--color-muted-foreground)]">
+                      {t('noRulesYet')}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      {t('pickTemplate')}
+                    </p>
+                  </Card>
+                ) : (
+                  rules.map((rule) => {
+                    const cfg = getRuleSummary(rule);
+                    const condSummary = cfg.conditions
+                      .map((c) => {
+                        const labelKey = METRIC_OPTIONS.find((m) => m.value === c.metric)?.labelKey;
 
-                {/* Templates */}
+                        return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
+                      })
+                      .join(' AND ');
+
+                    return (
+                      <Card
+                        key={rule.id}
+                        className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
+                      >
+                        <Switch
+                          checked={rule.is_active}
+                          onCheckedChange={() => handleToggle(rule)}
+                          aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p
+                              className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
+                            >
+                              {rule.name}
+                            </p>
+                            <span
+                              className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                rule.is_active
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                                  : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                              }`}
+                            >
+                              {rule.is_active ? t('ruleActive') : t('ruleOff')}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                            {cfg.campaign_name && (
+                              <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
+                            )}
+                            {cfg.campaign_name && <span>·</span>}
+                            <span>
+                              {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
+                            </span>
+                            <span>·</span>
+                            <span className="capitalize">{cfg.action_type}</span>
+                            {cfg.slack_channel && (
+                              <>
+                                <span>·</span>
+                                <span>{cfg.slack_channel}</span>
+                              </>
+                            )}
+                          </div>
+                          {condSummary && (
+                            <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
+                              {t('if')}: {condSummary}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 sm:shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setConfirmRunRule(rule)}
+                            disabled={runningRuleId === rule.id}
+                          >
+                            {runningRuleId === rule.id ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Play className="mr-1 h-3 w-3" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {runningRuleId === rule.id ? t('running') : t('runNow')}
+                            </span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => editRule(rule)}
+                            title={t('editRule')}
+                          >
+                            <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => handleDelete(rule.id)}
+                            title={t('deleteRule')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
+                          </Button>
+                        </div>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* ─── TEMPLATES TAB ─── */}
+            {listTab === 'templates' && (
+              <div className="space-y-8">
                 <div>
                   <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                    Starter templates
+                    {t('starterTemplates')}
                   </h2>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {TEMPLATES.map((tmpl) => (
@@ -777,299 +798,200 @@ export default function AutomationsPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* Active Rules */}
-                <div>
-                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                    {t('yourRules')} {rules.length > 0 && `(${rules.length})`}
-                  </h2>
-                  {rules.length === 0 ? (
-                    <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
-                      <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                      <p className="text-sm text-[var(--color-muted-foreground)]">
-                        {t('noRulesYet')}
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                        {t('pickTemplate')}
-                      </p>
-                    </Card>
-                  ) : (
-                    <div className="space-y-2">
-                      {rules.map((rule) => {
-                        const cfg = getRuleSummary(rule);
-                        const condSummary = cfg.conditions
-                          .map((c) => {
-                            const labelKey = METRIC_OPTIONS.find(
-                              (m) => m.value === c.metric
-                            )?.labelKey;
-
-                            return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
-                          })
-                          .join(' AND ');
-
-                        return (
-                          <Card
-                            key={rule.id}
-                            className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
-                          >
-                            <Switch
-                              checked={rule.is_active}
-                              onCheckedChange={() => handleToggle(rule)}
-                              aria-label={rule.is_active ? t('pauseRule') : t('enableRule')}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <p
-                                  className={`text-sm font-medium ${rule.is_active ? 'text-[var(--color-foreground)]' : 'text-[var(--color-muted-foreground)]'}`}
-                                >
-                                  {rule.name}
-                                </p>
-                                <span
-                                  className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                    rule.is_active
-                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
-                                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                                  }`}
-                                >
-                                  {rule.is_active ? t('ruleActive') : t('ruleOff')}
-                                </span>
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
-                                {cfg.campaign_name && (
-                                  <span className="max-w-[200px] truncate">
-                                    {cfg.campaign_name}
-                                  </span>
-                                )}
-                                {cfg.campaign_name && <span>·</span>}
-                                <span>
-                                  {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
-                                </span>
-                                <span>·</span>
-                                <span className="capitalize">{cfg.action_type}</span>
-                                {cfg.slack_channel && (
-                                  <>
-                                    <span>·</span>
-                                    <span>{cfg.slack_channel}</span>
-                                  </>
-                                )}
-                              </div>
-                              {condSummary && (
-                                <p className="mt-0.5 truncate text-xs text-[var(--color-muted-foreground)]">
-                                  {t('if')}: {condSummary}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 sm:shrink-0">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => setConfirmRunRule(rule)}
-                                disabled={runningRuleId === rule.id}
-                              >
-                                {runningRuleId === rule.id ? (
-                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Play className="mr-1 h-3 w-3" />
-                                )}
-                                <span className="hidden sm:inline">
-                                  {runningRuleId === rule.id ? t('running') : t('runNow')}
-                                </span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => editRule(rule)}
-                                title={t('editRule')}
-                              >
-                                <Settings2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)]" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleDelete(rule.id)}
-                                title={t('deleteRule')}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-[var(--color-muted-foreground)] hover:text-red-400" />
-                              </Button>
-                            </div>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Activity Log */}
-                <div>
-                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                    {t('activityLog')} {activityLog.length > 0 && `(${activityLog.length})`}
-                  </h2>
-                  {activityLog.length === 0 ? (
-                    <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
-                      <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
-                      <p className="text-sm text-[var(--color-muted-foreground)]">
-                        {t('noRunsYet')}
-                      </p>
-                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                        {t('testOrActivate')}
-                      </p>
-                    </Card>
-                  ) : (
-                    <div className="space-y-2">
-                      {activityLog.map((event) => {
-                        const date = new Date(event.timestamp);
-                        const timeStr = date.toLocaleString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true,
-                        });
-                        const isTest = event.type === 'test';
-
-                        return (
-                          <Card key={event.id} className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                    isTest
-                                      ? 'bg-amber-50 text-amber-700'
-                                      : 'bg-emerald-50 text-emerald-700'
-                                  }`}
-                                >
-                                  {isTest ? t('test') : t('live')}
-                                </span>
-                                <p className="text-sm font-medium text-[var(--color-foreground)]">
-                                  {event.rule_name}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {!isTest &&
-                                  event.results?.some((r) =>
-                                    r.action
-                                      ? ['paused', 'activated', 'promoted'].includes(r.action)
-                                      : false
-                                  ) && (
-                                    <button
-                                      onClick={() => handleRollback(event.id, event.results || [])}
-                                      disabled={rollingBackId === event.id}
-                                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
-                                      title={t('undoActions')}
-                                    >
-                                      {rollingBackId === event.id ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <RotateCcw className="h-3 w-3" />
-                                      )}
-                                      {t('undo')}
-                                    </button>
-                                  )}
-                                <p className="text-xs text-[var(--color-muted-foreground)]">
-                                  {timeStr}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                              {event.matched === 0 ? (
-                                <p>{t('noAdsMatched')}</p>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  <p>
-                                    <span className="font-medium text-[var(--color-foreground)]">
-                                      {event.matched}
-                                    </span>{' '}
-                                    {t('adsMatched', { count: event.matched })}
-                                  </p>
-                                  {event.results?.map((r, i) => (
-                                    <div
-                                      key={i}
-                                      className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
-                                    >
-                                      <span className="truncate text-[var(--color-foreground)]">
-                                        {r.entity_name}
-                                      </span>
-                                      <div className="ml-2 flex flex-shrink-0 items-center gap-2">
-                                        <span className="text-[var(--color-muted-foreground)]">
-                                          $
-                                          {r.metrics?.spend?.toFixed?.(2) ||
-                                            r.metrics?.spend ||
-                                            '0'}{' '}
-                                          · {r.metrics?.results ?? 0} {tMetrics('results')}
-                                        </span>
-                                        <span
-                                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                                            r.action?.includes('pause') ||
-                                            r.action?.includes('would_pause')
-                                              ? 'bg-red-50 text-red-600'
-                                              : r.action?.includes('promote') ||
-                                                  r.action?.includes('would_promote')
-                                                ? 'bg-emerald-50 text-emerald-600'
-                                                : 'bg-blue-50 text-blue-600'
-                                          }`}
-                                        >
-                                          {r.action?.replace('would_', '')}
-                                        </span>
-                                        {r.slack_sent && (
-                                          <span className="text-[10px] text-emerald-500">
-                                            {t('slackSent')}
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <CopilotCard onSubmit={useCopilot} />
               </div>
+            )}
+
+            {/* ─── ACTIVITY LOG TAB ─── */}
+            {listTab === 'activityLog' && (
+              <div>
+                {activityLog.length === 0 ? (
+                  <Card className="border-dashed bg-[var(--color-muted)] py-8 text-center">
+                    <Activity className="mx-auto mb-2 h-8 w-8 text-[var(--color-muted-foreground)]" />
+                    <p className="text-sm text-[var(--color-muted-foreground)]">{t('noRunsYet')}</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      {t('testOrActivate')}
+                    </p>
+                  </Card>
+                ) : (
+                  <div className="space-y-2">
+                    {activityLog.map((event) => {
+                      const date = new Date(event.timestamp);
+                      const timeStr = date.toLocaleString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                      const isTest = event.type === 'test';
+
+                      return (
+                        <Card key={event.id} className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                  isTest
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-emerald-50 text-emerald-700'
+                                }`}
+                              >
+                                {isTest ? t('test') : t('live')}
+                              </span>
+                              <p className="text-sm font-medium text-[var(--color-foreground)]">
+                                {event.rule_name}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {!isTest &&
+                                event.results?.some((r) =>
+                                  r.action
+                                    ? ['paused', 'activated', 'promoted'].includes(r.action)
+                                    : false
+                                ) && (
+                                  <button
+                                    onClick={() => handleRollback(event.id, event.results || [])}
+                                    disabled={rollingBackId === event.id}
+                                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:opacity-50"
+                                    title={t('undoActions')}
+                                  >
+                                    {rollingBackId === event.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="h-3 w-3" />
+                                    )}
+                                    {t('undo')}
+                                  </button>
+                                )}
+                              <p className="text-xs text-[var(--color-muted-foreground)]">
+                                {timeStr}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                            {event.matched === 0 ? (
+                              <p>{t('noAdsMatched')}</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <p>
+                                  <span className="font-medium text-[var(--color-foreground)]">
+                                    {event.matched}
+                                  </span>{' '}
+                                  {t('adsMatched', { count: event.matched })}
+                                </p>
+                                {event.results?.map((r, i) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center justify-between border-l-2 border-[var(--color-border)] pl-3"
+                                  >
+                                    <span className="truncate text-[var(--color-foreground)]">
+                                      {r.entity_name}
+                                    </span>
+                                    <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                                      <span className="text-[var(--color-muted-foreground)]">
+                                        ${r.metrics?.spend?.toFixed?.(2) || r.metrics?.spend || '0'}{' '}
+                                        · {r.metrics?.results ?? 0} {tMetrics('results')}
+                                      </span>
+                                      <span
+                                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                          r.action?.includes('pause') ||
+                                          r.action?.includes('would_pause')
+                                            ? 'bg-red-50 text-red-600'
+                                            : r.action?.includes('promote') ||
+                                                r.action?.includes('would_promote')
+                                              ? 'bg-emerald-50 text-emerald-600'
+                                              : 'bg-blue-50 text-blue-600'
+                                        }`}
+                                      >
+                                        {r.action?.replace('would_', '')}
+                                      </span>
+                                      {r.slack_sent && (
+                                        <span className="text-[10px] text-emerald-500">
+                                          {t('slackSent')}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ─── EDITOR SLIDE PANEL ─── */}
+      <SlidePanel
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        title={selectedRule ? t('saveRule') : t('newRule')}
+        width="780px"
+      >
+        <div className="flex h-full flex-col">
+          {/* Rule name */}
+          <div className="mb-6 shrink-0">
+            <label className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+              {t('ruleName')}
+            </label>
+            <Input
+              value={ruleName}
+              onChange={(e) => setRuleName(e.target.value)}
+              className="mt-2 h-10 text-base font-medium"
+              placeholder={t('ruleNamePlaceholder')}
+            />
+          </div>
+
+          {/* Stepper + content */}
+          <div className="flex min-h-0 flex-1 gap-6">
+            {/* Left stepper rail */}
+            <div className="flex w-36 shrink-0 flex-col gap-1 pt-1">
+              {[
+                { step: 1, label: t('stepTarget'), complete: isStep1Complete },
+                { step: 2, label: t('stepConditions'), complete: isStep2Complete },
+                { step: 3, label: t('stepAction'), complete: isStep3Complete },
+              ].map(({ step, label, complete }) => (
+                <button
+                  key={step}
+                  onClick={() => setOpenStep(step)}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                    openStep === step
+                      ? 'bg-[var(--color-foreground)] text-[var(--color-background)]'
+                      : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold',
+                      complete
+                        ? openStep === step
+                          ? 'bg-emerald-400 text-white'
+                          : 'bg-emerald-100 text-emerald-700'
+                        : openStep === step
+                          ? 'bg-white/20 text-[var(--color-background)]'
+                          : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                    )}
+                  >
+                    {complete ? <Check className="h-3 w-3" /> : step}
+                  </div>
+                  <span className="font-medium">{label}</span>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-      )}
 
-      {/* ─── EDITOR VIEW (Step-by-step form) ─── */}
-      {viewMode === 'editor' && (
-        <div className="flex-1 overflow-y-auto bg-[var(--color-background)]">
-          <div className="mx-auto max-w-2xl space-y-4 px-8 py-6">
-            {/* Rule Name */}
-            <Card className="p-5">
-              <label className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                {t('ruleName')}
-              </label>
-              <Input
-                value={ruleName}
-                onChange={(e) => setRuleName(e.target.value)}
-                className="mt-2 h-10 text-base font-medium"
-                placeholder={t('ruleNamePlaceholder')}
-              />
-            </Card>
-
-            {/* ─── STEP 1: Apply rule to ─── */}
-            <Card className="overflow-hidden">
-              <StepHeader
-                number={1}
-                title={t('applyRuleTo')}
-                subtitle={
-                  config.campaign_name
-                    ? `${config.entity_type === 'ad' ? t('allAds') : config.entity_type === 'adset' ? t('allAdSets') : tCommon('campaigns')} ${t('inCampaign', { name: config.campaign_name })}`
-                    : t('selectCampaignAndEntity')
-                }
-                isOpen={openStep === 1}
-                onToggle={() => setOpenStep(openStep === 1 ? 0 : 1)}
-                isComplete={isStep1Complete}
-              />
+            {/* Right content area */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {/* ─── STEP 1: Target ─── */}
               {openStep === 1 && (
-                <div className="space-y-4 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
-                  {/* Entity type */}
+                <div className="space-y-4">
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('entityLevel')}
@@ -1095,7 +1017,6 @@ export default function AutomationsPage() {
                     </div>
                   </div>
 
-                  {/* Campaign selector */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {tCommon('campaign')}
@@ -1105,10 +1026,7 @@ export default function AutomationsPage() {
                         value={config.campaign_id}
                         displayName={config.campaign_name}
                         onChange={(id, name) =>
-                          updateConfig({
-                            campaign_id: id,
-                            campaign_name: name,
-                          })
+                          updateConfig({ campaign_id: id, campaign_name: name })
                         }
                         placeholder={t('searchByCampaign')}
                       />
@@ -1118,7 +1036,6 @@ export default function AutomationsPage() {
                     </p>
                   </div>
 
-                  {/* Schedule */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('checkFrequency')}
@@ -1134,7 +1051,6 @@ export default function AutomationsPage() {
                     />
                   </div>
 
-                  {/* Performance period */}
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('performancePeriod')}
@@ -1152,43 +1068,12 @@ export default function AutomationsPage() {
                       {t('timeRangeDesc')}
                     </p>
                   </div>
-
-                  <Button
-                    size="sm"
-                    onClick={() => setOpenStep(2)}
-                    className="mt-2"
-                    disabled={!isStep1Complete}
-                  >
-                    {t('continue')} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Button>
                 </div>
               )}
-            </Card>
 
-            {/* ─── STEP 2: Conditions ─── */}
-            <Card className="overflow-hidden">
-              <StepHeader
-                number={2}
-                title={t('setConditions')}
-                subtitle={
-                  isStep2Complete
-                    ? config.conditions
-                        .map((c) => {
-                          const labelKey = METRIC_OPTIONS.find(
-                            (m) => m.value === c.metric
-                          )?.labelKey;
-
-                          return `${labelKey ? tCommon(labelKey) : c.metric} ${c.operator} ${c.threshold}`;
-                        })
-                        .join(' AND ')
-                    : t('setPerformanceThresholds')
-                }
-                isOpen={openStep === 2}
-                onToggle={() => setOpenStep(openStep === 2 ? 0 : 2)}
-                isComplete={isStep2Complete}
-              />
+              {/* ─── STEP 2: Conditions ─── */}
               {openStep === 2 && (
-                <div className="space-y-3 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
+                <div className="space-y-3">
                   <p className="text-xs text-[var(--color-muted-foreground)]">
                     {t('allConditionsMet')}
                   </p>
@@ -1221,11 +1106,7 @@ export default function AutomationsPage() {
                         <Input
                           type="number"
                           value={cond.threshold}
-                          onChange={(e) =>
-                            updateCondition(cond.id, {
-                              threshold: e.target.value,
-                            })
-                          }
+                          onChange={(e) => updateCondition(cond.id, { threshold: e.target.value })}
                           placeholder={t('value')}
                           className="h-9 w-24"
                         />
@@ -1334,36 +1215,12 @@ export default function AutomationsPage() {
                       </div>
                     )}
                   </div>
-
-                  <Button
-                    size="sm"
-                    onClick={() => setOpenStep(3)}
-                    className="mt-2"
-                    disabled={!isStep2Complete}
-                  >
-                    {t('continue')} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                  </Button>
                 </div>
               )}
-            </Card>
 
-            {/* ─── STEP 3: Action ─── */}
-            <Card className="overflow-hidden">
-              <StepHeader
-                number={3}
-                title={t('actionStep')}
-                subtitle={
-                  isStep3Complete
-                    ? `${config.action_type === 'promote' ? t('promotePauseDuplicate') : config.action_type === 'pause' ? t('pause') : config.action_type === 'activate' ? t('activate') : t('notify')}${config.also_notify_slack ? ` → ${config.slack_channel || 'Slack'}` : ''}`
-                    : t('whatHappensWhenMet')
-                }
-                isOpen={openStep === 3}
-                onToggle={() => setOpenStep(openStep === 3 ? 0 : 3)}
-                isComplete={isStep3Complete}
-              />
+              {/* ─── STEP 3: Action ─── */}
               {openStep === 3 && (
-                <div className="space-y-4 border-t border-[var(--color-border)] px-5 pt-4 pb-5">
-                  {/* Action type */}
+                <div className="space-y-4">
                   <div>
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('actionType')}
@@ -1418,7 +1275,6 @@ export default function AutomationsPage() {
                     </div>
                   </div>
 
-                  {/* Promote target */}
                   {config.action_type === 'promote' && (
                     <div>
                       <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
@@ -1432,10 +1288,7 @@ export default function AutomationsPage() {
                           value={config.target_adset_id}
                           displayName={config.target_adset_name}
                           onChange={(id, name) =>
-                            updateConfig({
-                              target_adset_id: id,
-                              target_adset_name: name,
-                            })
+                            updateConfig({ target_adset_id: id, target_adset_name: name })
                           }
                           placeholder={t('searchForWinnersAdSet')}
                         />
@@ -1443,7 +1296,6 @@ export default function AutomationsPage() {
                     </div>
                   )}
 
-                  {/* Slack notification */}
                   <div className="border-t border-[var(--color-border)] pt-4">
                     <label className="flex cursor-pointer items-center gap-2.5">
                       <Switch
@@ -1464,11 +1316,7 @@ export default function AutomationsPage() {
                           </label>
                           <Input
                             value={config.slack_channel}
-                            onChange={(e) =>
-                              updateConfig({
-                                slack_channel: e.target.value,
-                              })
-                            }
+                            onChange={(e) => updateConfig({ slack_channel: e.target.value })}
                             className="mt-1 h-9"
                             placeholder={t('channelPlaceholder')}
                           />
@@ -1482,26 +1330,16 @@ export default function AutomationsPage() {
                           </label>
                           <textarea
                             value={config.slack_message}
-                            onChange={(e) =>
-                              updateConfig({
-                                slack_message: e.target.value,
-                              })
-                            }
+                            onChange={(e) => updateConfig({ slack_message: e.target.value })}
                             className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 font-mono text-sm text-[var(--color-foreground)] focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             rows={3}
                             placeholder={t('leaveEmptyDefault')}
                           />
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {[
-                              {
-                                var: '{rule_name}',
-                                label: t('ruleName'),
-                              },
+                              { var: '{rule_name}', label: t('ruleName') },
                               { var: '{action}', label: t('action') },
-                              {
-                                var: '{entity_name}',
-                                label: tMetrics('adName'),
-                              },
+                              { var: '{entity_name}', label: tMetrics('adName') },
                               { var: '{ad_link}', label: t('adLink') },
                               { var: '{spend}', label: tMetrics('spend') },
                               { var: '{results}', label: tMetrics('results') },
@@ -1525,7 +1363,6 @@ export default function AutomationsPage() {
                             ))}
                           </div>
 
-                          {/* Live preview with matched ad data */}
                           {(config.slack_message || previewAds.length > 0) && (
                             <div className="mt-3">
                               <p className="mb-1.5 text-[10px] font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
@@ -1576,83 +1413,42 @@ export default function AutomationsPage() {
                   </div>
                 </div>
               )}
-            </Card>
+            </div>
+          </div>
 
-            {/* ─── Summary + Actions ─── */}
-            {isStep1Complete && isStep2Complete && isStep3Complete && (
-              <Card className="p-5">
-                <h3 className="mb-3 text-sm font-semibold text-[var(--color-foreground)]">
-                  {t('summary')}
-                </h3>
-                <div className="space-y-2 text-sm text-[var(--color-muted-foreground)]">
-                  <p>
-                    <span className="text-[var(--color-muted-foreground)]">{t('applyTo')}</span>{' '}
-                    {config.entity_type === 'ad'
-                      ? t('allAds')
-                      : config.entity_type === 'adset'
-                        ? t('allAdSets')
-                        : tCommon('campaigns')}
-                    {config.campaign_name && ' ' + t('inCampaign', { name: config.campaign_name })}
-                  </p>
-                  <p>
-                    <span className="text-[var(--color-muted-foreground)]">{t('when')}</span>{' '}
-                    {config.conditions.map((c, i) => (
-                      <span key={c.id}>
-                        {i > 0 && (
-                          <span className="text-[var(--color-muted-foreground)]"> AND </span>
-                        )}
-                        <span className="font-medium text-[var(--color-foreground)]">
-                          {(() => {
-                            const lk = METRIC_OPTIONS.find((m) => m.value === c.metric)?.labelKey;
-
-                            return lk ? tCommon(lk) : c.metric;
-                          })()}{' '}
-                          {c.operator} {c.threshold}
-                        </span>
-                      </span>
-                    ))}
-                  </p>
-                  <p>
-                    <span className="text-[var(--color-muted-foreground)]">{t('then')}</span>{' '}
-                    <span className="font-medium text-[var(--color-foreground)] capitalize">
-                      {config.action_type}
-                    </span>
-                    {config.action_type === 'promote' && config.target_adset_name && (
-                      <span> {t('toAdSet', { name: config.target_adset_name })}</span>
-                    )}
-                    {config.also_notify_slack && config.slack_channel && (
-                      <span> {t('notifyChannel', { channel: config.slack_channel })}</span>
-                    )}
-                  </p>
-                  <p>
-                    <span className="text-[var(--color-muted-foreground)]">{t('frequency')}</span>{' '}
-                    {t(SCHEDULE_LABEL_KEYS[config.schedule] || 'scheduleLabels.hourly')} ·{' '}
-                    {t(
-                      DATE_PRESET_OPTIONS.find((d) => d.value === config.date_preset)?.labelKey ||
-                        'datePresets.last7d'
-                    )}
-                  </p>
-                </div>
-                <div className="mt-4 flex items-center gap-2 border-t border-[var(--color-border)] pt-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTestWorkflow}
-                    disabled={testing}
-                  >
-                    <Play className="mr-1.5 h-3.5 w-3.5" />
-                    {testing ? t('testing') : t('testRule')}
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
-                    <Save className="mr-1.5 h-3.5 w-3.5" />
-                    {saveRule.isPending ? t('saving') : t('saveRule')}
-                  </Button>
-                </div>
-              </Card>
-            )}
+          {/* Footer */}
+          <div className="mt-4 flex shrink-0 items-center justify-between border-t border-[var(--color-border)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => (openStep > 1 ? setOpenStep(openStep - 1) : setEditorOpen(false))}
+            >
+              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+              {openStep === 1 ? tCommon('cancel') : t('back')}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+                {testing ? t('testing') : t('testRule')}
+              </Button>
+              {openStep < 3 ? (
+                <Button
+                  size="sm"
+                  onClick={() => setOpenStep(openStep + 1)}
+                  disabled={openStep === 1 ? !isStep1Complete : !isStep2Complete}
+                >
+                  {t('continue')} <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button size="sm" onClick={handleSave} disabled={saveRule.isPending}>
+                  <Save className="mr-1.5 h-3.5 w-3.5" />
+                  {saveRule.isPending ? t('saving') : t('saveRule')}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      </SlidePanel>
 
       {/* ─── Test Results Dialog ─── */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>

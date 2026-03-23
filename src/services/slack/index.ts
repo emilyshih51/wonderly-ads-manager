@@ -617,15 +617,17 @@ export class SlackService {
     const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
     const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
 
+    // Use searchParams for standard params (they handle encoding automatically),
+    // then manually append filter_set which contains pre-encoded %1E separators
+    // that must not be double-encoded by URLSearchParams.
     const url = new URL('https://adsmanager.facebook.com/adsmanager/manage/ads');
 
     url.searchParams.set('act', adAccountId);
-    url.searchParams.set('filter_set', filterSet);
     url.searchParams.set('selected_ad_ids', entityId);
     url.searchParams.set('date_source', 'today');
     url.searchParams.set('nav_source', 'ads_manager');
 
-    return url.toString();
+    return `${url.toString()}&filter_set=${filterSet}`;
   }
 
   private static splitText(text: string, maxLen: number): string[] {

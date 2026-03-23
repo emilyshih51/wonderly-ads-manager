@@ -228,6 +228,16 @@ Each service has a test file:
 - `src/services/logger/__tests__/logger.test.ts`
 - `src/lib/__tests__/automation-utils.test.ts`
 
+### Locale completeness test
+
+`locales/__tests__/locales.test.ts` verifies every locale file has **exactly the same keys** as `en.json` (no missing, no extras). It uses `en.json` as the source of truth and checks all other locale files against it.
+
+**Rules:**
+
+- `en.json` is the canonical locale — add new keys there first.
+- After adding any key to `en.json`, add the translated equivalent to **all other locale files** (`de`, `es`, `fr`, `ja`, `ko`, `pt`, `zh`, `zh-TW`).
+- Run `npm test -- locales` to verify before committing.
+
 ---
 
 ## Deployment

@@ -624,7 +624,7 @@ export class SlackService {
 
     url.searchParams.set('act', adAccountId);
     url.searchParams.set('selected_ad_ids', entityId);
-    url.searchParams.set('date_source', 'today');
+    url.searchParams.set('date_preset', 'today');
     url.searchParams.set('nav_source', 'ads_manager');
 
     return `${url.toString()}&filter_set=${filterSet}`;

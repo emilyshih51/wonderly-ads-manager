@@ -9,7 +9,7 @@ export default getRequestConfig(async () => {
     ? (raw as Locale)
     : defaultLocale;
 
-  const messages = (await import(`../../messages/${locale}.json`)).default;
+  const messages = (await import(`../../locales/${locale}.json`)).default;
 
   return { locale, messages };
 });

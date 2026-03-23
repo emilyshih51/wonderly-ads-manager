@@ -277,4 +277,4 @@ chore(deps): Upgrade next to 16.1.0
 - Do not use `console.*` — use `createLogger()` from `@/services/logger`.
 - Do not use `reactflow` for anything other than the automation flow editor.
 - Do not add a second state management library — Zustand is the only one.
-- Do not hardcode UI strings — always add them to `messages/en.json` (and all other locale files in `messages/`) and reference them via `useTranslations()`.
+- Do not hardcode UI strings — always add them to `locales/en.json` (and all other locale files in `locales/`) and reference them via `useTranslations()`.

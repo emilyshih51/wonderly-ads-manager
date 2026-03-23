@@ -93,7 +93,17 @@ export async function GET(request: NextRequest) {
       logger.error(`Failed to get optimization map for account ${adAccountId}`, e);
     }
 
+    const now = new Date();
+
     for (const rule of accountRules) {
+      const triggerNode = rule.nodes.find((n) => n.type === 'trigger');
+      const schedule = (triggerNode?.data?.config as { schedule?: string } | undefined)?.schedule;
+
+      if (!shouldRunRule(schedule, now)) {
+        logger.info('Skipping rule (not due this tick)', { rule: rule.name, schedule });
+        continue;
+      }
+
       try {
         const result = await evaluateRule(rule, meta, adAccountId, optimizationMap, {
           actionCap,
@@ -217,6 +227,36 @@ interface EvaluateRuleOptions {
   dryRun?: boolean;
   sendSlack?: boolean;
   actionCap?: { executed: number; max: number };
+}
+
+/**
+ * Returns true if a rule with the given schedule should run on this cron tick.
+ * The cron fires every 5 minutes; this gates rules that run less frequently.
+ *
+ * @param schedule - Schedule value from the trigger config
+ * @param now - Current UTC time
+ */
+function shouldRunRule(schedule: string | undefined, now: Date): boolean {
+  const m = now.getUTCMinutes();
+  const h = now.getUTCHours();
+
+  switch (schedule) {
+    case '5min':
+      return true;
+    case '15min':
+      // Aligned to wall-clock boundaries (0, 15, 30, 45). Cron ticks at :05, :10, etc.
+      // will skip — this is intentional, not a bug.
+      return m % 15 === 0;
+    case 'hourly':
+      return m === 0;
+    case '6hours':
+      // Allow up to 4 min of cron jitter before declaring the window missed.
+      return h % 6 === 0 && m < 5;
+    case 'daily':
+      return h === 0 && m < 5;
+    default:
+      return true;
+  }
 }
 
 async function evaluateRule(

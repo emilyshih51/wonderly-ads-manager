@@ -395,12 +395,14 @@
       "last30d": "最近 30 天"
     },
     "schedules": {
+      "5min": "每 5 分钟",
       "15min": "每 15 分钟",
       "hourly": "每小时",
       "6hours": "每 6 小时",
       "daily": "每天"
     },
     "scheduleLabels": {
+      "5min": "每 5 分钟",
       "15min": "每 15 分钟",
       "hourly": "每小时",
       "6hours": "每 6 小时",

@@ -124,6 +124,7 @@ const DATE_PRESET_OPTIONS = [
 ];
 
 const SCHEDULE_OPTIONS = [
+  { labelKey: 'schedules.5min', value: '5min' },
   { labelKey: 'schedules.15min', value: '15min' },
   { labelKey: 'schedules.hourly', value: 'hourly' },
   { labelKey: 'schedules.6hours', value: '6hours' },
@@ -131,6 +132,7 @@ const SCHEDULE_OPTIONS = [
 ];
 
 const SCHEDULE_LABEL_KEYS: Record<string, string> = {
+  '5min': 'scheduleLabels.5min',
   '15min': 'scheduleLabels.15min',
   hourly: 'scheduleLabels.hourly',
   '6hours': 'scheduleLabels.6hours',

@@ -395,12 +395,14 @@
       "last30d": "Last 30 days"
     },
     "schedules": {
+      "5min": "Every 5 minutes",
       "15min": "Every 15 minutes",
       "hourly": "Every hour",
       "6hours": "Every 6 hours",
       "daily": "Daily"
     },
     "scheduleLabels": {
+      "5min": "Every 5 min",
       "15min": "Every 15 min",
       "hourly": "Every hour",
       "6hours": "Every 6 hours",

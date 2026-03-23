@@ -395,12 +395,14 @@
       "last30d": "최근 30일"
     },
     "schedules": {
+      "5min": "5분마다",
       "15min": "15분마다",
       "hourly": "매시간",
       "6hours": "6시간마다",
       "daily": "매일"
     },
     "scheduleLabels": {
+      "5min": "5분마다",
       "15min": "15분마다",
       "hourly": "매시간",
       "6hours": "6시간마다",

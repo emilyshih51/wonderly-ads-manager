@@ -395,12 +395,14 @@
       "last30d": "過去30日間"
     },
     "schedules": {
+      "5min": "5分ごと",
       "15min": "15分ごと",
       "hourly": "1時間ごと",
       "6hours": "6時間ごと",
       "daily": "毎日"
     },
     "scheduleLabels": {
+      "5min": "5分ごと",
       "15min": "15分ごと",
       "hourly": "1時間ごと",
       "6hours": "6時間ごと",

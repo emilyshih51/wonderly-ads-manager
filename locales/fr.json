@@ -53,6 +53,8 @@
     "toggleTheme": "Basculer le thème",
     "ad": "publicité",
     "ads": "publicités",
+    "created": "Créé",
+    "updated": "Mis à jour",
     "scrollLeft": "Défiler à gauche",
     "scrollRight": "Défiler à droite",
     "presets": "Préréglages",
@@ -120,7 +122,8 @@
     "budget": "Budget",
     "cpa": "CPA",
     "reach": "Portée",
-    "adName": "Nom de la publicité"
+    "adName": "Nom de la publicité",
+    "performance": "Performance"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -141,7 +144,8 @@
     "dragToReorder": "Faire glisser pour réorganiser les graphiques",
     "addChart": "Ajouter un graphique",
     "resetLayout": "Réinitialiser",
-    "clickToEditBudget": "Cliquer pour modifier le budget"
+    "clickToEditBudget": "Cliquer pour modifier le budget",
+    "viewAdSets": "Voir les ensembles de publicités"
   },
   "campaigns": {
     "title": "Campagnes",
@@ -151,6 +155,7 @@
     "duplicate": "Dupliquer",
     "duplicating": "Duplication…",
     "viewAds": "Voir les publicités",
+    "viewDetails": "Voir les détails",
     "noCampaignsFound": "Aucune campagne trouvée pour cette période.",
     "duplicateDesc": "Créer une copie de « {name} » avec les mêmes paramètres. La copie sera créée en statut EN PAUSE.",
     "activePaused": "{active} active(s), {paused} en pause"

@@ -53,6 +53,8 @@
     "toggleTheme": "Toggle theme",
     "ad": "ad",
     "ads": "ads",
+    "created": "Created",
+    "updated": "Updated",
     "scrollLeft": "Scroll left",
     "scrollRight": "Scroll right",
     "presets": "Presets",
@@ -120,7 +122,8 @@
     "budget": "Budget",
     "cpa": "CPA",
     "reach": "Reach",
-    "adName": "Ad Name"
+    "adName": "Ad Name",
+    "performance": "Performance"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -141,7 +144,8 @@
     "dragToReorder": "Drag to reorder charts",
     "addChart": "Add chart",
     "resetLayout": "Reset",
-    "clickToEditBudget": "Click to edit budget"
+    "clickToEditBudget": "Click to edit budget",
+    "viewAdSets": "View Ad Sets"
   },
   "campaigns": {
     "title": "Campaigns",
@@ -151,6 +155,7 @@
     "duplicate": "Duplicate",
     "duplicating": "Duplicating…",
     "viewAds": "View Ads",
+    "viewDetails": "View Details",
     "noCampaignsFound": "No campaigns found for this period.",
     "duplicateDesc": "Create a copy of \"{name}\" with all the same settings. The copy will be created in PAUSED status.",
     "activePaused": "{active} active, {paused} paused"

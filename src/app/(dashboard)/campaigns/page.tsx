@@ -8,7 +8,8 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/badge';
-import { DataTable } from '@/components/data/data-table';
+import { DataTable, RowActions } from '@/components/data/data-table';
+import { SlidePanel } from '@/components/data/slide-panel';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import { apiPost } from '@/lib/queries/api-fetch';
 import { queryKeys } from '@/lib/queries/keys';
 import { formatCurrency, formatPercent, formatNumber, cn } from '@/lib/utils';
 import { getResultCount, getCostPerResult } from '@/lib/automation-utils';
-import { Copy, RefreshCw, Eye, DollarSign, Target, BarChart3, Layers } from 'lucide-react';
+import { Copy, RefreshCw, Eye, Info, DollarSign, Target, BarChart3, Layers } from 'lucide-react';
 import { StatCard } from '@/components/data/stat-card';
 import { createLogger } from '@/services/logger';
 import { useTranslations } from 'next-intl';
@@ -38,6 +39,7 @@ export default function CampaignsPage() {
   const { datePreset, setFilterCampaignId } = useAppStore();
   const { data: campaigns = [], isLoading, isFetching, refetch } = useCampaigns(datePreset);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignRow | null>(null);
   const [newName, setNewName] = useState('');
 
@@ -213,37 +215,39 @@ export default function CampaignsPage() {
       {
         id: 'actions',
         header: '',
-        size: 80,
+        size: 120,
         enableSorting: false,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-[var(--color-muted-foreground)]"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleViewAds(row.original);
-              }}
-            >
-              <Eye className="h-3 w-3" />
-              <span className="hidden sm:inline">{t('viewAds')}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-[var(--color-muted-foreground)]"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedCampaign(row.original);
-                setNewName(`${row.original.name} (Copy)`);
-                setDuplicateDialogOpen(true);
-              }}
-            >
-              <Copy className="h-3 w-3" />
-              <span className="hidden sm:inline">{t('duplicate')}</span>
-            </Button>
-          </div>
+          <RowActions
+            row={row.original}
+            actions={[
+              {
+                id: 'viewDetails',
+                label: t('viewDetails'),
+                icon: Info,
+                onClick: (campaign) => {
+                  setSelectedCampaign(campaign);
+                  setDetailPanelOpen(true);
+                },
+              },
+              {
+                id: 'viewAds',
+                label: t('viewAds'),
+                icon: Eye,
+                onClick: handleViewAds,
+              },
+              {
+                id: 'duplicate',
+                label: t('duplicate'),
+                icon: Copy,
+                onClick: (campaign) => {
+                  setSelectedCampaign(campaign);
+                  setNewName(`${campaign.name} (Copy)`);
+                  setDuplicateDialogOpen(true);
+                },
+              },
+            ]}
+          />
         ),
       },
     ],
@@ -318,6 +322,113 @@ export default function CampaignsPage() {
           </div>
         )}
       </div>
+
+      {/* Detail Panel */}
+      <SlidePanel
+        open={detailPanelOpen}
+        onOpenChange={setDetailPanelOpen}
+        title={selectedCampaign?.name ?? ''}
+        description={selectedCampaign?.objective
+          ?.replace('OUTCOME_', '')
+          .replace(/_/g, ' ')
+          .toLowerCase()}
+      >
+        {selectedCampaign && (
+          <div className="space-y-6">
+            {/* Status & budget */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('status')}
+                </p>
+                <StatusBadge status={selectedCampaign.status} />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('budget')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {selectedCampaign.daily_budget
+                    ? `${formatCurrency(parseFloat(selectedCampaign.daily_budget))} / day`
+                    : selectedCampaign.lifetime_budget
+                      ? `${formatCurrency(parseFloat(selectedCampaign.lifetime_budget))} lifetime`
+                      : '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Insights */}
+            {selectedCampaign.insights && (
+              <div>
+                <p className="mb-3 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tMetrics('performance')}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    {
+                      label: tMetrics('spend'),
+                      value: formatCurrency(parseFloat(selectedCampaign.insights.spend || '0')),
+                    },
+                    {
+                      label: tMetrics('impressions'),
+                      value: formatNumber(
+                        parseInt(selectedCampaign.insights.impressions || '0', 10)
+                      ),
+                    },
+                    {
+                      label: tMetrics('clicks'),
+                      value: formatNumber(parseInt(selectedCampaign.insights.clicks || '0', 10)),
+                    },
+                    {
+                      label: tMetrics('ctr'),
+                      value: formatPercent(parseFloat(selectedCampaign.insights.ctr || '0')),
+                    },
+                    {
+                      label: tMetrics('cpc'),
+                      value: formatCurrency(parseFloat(selectedCampaign.insights.cpc || '0')),
+                    },
+                    {
+                      label: tMetrics('cpm'),
+                      value: formatCurrency(parseFloat(selectedCampaign.insights.cpm || '0')),
+                    },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-lg bg-[var(--color-accent)]/40 px-3 py-2.5">
+                      <p className="text-xs text-[var(--color-muted-foreground)]">{label}</p>
+                      <p className="mt-0.5 text-sm font-medium text-[var(--color-foreground)]">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-4 border-t border-[var(--color-border)] pt-4">
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('created')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {selectedCampaign.created_time
+                    ? new Date(selectedCampaign.created_time).toLocaleDateString()
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {tCommon('updated')}
+                </p>
+                <p className="text-sm text-[var(--color-foreground)]">
+                  {selectedCampaign.updated_time
+                    ? new Date(selectedCampaign.updated_time).toLocaleDateString()
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </SlidePanel>
 
       {/* Duplicate Dialog */}
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>

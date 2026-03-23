@@ -53,6 +53,8 @@
     "toggleTheme": "Design umschalten",
     "ad": "Anzeige",
     "ads": "Anzeigen",
+    "created": "Erstellt",
+    "updated": "Aktualisiert",
     "scrollLeft": "Nach links scrollen",
     "scrollRight": "Nach rechts scrollen",
     "presets": "Voreinstellungen",
@@ -120,7 +122,8 @@
     "budget": "Budget",
     "cpa": "CPA",
     "reach": "Reichweite",
-    "adName": "Anzeigenname"
+    "adName": "Anzeigenname",
+    "performance": "Leistung"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -141,7 +144,8 @@
     "dragToReorder": "Ziehen zum Neuanordnen der Diagramme",
     "addChart": "Diagramm hinzufügen",
     "resetLayout": "Zurücksetzen",
-    "clickToEditBudget": "Klicken, um Budget zu bearbeiten"
+    "clickToEditBudget": "Klicken, um Budget zu bearbeiten",
+    "viewAdSets": "Ad-Sets anzeigen"
   },
   "campaigns": {
     "title": "Kampagnen",
@@ -151,6 +155,7 @@
     "duplicate": "Duplizieren",
     "duplicating": "Wird dupliziert…",
     "viewAds": "Anzeigen ansehen",
+    "viewDetails": "Details anzeigen",
     "noCampaignsFound": "Keine Kampagnen für diesen Zeitraum gefunden.",
     "duplicateDesc": "Eine Kopie von „{name}\" mit denselben Einstellungen erstellen. Die Kopie wird im Status PAUSIERT erstellt.",
     "activePaused": "{active} aktiv, {paused} pausiert"

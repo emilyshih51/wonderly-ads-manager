@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
-import { SelectNative } from '@/components/ui/select-native';
+import { Select } from '@/components/ui/dropdown';
 import { AdsSkeleton } from '@/components/skeletons/ads-skeleton';
 import { AdsGallery } from '@/components/dashboard/ads-gallery';
 import { useAppStore } from '@/stores/app-store';
@@ -171,9 +171,9 @@ export default function TopPerformingAdsPage() {
               <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
                 {tCommon('campaign')}
               </label>
-              <SelectNative
+              <Select
                 value={selectedCampaign}
-                onChange={(e) => setSelectedCampaign(e.target.value)}
+                onChange={setSelectedCampaign}
                 options={[
                   { label: tCommon('allCampaigns'), value: 'all' },
                   ...campaigns.map((c) => ({ label: c.name, value: c.id })),
@@ -185,9 +185,9 @@ export default function TopPerformingAdsPage() {
               <label className="mb-1 block text-sm font-medium text-[var(--color-foreground)]">
                 {tCommon('dateRange')}
               </label>
-              <SelectNative
+              <Select
                 value={localDatePreset}
-                onChange={(e) => handleDatePresetChange(e.target.value)}
+                onChange={handleDatePresetChange}
                 options={datePresetOptions}
               />
             </div>

@@ -53,6 +53,8 @@
     "toggleTheme": "테마 전환",
     "ad": "광고",
     "ads": "광고",
+    "created": "생성일",
+    "updated": "수정일",
     "scrollLeft": "왼쪽으로 스크롤",
     "scrollRight": "오른쪽으로 스크롤",
     "presets": "프리셋",
@@ -120,7 +122,8 @@
     "budget": "예산",
     "cpa": "CPA",
     "reach": "도달",
-    "adName": "광고 이름"
+    "adName": "광고 이름",
+    "performance": "성과"
   },
   "dashboard": {
     "title": "대시보드",
@@ -141,7 +144,8 @@
     "dragToReorder": "드래그하여 차트 순서 변경",
     "addChart": "차트 추가",
     "resetLayout": "초기화",
-    "clickToEditBudget": "클릭하여 예산 수정"
+    "clickToEditBudget": "클릭하여 예산 수정",
+    "viewAdSets": "광고 세트 보기"
   },
   "campaigns": {
     "title": "캠페인",
@@ -151,6 +155,7 @@
     "duplicate": "복제",
     "duplicating": "복제 중…",
     "viewAds": "광고 보기",
+    "viewDetails": "세부 정보 보기",
     "noCampaignsFound": "이 기간에 캠페인을 찾을 수 없습니다.",
     "duplicateDesc": "동일한 설정으로 \"{name}\"의 사본을 만듭니다. 사본은 일시정지 상태로 생성됩니다.",
     "activePaused": "{active}개 활성, {paused}개 일시정지"

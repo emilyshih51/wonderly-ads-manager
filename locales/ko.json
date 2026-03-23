@@ -429,6 +429,8 @@
       "daily": "매일"
     },
     "starterTemplates": "시작 템플릿",
+    "categoryProtect": "보호",
+    "categoryOptimize": "최적화",
     "yourRules": "내 규칙",
     "noRulesYet": "아직 규칙이 없습니다",
     "pickTemplate": "템플릿을 선택하거나 새 규칙을 만드세요",

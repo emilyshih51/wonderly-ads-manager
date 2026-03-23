@@ -429,6 +429,8 @@
       "daily": "毎日"
     },
     "starterTemplates": "スターターテンプレート",
+    "categoryProtect": "保護",
+    "categoryOptimize": "最適化",
     "yourRules": "あなたのルール",
     "noRulesYet": "まだルールがありません",
     "pickTemplate": "テンプレートを選択するか、新しいルールを作成してください",

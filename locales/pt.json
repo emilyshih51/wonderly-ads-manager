@@ -429,6 +429,8 @@
       "daily": "Diariamente"
     },
     "starterTemplates": "Modelos iniciais",
+    "categoryProtect": "Proteger",
+    "categoryOptimize": "Otimizar",
     "yourRules": "Suas regras",
     "noRulesYet": "Ainda não há regras",
     "pickTemplate": "Escolha um modelo ou crie uma nova regra",

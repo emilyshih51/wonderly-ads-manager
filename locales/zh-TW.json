@@ -429,6 +429,8 @@
       "daily": "每天"
     },
     "starterTemplates": "入門範本",
+    "categoryProtect": "保護",
+    "categoryOptimize": "優化",
     "yourRules": "您的規則",
     "noRulesYet": "尚無規則",
     "pickTemplate": "選擇範本或建立新規則",

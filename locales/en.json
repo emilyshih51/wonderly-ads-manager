@@ -429,6 +429,8 @@
       "daily": "Daily"
     },
     "starterTemplates": "Starter templates",
+    "categoryProtect": "Protect",
+    "categoryOptimize": "Optimize",
     "yourRules": "Your rules",
     "noRulesYet": "No rules yet",
     "pickTemplate": "Pick a template above or create a new rule",

@@ -429,6 +429,8 @@
       "daily": "Diariamente"
     },
     "starterTemplates": "Plantillas de inicio",
+    "categoryProtect": "Proteger",
+    "categoryOptimize": "Optimizar",
     "yourRules": "Tus reglas",
     "noRulesYet": "Aún no hay reglas",
     "pickTemplate": "Elige una plantilla o crea una nueva regla",

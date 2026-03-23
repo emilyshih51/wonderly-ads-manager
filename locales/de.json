@@ -429,6 +429,8 @@
       "daily": "Täglich"
     },
     "starterTemplates": "Starter-Vorlagen",
+    "categoryProtect": "Schützen",
+    "categoryOptimize": "Optimieren",
     "yourRules": "Deine Regeln",
     "noRulesYet": "Noch keine Regeln",
     "pickTemplate": "Wähle eine Vorlage oder erstelle eine neue Regel",

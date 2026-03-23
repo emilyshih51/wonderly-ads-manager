@@ -792,33 +792,67 @@ export default function AutomationsPage() {
             {/* ─── TEMPLATES TAB ─── */}
             {listTab === 'templates' && (
               <div className="space-y-8">
-                <div>
-                  <h2 className="mb-4 text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                    {t('starterTemplates')}
-                  </h2>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {TEMPLATES.map((tmpl) => (
-                      <button
-                        key={tmpl.id}
-                        onClick={() => applyTemplate(tmpl)}
-                        className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left shadow-sm transition-all hover:border-[var(--color-primary)]/40 hover:shadow-md"
-                      >
-                        <span className="mt-0.5 text-lg">{tmpl.icon}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-[var(--color-foreground)]">
-                            {t(tmpl.nameKey)}
-                          </p>
-                          <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                            {t(tmpl.descriptionKey)}
-                          </p>
-                          <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] opacity-0 transition-opacity group-hover:opacity-100">
-                            {t('useTemplate')} <ArrowRight className="h-3 w-3" />
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {(['protect', 'optimize'] as const).map((category) => {
+                  const categoryTemplates = TEMPLATES.filter((tmpl) => tmpl.category === category);
+                  const isProtect = category === 'protect';
+
+                  return (
+                    <div key={category}>
+                      <div className="mb-4 flex items-center gap-2">
+                        <span
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${
+                            isProtect
+                              ? 'bg-red-100 text-red-600'
+                              : 'bg-emerald-100 text-emerald-600'
+                          }`}
+                        >
+                          {isProtect ? '🛡️' : '🚀'}
+                        </span>
+                        <h2 className="text-xs font-semibold tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                          {isProtect ? t('categoryProtect') : t('categoryOptimize')}
+                        </h2>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {categoryTemplates.map((tmpl) => (
+                          <div
+                            key={tmpl.id}
+                            className="group flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm transition-all hover:border-[var(--color-primary)]/40 hover:shadow-md"
+                          >
+                            <div className="mb-3 flex items-start gap-3">
+                              <span
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg ${
+                                  isProtect ? 'bg-red-50' : 'bg-emerald-50'
+                                }`}
+                              >
+                                {tmpl.icon}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[var(--color-foreground)]">
+                                  {t(tmpl.nameKey)}
+                                </p>
+                                <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                                  {t(tmpl.descriptionKey)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-auto pt-3">
+                              <button
+                                onClick={() => applyTemplate(tmpl)}
+                                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                                  isProtect
+                                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                }`}
+                              >
+                                {t('useTemplate')} <ArrowRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
                 <CopilotCard onSubmit={useCopilot} />
               </div>
             )}
@@ -1405,10 +1439,12 @@ export default function AutomationsPage() {
                           {t('amountType')}
                         </label>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          {([
-                            { value: 'percent', label: t('percent') },
-                            { value: 'fixed', label: t('fixedAmount') },
-                          ] as const).map((opt) => (
+                          {(
+                            [
+                              { value: 'percent', label: t('percent') },
+                              { value: 'fixed', label: t('fixedAmount') },
+                            ] as const
+                          ).map((opt) => (
                             <button
                               key={opt.value}
                               onClick={() => updateConfig({ adjust_amount_type: opt.value })}

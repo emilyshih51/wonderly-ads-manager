@@ -42,4 +42,5 @@ yarn-error.log*
 next-env.d.ts
 
 # ai
-.claude/plans
+.cladue/plans
+.claude/plans/.worktrees/

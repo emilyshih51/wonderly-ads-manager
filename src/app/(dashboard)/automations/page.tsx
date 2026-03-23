@@ -802,8 +802,8 @@ export default function AutomationsPage() {
                         <span
                           className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${
                             isProtect
-                              ? 'bg-red-100 text-red-600'
-                              : 'bg-emerald-100 text-emerald-600'
+                              ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'
+                              : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
                           }`}
                         >
                           {isProtect ? '🛡️' : '🚀'}
@@ -821,7 +821,9 @@ export default function AutomationsPage() {
                             <div className="mb-3 flex items-start gap-3">
                               <span
                                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg ${
-                                  isProtect ? 'bg-red-50' : 'bg-emerald-50'
+                                  isProtect
+                                    ? 'bg-red-100/60 dark:bg-red-500/15'
+                                    : 'bg-emerald-100/60 dark:bg-emerald-500/15'
                                 }`}
                               >
                                 {tmpl.icon}
@@ -840,8 +842,8 @@ export default function AutomationsPage() {
                                 onClick={() => applyTemplate(tmpl)}
                                 className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
                                   isProtect
-                                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20'
                                 }`}
                               >
                                 {t('useTemplate')} <ArrowRight className="h-3 w-3" />

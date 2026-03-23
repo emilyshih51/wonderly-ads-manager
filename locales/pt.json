@@ -107,7 +107,8 @@
     "resultsVsCpa": "Resultados vs CPA",
     "spendVsCpm": "Gasto vs CPM",
     "spendResultsCpa": "Gasto + Resultados + CPA",
-    "clicksCtrCpc": "Cliques + CTR + CPC"
+    "clicksCtrCpc": "Cliques + CTR + CPC",
+    "optional": "(opcional)"
   },
   "metrics": {
     "amountSpent": "Valor gasto",

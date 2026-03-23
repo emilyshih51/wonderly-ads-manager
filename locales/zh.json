@@ -107,7 +107,8 @@
     "resultsVsCpa": "结果 vs CPA",
     "spendVsCpm": "花费 vs CPM",
     "spendResultsCpa": "花费 + 结果 + CPA",
-    "clicksCtrCpc": "点击量 + CTR + CPC"
+    "clicksCtrCpc": "点击量 + CTR + CPC",
+    "optional": "（可选）"
   },
   "metrics": {
     "amountSpent": "总花费",

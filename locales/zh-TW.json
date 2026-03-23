@@ -107,7 +107,8 @@
     "resultsVsCpa": "結果 vs CPA",
     "spendVsCpm": "花費 vs CPM",
     "spendResultsCpa": "花費 + 結果 + CPA",
-    "clicksCtrCpc": "點擊量 + CTR + CPC"
+    "clicksCtrCpc": "點擊量 + CTR + CPC",
+    "optional": "（選填）"
   },
   "metrics": {
     "amountSpent": "總花費",

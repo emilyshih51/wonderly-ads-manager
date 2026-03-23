@@ -107,7 +107,8 @@
     "resultsVsCpa": "결과 vs CPA",
     "spendVsCpm": "지출 vs CPM",
     "spendResultsCpa": "지출 + 결과 + CPA",
-    "clicksCtrCpc": "클릭 + CTR + CPC"
+    "clicksCtrCpc": "클릭 + CTR + CPC",
+    "optional": "(선택 사항)"
   },
   "metrics": {
     "amountSpent": "총 지출",

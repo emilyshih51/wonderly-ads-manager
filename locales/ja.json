@@ -107,7 +107,8 @@
     "resultsVsCpa": "成果 vs CPA",
     "spendVsCpm": "消化額 vs CPM",
     "spendResultsCpa": "消化額 + 成果 + CPA",
-    "clicksCtrCpc": "クリック数 + CTR + CPC"
+    "clicksCtrCpc": "クリック数 + CTR + CPC",
+    "optional": "(任意)"
   },
   "metrics": {
     "amountSpent": "合計消化額",

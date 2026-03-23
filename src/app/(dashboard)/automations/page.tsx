@@ -964,7 +964,7 @@ export default function AutomationsPage() {
                   className={cn(
                     'flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
                     openStep === step
-                      ? 'bg-[var(--color-foreground)] text-[var(--color-background)]'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
                       : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]'
                   )}
                 >
@@ -976,7 +976,7 @@ export default function AutomationsPage() {
                           ? 'bg-emerald-400 text-white'
                           : 'bg-emerald-100 text-emerald-700'
                         : openStep === step
-                          ? 'bg-white/20 text-[var(--color-background)]'
+                          ? 'bg-[var(--color-primary-foreground)]/20 text-[var(--color-primary-foreground)]'
                           : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
                     )}
                   >
@@ -1003,8 +1003,8 @@ export default function AutomationsPage() {
                           onClick={() => updateConfig({ entity_type: type })}
                           className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                             config.entity_type === type
-                              ? 'border-[var(--color-foreground)] bg-[var(--color-foreground)] text-[var(--color-background)]'
-                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border)]'
+                              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)]/50'
                           }`}
                         >
                           {type === 'ad'
@@ -1257,8 +1257,8 @@ export default function AutomationsPage() {
                           onClick={() => updateConfig({ action_type: action.value })}
                           className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
                             config.action_type === action.value
-                              ? 'border-[var(--color-foreground)] bg-[var(--color-foreground)] text-[var(--color-background)]'
-                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border)]'
+                              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                              : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)]/50'
                           }`}
                         >
                           {action.icon}

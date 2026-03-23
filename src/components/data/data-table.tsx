@@ -58,7 +58,7 @@ interface RowActionsProps<TData> {
  */
 export function RowActions<TData>({ row, actions }: RowActionsProps<TData>) {
   return (
-    <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
+    <div className="flex items-center justify-end gap-1">
       {actions.map((action) => {
         const Icon = action.icon;
 
@@ -68,7 +68,7 @@ export function RowActions<TData>({ row, actions }: RowActionsProps<TData>) {
             variant="ghost"
             size="sm"
             className={cn(
-              'h-7 gap-1 px-2 text-xs text-[var(--color-muted-foreground)]',
+              'h-7 gap-1 px-2 text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-foreground)]',
               action.destructive && 'hover:text-red-500'
             )}
             onClick={(e) => {

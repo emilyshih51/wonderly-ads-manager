@@ -964,10 +964,50 @@ export default function AutomationsPage() {
             />
           </div>
 
+          {/* Mobile step indicator (horizontal) */}
+          <div className="mb-4 flex shrink-0 items-center gap-0 sm:hidden">
+            {[
+              { step: 1, label: t('stepTarget'), complete: isStep1Complete },
+              { step: 2, label: t('stepConditions'), complete: isStep2Complete },
+              { step: 3, label: t('stepAction'), complete: isStep3Complete },
+            ].map(({ step, label, complete }, idx) => (
+              <div key={step} className="flex flex-1 items-center">
+                <button
+                  onClick={() => setOpenStep(step)}
+                  className="flex flex-1 flex-col items-center gap-1"
+                >
+                  <div
+                    className={cn(
+                      'flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                      openStep === step
+                        ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                        : complete
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                    )}
+                  >
+                    {complete && openStep !== step ? <Check className="h-3.5 w-3.5" /> : step}
+                  </div>
+                  <span
+                    className={cn(
+                      'text-[10px] font-medium',
+                      openStep === step
+                        ? 'text-[var(--color-foreground)]'
+                        : 'text-[var(--color-muted-foreground)]'
+                    )}
+                  >
+                    {label}
+                  </span>
+                </button>
+                {idx < 2 && <div className="mx-1 h-px w-6 shrink-0 bg-[var(--color-border)]" />}
+              </div>
+            ))}
+          </div>
+
           {/* Stepper + content */}
           <div className="flex min-h-0 flex-1 gap-6">
-            {/* Left stepper rail */}
-            <div className="flex w-36 shrink-0 flex-col gap-1 pt-1">
+            {/* Left stepper rail — desktop only */}
+            <div className="hidden w-36 shrink-0 flex-col gap-1 pt-1 sm:flex">
               {[
                 { step: 1, label: t('stepTarget'), complete: isStep1Complete },
                 { step: 2, label: t('stepConditions'), complete: isStep2Complete },
@@ -1100,7 +1140,7 @@ export default function AutomationsPage() {
                           AND
                         </span>
                       )}
-                      <div className="flex flex-1 gap-2">
+                      <div className="flex flex-1 flex-col gap-2 sm:flex-row">
                         <Select
                           value={cond.metric}
                           onChange={(value) => updateCondition(cond.id, { metric: value })}
@@ -1108,24 +1148,28 @@ export default function AutomationsPage() {
                             label: tCommon(o.labelKey),
                             value: o.value,
                           }))}
-                          className="flex-1"
+                          className="w-full sm:flex-1"
                         />
-                        <Select
-                          value={cond.operator}
-                          onChange={(value) => updateCondition(cond.id, { operator: value })}
-                          options={OPERATOR_OPTIONS.map((o) => ({
-                            label: t(o.labelKey),
-                            value: o.value,
-                          }))}
-                          className="w-48 shrink-0"
-                        />
-                        <Input
-                          type="number"
-                          value={cond.threshold}
-                          onChange={(e) => updateCondition(cond.id, { threshold: e.target.value })}
-                          placeholder={t('value')}
-                          className="h-9 w-20 shrink-0"
-                        />
+                        <div className="flex gap-2">
+                          <Select
+                            value={cond.operator}
+                            onChange={(value) => updateCondition(cond.id, { operator: value })}
+                            options={OPERATOR_OPTIONS.map((o) => ({
+                              label: t(o.labelKey),
+                              value: o.value,
+                            }))}
+                            className="flex-1 sm:w-48 sm:flex-none"
+                          />
+                          <Input
+                            type="number"
+                            value={cond.threshold}
+                            onChange={(e) =>
+                              updateCondition(cond.id, { threshold: e.target.value })
+                            }
+                            placeholder={t('value')}
+                            className="h-9 w-20 shrink-0"
+                          />
+                        </div>
                       </div>
                       <button
                         onClick={() => removeCondition(cond.id)}
@@ -1241,7 +1285,7 @@ export default function AutomationsPage() {
                     <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
                       {t('actionType')}
                     </label>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {[
                         {
                           value: 'pause',
@@ -1433,7 +1477,7 @@ export default function AutomationsPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-4 flex shrink-0 items-center justify-between border-t border-[var(--color-border)] pt-4">
+          <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] pt-4">
             <Button
               variant="ghost"
               size="sm"
@@ -1442,7 +1486,7 @@ export default function AutomationsPage() {
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
               {openStep === 1 ? tCommon('cancel') : t('back')}
             </Button>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
                 <Play className="mr-1.5 h-3.5 w-3.5" />
                 {testing ? t('testing') : t('testRule')}

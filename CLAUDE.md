@@ -85,6 +85,7 @@ src/
 - Tailwind CSS 4 via `@tailwindcss/postcss`.
 - Use `cn()` from `@/lib/utils` for conditional class merging.
 - No inline styles unless absolutely necessary for dynamic values.
+- **All UI must be fully responsive.** Every page, panel, dialog, and component must work correctly on mobile (320px+) through desktop. Use Tailwind responsive prefixes (`sm:`, `md:`, `lg:`) to adapt layouts. Multi-column grids should collapse to single column on mobile. Horizontal flex rows with many items should wrap or stack vertically. Drawers/panels should be full-width on mobile with `sm:max-w-*` for fixed width on desktop. Never build desktop-only UI without a mobile fallback.
 
 ### API Routes
 

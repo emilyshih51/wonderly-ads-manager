@@ -42,7 +42,7 @@ export function SlidePanel({
         {/* Panel — full-width on mobile, fixed width on sm+ */}
         <DialogPrimitive.Content
           className={cn(
-            'slide-panel fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-[var(--color-border)] bg-[var(--color-card)] shadow-xl',
+            'slide-panel fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-[var(--color-border)] bg-[var(--color-card)] shadow-xl sm:max-w-[var(--slide-panel-w)]',
             'data-[state=open]:animate-[slide-in_300ms_cubic-bezier(0.16,1,0.3,1)]',
             'data-[state=closed]:animate-[slide-out_200ms_ease-in]'
           )}

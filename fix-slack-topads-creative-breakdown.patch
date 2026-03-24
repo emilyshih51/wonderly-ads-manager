@@ -1,0 +1,688 @@
+From 5268f06d931e71cbc52d4fdcefd07908471e9ee4 Mon Sep 17 00:00:00 2001
+From: Emily Shih <emily@usemotion.com>
+Date: Tue, 24 Mar 2026 11:56:28 -0400
+Subject: [PATCH] fix(slack): Resolve campaign_name missing from messages, add
+ test controls, and creative breakdown
+
+- Fix campaign_name reading from actionConfig instead of triggerConfig in automation evaluator
+- Add test setup dialog with channel override and sample data selection for Slack test messages
+- Add CreativeBreakdown component showing top headlines, primary texts, and CTAs by conversions
+- Integrate creative breakdown into dashboard and ads pages
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ locales/en.json                               |  20 ++
+ src/app/(dashboard)/ads/page.tsx              |   8 +-
+ src/app/(dashboard)/automations/page.tsx      | 155 +++++++++++++-
+ src/app/(dashboard)/dashboard/page.tsx        |  21 ++
+ src/app/api/automations/evaluate/route.ts     |  72 ++++++-
+ .../dashboard/creative-breakdown.tsx          | 201 ++++++++++++++++++
+ 6 files changed, 461 insertions(+), 16 deletions(-)
+ create mode 100644 src/components/dashboard/creative-breakdown.tsx
+
+diff --git a/locales/en.json b/locales/en.json
+index b6db7f4..650e09f 100644
+--- a/locales/en.json
++++ b/locales/en.json
+@@ -137,6 +137,13 @@
+     "resultsOverTime": "Results Over Time",
+     "campaignPerformance": "Campaign Performance",
+     "adPerformance": "Ad Performance",
++    "creativeBreakdown": "Creative Breakdown",
++    "topHeadlines": "Top Headlines",
++    "topPrimaryTexts": "Top Primary Texts",
++    "topCTAs": "Top CTAs",
++    "byConversions": "by conversions",
++    "noCreativeData": "No creative data available",
++    "adsCount": "{count} {count, plural, =1 {ad} other {ads}}",
+     "noCampaignsFound": "No campaigns found",
+     "noAdSetsFound": "No ad sets found",
+     "loadingAdSets": "Loading ad sets…",
+@@ -391,6 +398,19 @@
+     "frequency": "Frequency:",
+     "testing": "Testing...",
+     "testRule": "Test Rule",
++    "testSetup": "Test Setup",
++    "testSetupDesc": "Choose a Slack channel to send the test message to, and optionally provide sample data.",
++    "testChannel": "Send test to channel",
++    "testChannelPlaceholder": "#test-alerts",
++    "useFakeData": "Use sample data",
++    "useLiveData": "Use live data",
++    "sampleEntityName": "Sample Ad Name",
++    "sampleSpend": "Spend ($)",
++    "sampleResults": "Results",
++    "sampleClicks": "Clicks",
++    "sampleImpressions": "Impressions",
++    "sampleCtr": "CTR",
++    "sendTest": "Send Test",
+     "saving": "Saving...",
+     "testResults": "Test Results",
+     "testResultsDesc": "Ads were not paused/promoted. Slack notifications were sent so you can preview them.",
+diff --git a/src/app/(dashboard)/ads/page.tsx b/src/app/(dashboard)/ads/page.tsx
+index 7c43f9d..a778442 100644
+--- a/src/app/(dashboard)/ads/page.tsx
++++ b/src/app/(dashboard)/ads/page.tsx
+@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/badge';
+ import { Select } from '@/components/ui/dropdown';
+ import { AdsSkeleton } from '@/components/skeletons/ads-skeleton';
+ import { AdsGallery } from '@/components/dashboard/ads-gallery';
++import { CreativeBreakdown } from '@/components/dashboard/creative-breakdown';
+ import { useAppStore } from '@/stores/app-store';
+ import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
+ import { useAds } from '@/lib/queries/meta/use-ads';
+@@ -207,7 +208,12 @@ export default function TopPerformingAdsPage() {
+             </CardContent>
+           </Card>
+         ) : viewMode === 'gallery' ? (
+-          <AdsGallery ads={ads} />
++          <>
++            <AdsGallery ads={ads} />
++            <div className="mt-6">
++              <CreativeBreakdown ads={ads} />
++            </div>
++          </>
+         ) : (
+           /* Table view */
+           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+diff --git a/src/app/(dashboard)/automations/page.tsx b/src/app/(dashboard)/automations/page.tsx
+index c9167e8..6e9b4c2 100644
+--- a/src/app/(dashboard)/automations/page.tsx
++++ b/src/app/(dashboard)/automations/page.tsx
+@@ -344,6 +344,17 @@ export default function AutomationsPage() {
+   const [testing, setTesting] = useState(false);
+   const [testResults, setTestResults] = useState<TestResult | null>(null);
+   const [testDialogOpen, setTestDialogOpen] = useState(false);
++  const [testSetupOpen, setTestSetupOpen] = useState(false);
++  const [testChannel, setTestChannel] = useState('');
++  const [useFakeData, setUseFakeData] = useState(false);
++  const [fakeData, setFakeData] = useState({
++    entity_name: 'Sample Ad',
++    spend: 50,
++    results: 3,
++    clicks: 120,
++    impressions: 5000,
++    ctr: 0.024,
++  });
+ 
+   // Run Now state
+   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
+@@ -443,19 +454,35 @@ export default function AutomationsPage() {
+   };
+ 
+   /* ─── Test Workflow ─── */
++  const openTestSetup = () => {
++    setTestChannel(config.slack_channel || '');
++    setTestSetupOpen(true);
++  };
++
+   const handleTestWorkflow = async () => {
++    setTestSetupOpen(false);
+     setTesting(true);
+     setTestResults(null);
+ 
+     try {
+       const { nodes, edges } = configToNodes(config);
++      const payload: Record<string, unknown> = {
++        rule: { name: ruleName, is_active: true, nodes, edges },
++        send_slack: true,
++      };
++
++      if (testChannel) {
++        payload.test_channel = testChannel;
++      }
++
++      if (useFakeData) {
++        payload.test_data = fakeData;
++      }
++
+       const res = await fetch('/api/automations/evaluate', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({
+-          rule: { name: ruleName, is_active: true, nodes, edges },
+-          send_slack: true,
+-        }),
++        body: JSON.stringify(payload),
+       });
+       const data = await res.json();
+ 
+@@ -1613,7 +1640,7 @@ export default function AutomationsPage() {
+               {openStep === 1 ? tCommon('cancel') : t('back')}
+             </Button>
+             <div className="flex flex-wrap gap-2">
+-              <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
++              <Button variant="outline" size="sm" onClick={openTestSetup} disabled={testing}>
+                 <Play className="mr-1.5 h-3.5 w-3.5" />
+                 {testing ? t('testing') : t('testRule')}
+               </Button>
+@@ -1636,6 +1663,124 @@ export default function AutomationsPage() {
+         </div>
+       </SlidePanel>
+ 
++      {/* ─── Test Setup Dialog ─── */}
++      <Dialog open={testSetupOpen} onOpenChange={setTestSetupOpen}>
++        <DialogContent className="sm:max-w-md">
++          <DialogHeader>
++            <DialogTitle className="text-base">{t('testSetup')}</DialogTitle>
++            <DialogDescription className="text-xs">{t('testSetupDesc')}</DialogDescription>
++          </DialogHeader>
++          <div className="mt-2 space-y-4">
++            <div>
++              <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
++                {t('testChannel')}
++              </label>
++              <Input
++                value={testChannel}
++                onChange={(e) => setTestChannel(e.target.value)}
++                className="mt-1 h-9"
++                placeholder={t('testChannelPlaceholder')}
++              />
++            </div>
++
++            <div className="border-t border-[var(--color-border)] pt-4">
++              <label className="flex cursor-pointer items-center gap-2.5">
++                <Switch size="sm" checked={useFakeData} onCheckedChange={setUseFakeData} />
++                <span className="text-sm font-medium text-[var(--color-foreground)]">
++                  {t('useFakeData')}
++                </span>
++              </label>
++              <p className="mt-1 ml-8 text-xs text-[var(--color-muted-foreground)]">
++                {useFakeData ? t('useFakeData') : t('useLiveData')}
++              </p>
++            </div>
++
++            {useFakeData && (
++              <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3">
++                <div>
++                  <label className="text-xs text-[var(--color-muted-foreground)]">
++                    {t('sampleEntityName')}
++                  </label>
++                  <Input
++                    value={fakeData.entity_name}
++                    onChange={(e) =>
++                      setFakeData((prev) => ({ ...prev, entity_name: e.target.value }))
++                    }
++                    className="mt-1 h-8 text-sm"
++                  />
++                </div>
++                <div className="grid grid-cols-2 gap-3">
++                  <div>
++                    <label className="text-xs text-[var(--color-muted-foreground)]">
++                      {t('sampleSpend')}
++                    </label>
++                    <Input
++                      type="number"
++                      value={fakeData.spend}
++                      onChange={(e) =>
++                        setFakeData((prev) => ({ ...prev, spend: parseFloat(e.target.value) || 0 }))
++                      }
++                      className="mt-1 h-8 text-sm"
++                    />
++                  </div>
++                  <div>
++                    <label className="text-xs text-[var(--color-muted-foreground)]">
++                      {t('sampleResults')}
++                    </label>
++                    <Input
++                      type="number"
++                      value={fakeData.results}
++                      onChange={(e) =>
++                        setFakeData((prev) => ({ ...prev, results: parseInt(e.target.value) || 0 }))
++                      }
++                      className="mt-1 h-8 text-sm"
++                    />
++                  </div>
++                  <div>
++                    <label className="text-xs text-[var(--color-muted-foreground)]">
++                      {t('sampleClicks')}
++                    </label>
++                    <Input
++                      type="number"
++                      value={fakeData.clicks}
++                      onChange={(e) =>
++                        setFakeData((prev) => ({ ...prev, clicks: parseInt(e.target.value) || 0 }))
++                      }
++                      className="mt-1 h-8 text-sm"
++                    />
++                  </div>
++                  <div>
++                    <label className="text-xs text-[var(--color-muted-foreground)]">
++                      {t('sampleImpressions')}
++                    </label>
++                    <Input
++                      type="number"
++                      value={fakeData.impressions}
++                      onChange={(e) =>
++                        setFakeData((prev) => ({
++                          ...prev,
++                          impressions: parseInt(e.target.value) || 0,
++                        }))
++                      }
++                      className="mt-1 h-8 text-sm"
++                    />
++                  </div>
++                </div>
++              </div>
++            )}
++
++            <div className="flex justify-end gap-2 pt-2">
++              <Button variant="ghost" size="sm" onClick={() => setTestSetupOpen(false)}>
++                {tCommon('cancel')}
++              </Button>
++              <Button size="sm" onClick={handleTestWorkflow}>
++                <Play className="mr-1.5 h-3.5 w-3.5" /> {t('sendTest')}
++              </Button>
++            </div>
++          </div>
++        </DialogContent>
++      </Dialog>
++
+       {/* ─── Test Results Dialog ─── */}
+       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
+         <DialogContent className="sm:max-w-lg">
+diff --git a/src/app/(dashboard)/dashboard/page.tsx b/src/app/(dashboard)/dashboard/page.tsx
+index 7c4e6cd..0e1d5c1 100644
+--- a/src/app/(dashboard)/dashboard/page.tsx
++++ b/src/app/(dashboard)/dashboard/page.tsx
+@@ -41,6 +41,7 @@ import { MetricCard } from '@/components/dashboard/metric-card';
+ import { StatDetailPanel } from '@/components/dashboard/stat-detail-panel';
+ import { ChartWidget } from '@/components/dashboard/chart-widget';
+ import { AdsGallery } from '@/components/dashboard/ads-gallery';
++import { CreativeBreakdown } from '@/components/dashboard/creative-breakdown';
+ import {
+   DollarSign,
+   Eye,
+@@ -888,6 +889,26 @@ export default function DashboardPage() {
+             </div>
+           </Card>
+         )}
++
++        {/* Creative Breakdown — which headlines, primary text, CTAs drive the most results */}
++        {selectedCampaign !== 'all' && !drillLoading && drillAds.length > 0 && (
++          <CreativeBreakdown
++            ads={drillAds
++              .map((ad, idx) => {
++                const results = getResults(ad.insights?.actions, selectedResultActionType);
++                const spend = parseFloat(ad.insights?.spend || '0');
++
++                return {
++                  ...ad,
++                  results,
++                  cpa: results > 0 ? spend / results : null,
++                  rank: idx + 1,
++                };
++              })
++              .sort((a, b) => b.results - a.results)
++              .map((ad, idx) => ({ ...ad, rank: idx + 1 }))}
++          />
++        )}
+       </div>
+ 
+       {/* Campaign detail panel */}
+diff --git a/src/app/api/automations/evaluate/route.ts b/src/app/api/automations/evaluate/route.ts
+index fab85d5..4ff37de 100644
+--- a/src/app/api/automations/evaluate/route.ts
++++ b/src/app/api/automations/evaluate/route.ts
+@@ -12,6 +12,7 @@ import { createSlackService } from '@/services/slack';
+ import { RulesStoreService } from '@/services/rules-store';
+ import { createLogger } from '@/services/logger';
+ import type { StoredRule } from '@/services/rules-store';
++import type { MetaInsightsRow } from '@/types';
+ 
+ const logger = createLogger('Automations:Evaluate');
+ 
+@@ -201,10 +202,21 @@ export async function POST(request: NextRequest) {
+     rule?: StoredRule;
+     send_slack?: boolean;
+     live?: boolean;
++    test_channel?: string;
++    test_data?: {
++      entity_name: string;
++      spend: number;
++      results: number;
++      clicks: number;
++      ctr: number;
++      impressions: number;
++    };
+   };
+   const rule = body.rule;
+   const sendSlack = body.send_slack === true;
+   const live = body.live === true;
++  const testChannel = body.test_channel;
++  const testData = body.test_data;
+ 
+   if (!rule) {
+     return NextResponse.json({ error: 'Rule required' }, { status: 400 });
+@@ -224,6 +236,8 @@ export async function POST(request: NextRequest) {
+     const results = await evaluateRule(rule, meta, rawAdAccountId, optimizationMap, {
+       dryRun,
+       sendSlack: sendSlack || live,
++      testChannel,
++      testData,
+     });
+ 
+     return NextResponse.json({
+@@ -284,6 +298,15 @@ interface EvaluateRuleOptions {
+   dryRun?: boolean;
+   sendSlack?: boolean;
+   actionCap?: { executed: number; max: number };
++  testChannel?: string;
++  testData?: {
++    entity_name: string;
++    spend: number;
++    results: number;
++    clicks: number;
++    ctr: number;
++    impressions: number;
++  };
+ }
+ 
+ /**
+@@ -323,7 +346,7 @@ async function evaluateRule(
+   optimizationMap: Record<string, string>,
+   options: EvaluateRuleOptions = {}
+ ): Promise<EvaluateResult[]> {
+-  const { dryRun = false, sendSlack = false, actionCap } = options;
++  const { dryRun = false, sendSlack = false, actionCap, testChannel, testData } = options;
+   const nodes = rule.nodes;
+   const triggerNode = nodes.find((n) => n.type === 'trigger');
+   const conditionNodes = nodes.filter((n) => n.type === 'condition');
+@@ -337,10 +360,35 @@ async function evaluateRule(
+   const datePreset = triggerConfig.date_preset ?? 'last_7d';
+   const campaignId = triggerConfig.campaign_id;
+ 
+-  const insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+-    datePreset,
+-    campaignId,
+-  });
++  // When testData is provided, use synthetic data instead of querying Meta
++  let insightsData: MetaInsightsRow[];
++
++  if (testData) {
++    insightsData = [
++      {
++        ad_id: 'test_ad_001',
++        ad_name: testData.entity_name || 'Sample Ad',
++        adset_id: 'test_adset_001',
++        campaign_id: campaignId || 'test_campaign_001',
++        campaign_name: triggerConfig.campaign_name || 'Sample Campaign',
++        spend: String(testData.spend),
++        impressions: String(testData.impressions),
++        clicks: String(testData.clicks),
++        ctr: String(testData.ctr),
++        cpc: testData.clicks > 0 ? String(testData.spend / testData.clicks) : '0',
++        cpm: '0',
++        actions:
++          testData.results > 0
++            ? [{ action_type: 'offsite_conversion', value: String(testData.results) }]
++            : [],
++      },
++    ];
++  } else {
++    insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
++      datePreset,
++      campaignId,
++    });
++  }
+ 
+   if (insightsData.length === 0 && !dryRun) {
+     logger.warn(
+@@ -506,7 +554,11 @@ async function evaluateRule(
+       const notifySlack =
+         actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true;
+ 
+-      if (actionConfig.slack_channel && notifySlack) {
++      // When a testChannel is provided, always send to the override channel
++      const effectiveSlackChannel = testChannel || actionConfig.slack_channel;
++      const shouldNotifySlack = testChannel ? true : notifySlack;
++
++      if (effectiveSlackChannel && shouldNotifySlack) {
+         if (!dryRun || sendSlack) {
+           if (
+             actionType === 'adjust_budget' &&
+@@ -514,7 +566,7 @@ async function evaluateRule(
+             actionResult.new_budget !== undefined
+           ) {
+             await slack
+-              .sendBudgetNotification(actionConfig.slack_channel, {
++              .sendBudgetNotification(effectiveSlackChannel, {
+                 entityName,
+                 newBudget: actionResult.new_budget,
+                 previousBudget: actionResult.previous_budget,
+@@ -522,7 +574,7 @@ async function evaluateRule(
+               .catch((e: unknown) => logger.error('Slack budget notification failed', e));
+           } else {
+             await slack
+-              .sendAutomationNotification(actionConfig.slack_channel, {
++              .sendAutomationNotification(effectiveSlackChannel, {
+                 ruleName: rule.name,
+                 actionType: actionType as 'pause' | 'activate' | 'promote',
+                 entityType,
+@@ -537,7 +589,7 @@ async function evaluateRule(
+                   ctr: metrics.ctr,
+                 },
+                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
+-                campaignName: (actionConfig.campaign_name as string) || '',
++                campaignName: (triggerConfig.campaign_name as string) || '',
+                 customMessage: actionConfig.slack_message,
+                 prefix: dryRun ? '🧪 *[TEST]* ' : '',
+               })
+@@ -547,7 +599,7 @@ async function evaluateRule(
+           actionResult.slack_sent = true;
+         }
+ 
+-        actionResult.slack_channel = actionConfig.slack_channel;
++        actionResult.slack_channel = effectiveSlackChannel;
+       }
+     } catch (actionError) {
+       actionResult.error = String(actionError);
+diff --git a/src/components/dashboard/creative-breakdown.tsx b/src/components/dashboard/creative-breakdown.tsx
+new file mode 100644
+index 0000000..55cad6a
+--- /dev/null
++++ b/src/components/dashboard/creative-breakdown.tsx
+@@ -0,0 +1,201 @@
++'use client';
++
++import * as React from 'react';
++import { Card, CardContent } from '@/components/ui/card';
++import { useTranslations } from 'next-intl';
++import { cn, formatNumber, formatCurrency } from '@/lib/utils';
++import { TrendingUp, Type, MessageSquare, MousePointerClick } from 'lucide-react';
++import type { AdRow } from '@/lib/queries/meta/use-ads';
++
++interface RankedAd extends AdRow {
++  results: number;
++  cpa: number | null;
++  rank: number;
++}
++
++interface CreativeBreakdownProps {
++  ads: RankedAd[];
++}
++
++interface AggregatedCreative {
++  value: string;
++  totalResults: number;
++  totalSpend: number;
++  adCount: number;
++  avgCpa: number | null;
++}
++
++/**
++ * Aggregate ads by a creative field (headline, body, or CTA) and rank by total conversions.
++ */
++function aggregateByField(
++  ads: RankedAd[],
++  extractor: (ad: RankedAd) => string | undefined
++): AggregatedCreative[] {
++  const map = new Map<string, { results: number; spend: number; count: number }>();
++
++  for (const ad of ads) {
++    const value = extractor(ad)?.trim();
++
++    if (!value) continue;
++
++    const existing = map.get(value) || { results: 0, spend: 0, count: 0 };
++
++    existing.results += ad.results;
++    existing.spend += ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
++    existing.count += 1;
++    map.set(value, existing);
++  }
++
++  return Array.from(map.entries())
++    .map(([value, data]) => ({
++      value,
++      totalResults: data.results,
++      totalSpend: data.spend,
++      adCount: data.count,
++      avgCpa: data.results > 0 ? data.spend / data.results : null,
++    }))
++    .sort((a, b) => b.totalResults - a.totalResults)
++    .slice(0, 5);
++}
++
++function BreakdownSection({
++  title,
++  icon,
++  items,
++  maxResults,
++}: {
++  title: string;
++  icon: React.ReactNode;
++  items: AggregatedCreative[];
++  maxResults: number;
++}) {
++  const t = useTranslations('dashboard');
++  const tMetrics = useTranslations('metrics');
++
++  if (items.length === 0) return null;
++
++  return (
++    <div className="space-y-2">
++      <div className="flex items-center gap-2">
++        {icon}
++        <h4 className="text-sm font-medium text-[var(--color-foreground)]">{title}</h4>
++      </div>
++      <div className="space-y-1.5">
++        {items.map((item, idx) => {
++          const barWidth = maxResults > 0 ? (item.totalResults / maxResults) * 100 : 0;
++
++          return (
++            <div
++              key={item.value}
++              className="relative overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3"
++            >
++              {/* Background bar */}
++              <div
++                className="absolute inset-y-0 left-0 bg-green-50 dark:bg-green-900/20"
++                style={{ width: `${barWidth}%` }}
++              />
++              <div className="relative flex items-start justify-between gap-3">
++                <div className="min-w-0 flex-1">
++                  <div className="flex items-center gap-2">
++                    <span
++                      className={cn(
++                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
++                        idx === 0
++                          ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
++                          : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
++                      )}
++                    >
++                      {idx + 1}
++                    </span>
++                    <p className="truncate text-sm text-[var(--color-foreground)]">{item.value}</p>
++                  </div>
++                  <p className="mt-0.5 ml-7 text-[10px] text-[var(--color-muted-foreground)]">
++                    {t('adsCount', { count: item.adCount })}
++                  </p>
++                </div>
++                <div className="flex shrink-0 items-center gap-3 text-xs">
++                  <div className="text-right">
++                    <span className="font-bold text-green-600 dark:text-green-400">
++                      {formatNumber(item.totalResults)}
++                    </span>
++                    <span className="ml-1 text-[var(--color-muted-foreground)]">
++                      {tMetrics('results').toLowerCase()}
++                    </span>
++                  </div>
++                  {item.avgCpa != null && (
++                    <div className="text-right text-[var(--color-muted-foreground)]">
++                      {formatCurrency(item.avgCpa)} {tMetrics('cpa').toLowerCase()}
++                    </div>
++                  )}
++                </div>
++              </div>
++            </div>
++          );
++        })}
++      </div>
++    </div>
++  );
++}
++
++/**
++ * Shows which headlines, primary texts, and CTAs produced the most conversions/results.
++ * Aggregates across all ranked ads and displays a top-5 breakdown for each creative element.
++ */
++export function CreativeBreakdown({ ads }: CreativeBreakdownProps) {
++  const t = useTranslations('dashboard');
++
++  const headlines = React.useMemo(() => aggregateByField(ads, (ad) => ad.creative?.title), [ads]);
++  const primaryTexts = React.useMemo(() => aggregateByField(ads, (ad) => ad.creative?.body), [ads]);
++  const ctas = React.useMemo(
++    () =>
++      aggregateByField(ads, (ad) =>
++        ad.creative?.call_to_action_type
++          ? ad.creative.call_to_action_type.replace(/_/g, ' ')
++          : undefined
++      ),
++    [ads]
++  );
++
++  if (headlines.length === 0 && primaryTexts.length === 0 && ctas.length === 0) {
++    return null;
++  }
++
++  const globalMax = Math.max(
++    headlines[0]?.totalResults ?? 0,
++    primaryTexts[0]?.totalResults ?? 0,
++    ctas[0]?.totalResults ?? 0
++  );
++
++  return (
++    <Card className="overflow-hidden">
++      <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-4 py-3 md:px-5">
++        <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
++        <h3 className="text-sm font-medium text-[var(--color-foreground)]">
++          {t('creativeBreakdown')}
++        </h3>
++        <span className="text-xs text-[var(--color-muted-foreground)]">{t('byConversions')}</span>
++      </div>
++      <CardContent className="space-y-5 p-4 md:p-5">
++        <BreakdownSection
++          title={t('topHeadlines')}
++          icon={<Type className="h-4 w-4 text-blue-500" />}
++          items={headlines}
++          maxResults={globalMax}
++        />
++        <BreakdownSection
++          title={t('topPrimaryTexts')}
++          icon={<MessageSquare className="h-4 w-4 text-purple-500" />}
++          items={primaryTexts}
++          maxResults={globalMax}
++        />
++        <BreakdownSection
++          title={t('topCTAs')}
++          icon={<MousePointerClick className="h-4 w-4 text-orange-500" />}
++          items={ctas}
++          maxResults={globalMax}
++        />
++      </CardContent>
++    </Card>
++  );
++}
+-- 
+2.34.1
+

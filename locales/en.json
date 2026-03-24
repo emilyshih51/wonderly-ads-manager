@@ -461,6 +461,7 @@
     "useTemplate": "Use template",
     "if": "If",
     "noAdsMatched": "No ads matched",
+    "noAdsMetThresholds": "No ads met the rule's thresholds. Try adjusting your conditions or use sample data to test.",
     "adsMatched": "{count, plural, one {ad matched} other {ads matched}}",
     "slackSent": "Slack sent",
     "undoActions": "Undo actions",

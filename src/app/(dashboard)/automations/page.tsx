@@ -454,11 +454,6 @@ export default function AutomationsPage() {
   };
 
   /* ─── Test Workflow ─── */
-  const openTestSetup = () => {
-    setTestChannel(config.slack_channel || '');
-    setTestSetupOpen(true);
-  };
-
   const handleTestWorkflow = async () => {
     setTestSetupOpen(false);
     setTesting(true);
@@ -1629,6 +1624,136 @@ export default function AutomationsPage() {
             </div>
           </div>
 
+          {/* ─── Inline Test Setup ─── */}
+          {testSetupOpen && (
+            <div className="mt-4 shrink-0 space-y-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-[var(--color-foreground)]">
+                  {t('testSetup')}
+                </h4>
+                <button
+                  onClick={() => setTestSetupOpen(false)}
+                  className="rounded-md p-1 text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-xs text-[var(--color-muted-foreground)]">{t('testSetupDesc')}</p>
+              <div>
+                <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                  {t('testChannel')}
+                </label>
+                <Input
+                  value={testChannel}
+                  onChange={(e) => setTestChannel(e.target.value)}
+                  className="mt-1 h-9"
+                  placeholder={t('testChannelPlaceholder')}
+                />
+              </div>
+              <div className="border-t border-[var(--color-border)] pt-3">
+                <label className="flex cursor-pointer items-center gap-2.5">
+                  <Switch size="sm" checked={useFakeData} onCheckedChange={setUseFakeData} />
+                  <span className="text-sm font-medium text-[var(--color-foreground)]">
+                    {t('useFakeData')}
+                  </span>
+                </label>
+                <p className="mt-1 ml-8 text-xs text-[var(--color-muted-foreground)]">
+                  {useFakeData ? t('useFakeData') : t('useLiveData')}
+                </p>
+              </div>
+              {useFakeData && (
+                <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+                  <div>
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('sampleEntityName')}
+                    </label>
+                    <Input
+                      value={fakeData.entity_name}
+                      onChange={(e) =>
+                        setFakeData((prev) => ({ ...prev, entity_name: e.target.value }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        {t('sampleSpend')}
+                      </label>
+                      <Input
+                        type="number"
+                        value={fakeData.spend}
+                        onChange={(e) =>
+                          setFakeData((prev) => ({
+                            ...prev,
+                            spend: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        {t('sampleResults')}
+                      </label>
+                      <Input
+                        type="number"
+                        value={fakeData.results}
+                        onChange={(e) =>
+                          setFakeData((prev) => ({
+                            ...prev,
+                            results: parseInt(e.target.value) || 0,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        {t('sampleClicks')}
+                      </label>
+                      <Input
+                        type="number"
+                        value={fakeData.clicks}
+                        onChange={(e) =>
+                          setFakeData((prev) => ({
+                            ...prev,
+                            clicks: parseInt(e.target.value) || 0,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        {t('sampleImpressions')}
+                      </label>
+                      <Input
+                        type="number"
+                        value={fakeData.impressions}
+                        onChange={(e) =>
+                          setFakeData((prev) => ({
+                            ...prev,
+                            impressions: parseInt(e.target.value) || 0,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setTestSetupOpen(false)}>
+                  {tCommon('cancel')}
+                </Button>
+                <Button size="sm" onClick={handleTestWorkflow}>
+                  <Play className="mr-1.5 h-3.5 w-3.5" /> {t('sendTest')}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] pt-4">
             <Button
@@ -1640,7 +1765,15 @@ export default function AutomationsPage() {
               {openStep === 1 ? tCommon('cancel') : t('back')}
             </Button>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={openTestSetup} disabled={testing}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTestChannel(config.slack_channel || '');
+                  setTestSetupOpen((prev) => !prev);
+                }}
+                disabled={testing}
+              >
                 <Play className="mr-1.5 h-3.5 w-3.5" />
                 {testing ? t('testing') : t('testRule')}
               </Button>
@@ -1662,124 +1795,6 @@ export default function AutomationsPage() {
           </div>
         </div>
       </SlidePanel>
-
-      {/* ─── Test Setup Dialog ─── */}
-      <Dialog open={testSetupOpen} onOpenChange={setTestSetupOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base">{t('testSetup')}</DialogTitle>
-            <DialogDescription className="text-xs">{t('testSetupDesc')}</DialogDescription>
-          </DialogHeader>
-          <div className="mt-2 space-y-4">
-            <div>
-              <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                {t('testChannel')}
-              </label>
-              <Input
-                value={testChannel}
-                onChange={(e) => setTestChannel(e.target.value)}
-                className="mt-1 h-9"
-                placeholder={t('testChannelPlaceholder')}
-              />
-            </div>
-
-            <div className="border-t border-[var(--color-border)] pt-4">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <Switch size="sm" checked={useFakeData} onCheckedChange={setUseFakeData} />
-                <span className="text-sm font-medium text-[var(--color-foreground)]">
-                  {t('useFakeData')}
-                </span>
-              </label>
-              <p className="mt-1 ml-8 text-xs text-[var(--color-muted-foreground)]">
-                {useFakeData ? t('useFakeData') : t('useLiveData')}
-              </p>
-            </div>
-
-            {useFakeData && (
-              <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3">
-                <div>
-                  <label className="text-xs text-[var(--color-muted-foreground)]">
-                    {t('sampleEntityName')}
-                  </label>
-                  <Input
-                    value={fakeData.entity_name}
-                    onChange={(e) =>
-                      setFakeData((prev) => ({ ...prev, entity_name: e.target.value }))
-                    }
-                    className="mt-1 h-8 text-sm"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('sampleSpend')}
-                    </label>
-                    <Input
-                      type="number"
-                      value={fakeData.spend}
-                      onChange={(e) =>
-                        setFakeData((prev) => ({ ...prev, spend: parseFloat(e.target.value) || 0 }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('sampleResults')}
-                    </label>
-                    <Input
-                      type="number"
-                      value={fakeData.results}
-                      onChange={(e) =>
-                        setFakeData((prev) => ({ ...prev, results: parseInt(e.target.value) || 0 }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('sampleClicks')}
-                    </label>
-                    <Input
-                      type="number"
-                      value={fakeData.clicks}
-                      onChange={(e) =>
-                        setFakeData((prev) => ({ ...prev, clicks: parseInt(e.target.value) || 0 }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('sampleImpressions')}
-                    </label>
-                    <Input
-                      type="number"
-                      value={fakeData.impressions}
-                      onChange={(e) =>
-                        setFakeData((prev) => ({
-                          ...prev,
-                          impressions: parseInt(e.target.value) || 0,
-                        }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" size="sm" onClick={() => setTestSetupOpen(false)}>
-                {tCommon('cancel')}
-              </Button>
-              <Button size="sm" onClick={handleTestWorkflow}>
-                <Play className="mr-1.5 h-3.5 w-3.5" /> {t('sendTest')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ─── Test Results Dialog ─── */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>

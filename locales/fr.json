@@ -125,6 +125,7 @@
     "cpa": "CPA",
     "reach": "Portée",
     "adName": "Nom de la publicité",
+    "campaignName": "Nom de la campagne",
     "performance": "Performance"
   },
   "dashboard": {

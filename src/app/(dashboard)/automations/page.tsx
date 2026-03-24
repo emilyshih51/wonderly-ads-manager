@@ -1521,6 +1521,7 @@ export default function AutomationsPage() {
                               { var: '{rule_name}', label: t('ruleName') },
                               { var: '{action}', label: t('action') },
                               { var: '{entity_name}', label: tMetrics('adName') },
+                              { var: '{campaign_name}', label: tMetrics('campaignName') },
                               { var: '{ad_link}', label: t('adLink') },
                               { var: '{spend}', label: tMetrics('spend') },
                               { var: '{results}', label: tMetrics('results') },
@@ -1578,7 +1579,11 @@ export default function AutomationsPage() {
                                         : `$${sampleAd?.cpa || '0.00'}`
                                     )
                                     .replace(/\{clicks\}/g, String(sampleAd?.clicks ?? 0))
-                                    .replace(/\{ctr\}/g, `${sampleAd?.ctr || '0.00'}%`);
+                                    .replace(/\{ctr\}/g, `${sampleAd?.ctr || '0.00'}%`)
+                                    .replace(
+                                      /\{campaign_name\}/g,
+                                      config.campaign_name || '<campaign name>'
+                                    );
                                 })()}
                               </div>
                               {previewAds.length > 0 && (

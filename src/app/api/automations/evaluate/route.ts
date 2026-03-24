@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
 
       for (const r of budgetResults) {
         const ch = r.slack_channel ?? summaryChannel;
+
         if (!byChannel[ch]) byChannel[ch] = [];
         byChannel[ch].push(r);
       }
@@ -491,7 +492,8 @@ async function evaluateRule(
                 }
               }
 
-              actionResult.action = direction === 'increase' ? 'budget_increased' : 'budget_decreased';
+              actionResult.action =
+                direction === 'increase' ? 'budget_increased' : 'budget_decreased';
               actionResult.previous_budget = currentBudgetCents / 100;
               actionResult.new_budget = newBudgetCents / 100;
               if (actionCap) actionCap.executed++;
@@ -505,7 +507,11 @@ async function evaluateRule(
 
       if (actionConfig.slack_channel && notifySlack) {
         if (!dryRun || sendSlack) {
-          if (actionType === 'adjust_budget' && actionResult.action && actionResult.new_budget !== undefined) {
+          if (
+            actionType === 'adjust_budget' &&
+            actionResult.action &&
+            actionResult.new_budget !== undefined
+          ) {
             await slack
               .sendBudgetNotification(actionConfig.slack_channel, {
                 entityName,
@@ -530,6 +536,7 @@ async function evaluateRule(
                   ctr: metrics.ctr,
                 },
                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
+                campaignName: (actionConfig.campaign_name as string) || '',
                 customMessage: actionConfig.slack_message,
                 prefix: dryRun ? '🧪 *[TEST]* ' : '',
               })

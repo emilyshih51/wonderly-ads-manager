@@ -68,6 +68,8 @@ export interface AutomationNotification {
     clicks?: number;
     ctr?: number;
   };
+  /** Campaign name from the rule config, used for `{campaign_name}` placeholder. */
+  campaignName?: string;
   /** Optional custom message template with `{placeholder}` tokens. */
   customMessage?: string;
   /** Optional ID of a newly created duplicate ad (for promote actions). */

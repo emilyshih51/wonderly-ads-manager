@@ -125,6 +125,7 @@
     "cpa": "CPA",
     "reach": "觸及人數",
     "adName": "廣告名稱",
+    "campaignName": "廣告活動名稱",
     "performance": "效果"
   },
   "dashboard": {

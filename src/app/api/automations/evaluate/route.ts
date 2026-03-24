@@ -12,6 +12,7 @@ import { createSlackService } from '@/services/slack';
 import { RulesStoreService } from '@/services/rules-store';
 import { createLogger } from '@/services/logger';
 import type { StoredRule } from '@/services/rules-store';
+import type { MetaInsightsRow } from '@/types';
 
 const logger = createLogger('Automations:Evaluate');
 
@@ -201,10 +202,21 @@ export async function POST(request: NextRequest) {
     rule?: StoredRule;
     send_slack?: boolean;
     live?: boolean;
+    test_channel?: string;
+    test_data?: {
+      entity_name: string;
+      spend: number;
+      results: number;
+      clicks: number;
+      ctr: number;
+      impressions: number;
+    };
   };
   const rule = body.rule;
   const sendSlack = body.send_slack === true;
   const live = body.live === true;
+  const testChannel = body.test_channel;
+  const testData = body.test_data;
 
   if (!rule) {
     return NextResponse.json({ error: 'Rule required' }, { status: 400 });
@@ -224,6 +236,8 @@ export async function POST(request: NextRequest) {
     const results = await evaluateRule(rule, meta, rawAdAccountId, optimizationMap, {
       dryRun,
       sendSlack: sendSlack || live,
+      testChannel,
+      testData,
     });
 
     return NextResponse.json({
@@ -284,6 +298,15 @@ interface EvaluateRuleOptions {
   dryRun?: boolean;
   sendSlack?: boolean;
   actionCap?: { executed: number; max: number };
+  testChannel?: string;
+  testData?: {
+    entity_name: string;
+    spend: number;
+    results: number;
+    clicks: number;
+    ctr: number;
+    impressions: number;
+  };
 }
 
 /**
@@ -323,7 +346,7 @@ async function evaluateRule(
   optimizationMap: Record<string, string>,
   options: EvaluateRuleOptions = {}
 ): Promise<EvaluateResult[]> {
-  const { dryRun = false, sendSlack = false, actionCap } = options;
+  const { dryRun = false, sendSlack = false, actionCap, testChannel, testData } = options;
   const nodes = rule.nodes;
   const triggerNode = nodes.find((n) => n.type === 'trigger');
   const conditionNodes = nodes.filter((n) => n.type === 'condition');
@@ -337,10 +360,35 @@ async function evaluateRule(
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
   const campaignId = triggerConfig.campaign_id;
 
-  const insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
-    datePreset,
-    campaignId,
-  });
+  // When testData is provided, use synthetic data instead of querying Meta
+  let insightsData: MetaInsightsRow[];
+
+  if (testData) {
+    insightsData = [
+      {
+        ad_id: 'test_ad_001',
+        ad_name: testData.entity_name || 'Sample Ad',
+        adset_id: 'test_adset_001',
+        campaign_id: campaignId || 'test_campaign_001',
+        campaign_name: triggerConfig.campaign_name || 'Sample Campaign',
+        spend: String(testData.spend),
+        impressions: String(testData.impressions),
+        clicks: String(testData.clicks),
+        ctr: String(testData.ctr),
+        cpc: testData.clicks > 0 ? String(testData.spend / testData.clicks) : '0',
+        cpm: '0',
+        actions:
+          testData.results > 0
+            ? [{ action_type: 'offsite_conversion', value: String(testData.results) }]
+            : [],
+      },
+    ];
+  } else {
+    insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+      datePreset,
+      campaignId,
+    });
+  }
 
   if (insightsData.length === 0 && !dryRun) {
     logger.warn(
@@ -506,7 +554,11 @@ async function evaluateRule(
       const notifySlack =
         actionConfig.also_notify_slack === 'true' || actionConfig.also_notify_slack === true;
 
-      if (actionConfig.slack_channel && notifySlack) {
+      // When a testChannel is provided, always send to the override channel
+      const effectiveSlackChannel = testChannel || actionConfig.slack_channel;
+      const shouldNotifySlack = testChannel ? true : notifySlack;
+
+      if (effectiveSlackChannel && shouldNotifySlack) {
         if (!dryRun || sendSlack) {
           if (
             actionType === 'adjust_budget' &&
@@ -514,7 +566,7 @@ async function evaluateRule(
             actionResult.new_budget !== undefined
           ) {
             await slack
-              .sendBudgetNotification(actionConfig.slack_channel, {
+              .sendBudgetNotification(effectiveSlackChannel, {
                 entityName,
                 newBudget: actionResult.new_budget,
                 previousBudget: actionResult.previous_budget,
@@ -522,7 +574,7 @@ async function evaluateRule(
               .catch((e: unknown) => logger.error('Slack budget notification failed', e));
           } else {
             await slack
-              .sendAutomationNotification(actionConfig.slack_channel, {
+              .sendAutomationNotification(effectiveSlackChannel, {
                 ruleName: rule.name,
                 actionType: actionType as 'pause' | 'activate' | 'promote',
                 entityType,
@@ -537,7 +589,7 @@ async function evaluateRule(
                   ctr: metrics.ctr,
                 },
                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
-                campaignName: (actionConfig.campaign_name as string) || '',
+                campaignName: (triggerConfig.campaign_name as string) || '',
                 customMessage: actionConfig.slack_message,
                 prefix: dryRun ? '🧪 *[TEST]* ' : '',
               })
@@ -547,7 +599,7 @@ async function evaluateRule(
           actionResult.slack_sent = true;
         }
 
-        actionResult.slack_channel = actionConfig.slack_channel;
+        actionResult.slack_channel = effectiveSlackChannel;
       }
     } catch (actionError) {
       actionResult.error = String(actionError);

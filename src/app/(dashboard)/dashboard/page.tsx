@@ -41,6 +41,7 @@ import { MetricCard } from '@/components/dashboard/metric-card';
 import { StatDetailPanel } from '@/components/dashboard/stat-detail-panel';
 import { ChartWidget } from '@/components/dashboard/chart-widget';
 import { AdsGallery } from '@/components/dashboard/ads-gallery';
+import { CreativeBreakdown } from '@/components/dashboard/creative-breakdown';
 import {
   DollarSign,
   Eye,
@@ -887,6 +888,26 @@ export default function DashboardPage() {
               />
             </div>
           </Card>
+        )}
+
+        {/* Creative Breakdown — which headlines, primary text, CTAs drive the most results */}
+        {selectedCampaign !== 'all' && !drillLoading && drillAds.length > 0 && (
+          <CreativeBreakdown
+            ads={drillAds
+              .map((ad, idx) => {
+                const results = getResults(ad.insights?.actions, selectedResultActionType);
+                const spend = parseFloat(ad.insights?.spend || '0');
+
+                return {
+                  ...ad,
+                  results,
+                  cpa: results > 0 ? spend / results : null,
+                  rank: idx + 1,
+                };
+              })
+              .sort((a, b) => b.results - a.results)
+              .map((ad, idx) => ({ ...ad, rank: idx + 1 }))}
+          />
         )}
       </div>
 

@@ -344,6 +344,17 @@ export default function AutomationsPage() {
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState<TestResult | null>(null);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [testSetupOpen, setTestSetupOpen] = useState(false);
+  const [testChannel, setTestChannel] = useState('');
+  const [useFakeData, setUseFakeData] = useState(false);
+  const [fakeData, setFakeData] = useState({
+    entity_name: 'Sample Ad',
+    spend: 50,
+    results: 3,
+    clicks: 120,
+    impressions: 5000,
+    ctr: 0.024,
+  });
 
   // Run Now state
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
@@ -443,19 +454,35 @@ export default function AutomationsPage() {
   };
 
   /* ─── Test Workflow ─── */
+  const openTestSetup = () => {
+    setTestChannel(config.slack_channel || '');
+    setTestSetupOpen(true);
+  };
+
   const handleTestWorkflow = async () => {
+    setTestSetupOpen(false);
     setTesting(true);
     setTestResults(null);
 
     try {
       const { nodes, edges } = configToNodes(config);
+      const payload: Record<string, unknown> = {
+        rule: { name: ruleName, is_active: true, nodes, edges },
+        send_slack: true,
+      };
+
+      if (testChannel) {
+        payload.test_channel = testChannel;
+      }
+
+      if (useFakeData) {
+        payload.test_data = fakeData;
+      }
+
       const res = await fetch('/api/automations/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rule: { name: ruleName, is_active: true, nodes, edges },
-          send_slack: true,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
@@ -1613,7 +1640,7 @@ export default function AutomationsPage() {
               {openStep === 1 ? tCommon('cancel') : t('back')}
             </Button>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={handleTestWorkflow} disabled={testing}>
+              <Button variant="outline" size="sm" onClick={openTestSetup} disabled={testing}>
                 <Play className="mr-1.5 h-3.5 w-3.5" />
                 {testing ? t('testing') : t('testRule')}
               </Button>
@@ -1635,6 +1662,124 @@ export default function AutomationsPage() {
           </div>
         </div>
       </SlidePanel>
+
+      {/* ─── Test Setup Dialog ─── */}
+      <Dialog open={testSetupOpen} onOpenChange={setTestSetupOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">{t('testSetup')}</DialogTitle>
+            <DialogDescription className="text-xs">{t('testSetupDesc')}</DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 space-y-4">
+            <div>
+              <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                {t('testChannel')}
+              </label>
+              <Input
+                value={testChannel}
+                onChange={(e) => setTestChannel(e.target.value)}
+                className="mt-1 h-9"
+                placeholder={t('testChannelPlaceholder')}
+              />
+            </div>
+
+            <div className="border-t border-[var(--color-border)] pt-4">
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <Switch size="sm" checked={useFakeData} onCheckedChange={setUseFakeData} />
+                <span className="text-sm font-medium text-[var(--color-foreground)]">
+                  {t('useFakeData')}
+                </span>
+              </label>
+              <p className="mt-1 ml-8 text-xs text-[var(--color-muted-foreground)]">
+                {useFakeData ? t('useFakeData') : t('useLiveData')}
+              </p>
+            </div>
+
+            {useFakeData && (
+              <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3">
+                <div>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    {t('sampleEntityName')}
+                  </label>
+                  <Input
+                    value={fakeData.entity_name}
+                    onChange={(e) =>
+                      setFakeData((prev) => ({ ...prev, entity_name: e.target.value }))
+                    }
+                    className="mt-1 h-8 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('sampleSpend')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={fakeData.spend}
+                      onChange={(e) =>
+                        setFakeData((prev) => ({ ...prev, spend: parseFloat(e.target.value) || 0 }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('sampleResults')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={fakeData.results}
+                      onChange={(e) =>
+                        setFakeData((prev) => ({ ...prev, results: parseInt(e.target.value) || 0 }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('sampleClicks')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={fakeData.clicks}
+                      onChange={(e) =>
+                        setFakeData((prev) => ({ ...prev, clicks: parseInt(e.target.value) || 0 }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('sampleImpressions')}
+                    </label>
+                    <Input
+                      type="number"
+                      value={fakeData.impressions}
+                      onChange={(e) =>
+                        setFakeData((prev) => ({
+                          ...prev,
+                          impressions: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setTestSetupOpen(false)}>
+                {tCommon('cancel')}
+              </Button>
+              <Button size="sm" onClick={handleTestWorkflow}>
+                <Play className="mr-1.5 h-3.5 w-3.5" /> {t('sendTest')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── Test Results Dialog ─── */}
       <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>

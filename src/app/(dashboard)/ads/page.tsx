@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/dropdown';
 import { AdsSkeleton } from '@/components/skeletons/ads-skeleton';
 import { AdsGallery } from '@/components/dashboard/ads-gallery';
+import { CreativeBreakdown } from '@/components/dashboard/creative-breakdown';
 import { useAppStore } from '@/stores/app-store';
 import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
 import { useAds } from '@/lib/queries/meta/use-ads';
@@ -207,7 +208,12 @@ export default function TopPerformingAdsPage() {
             </CardContent>
           </Card>
         ) : viewMode === 'gallery' ? (
-          <AdsGallery ads={ads} />
+          <>
+            <AdsGallery ads={ads} />
+            <div className="mt-6">
+              <CreativeBreakdown ads={ads} />
+            </div>
+          </>
         ) : (
           /* Table view */
           <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">

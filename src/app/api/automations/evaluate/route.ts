@@ -246,6 +246,7 @@ interface NodeConfig {
   entity_type?: string;
   date_preset?: string;
   campaign_id?: string;
+  campaign_name?: string;
   action_type?: string;
   target_adset_id?: string;
   slack_channel?: string;

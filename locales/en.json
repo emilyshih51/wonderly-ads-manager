@@ -155,7 +155,8 @@
     "addChart": "Add chart",
     "resetLayout": "Reset",
     "clickToEditBudget": "Click to edit budget",
-    "viewAdSets": "View Ad Sets"
+    "viewAdSets": "View Ad Sets",
+    "adsNoResults": "ads with no results"
   },
   "campaigns": {
     "title": "Campaigns",
@@ -502,7 +503,14 @@
       "adset": "Ad set level",
       "campaign": "Campaign level"
     },
-    "duplicatedToWinners": "Duplicated to winners ad set"
+    "duplicatedToWinners": "Duplicated to winners ad set",
+    "useHistoryData": "Use data from recent run",
+    "selectRun": "Select a run",
+    "selectEntity": "Select an entity",
+    "noHistoryRuns": "No recent runs available. Run or test a rule first.",
+    "selectedMetrics": "Selected metrics",
+    "runOn": "Run on {date}",
+    "matchedEntities": "{count} matched"
   },
   "settings": {
     "title": "Settings",
@@ -541,7 +549,13 @@
     "fontGeistMono": "Monospace companion to Geist",
     "fontDmSans": "Friendly geometric sans-serif",
     "fontSpaceGrotesk": "Proportional — techy feel",
-    "fontPreview": "The quick brown fox"
+    "fontPreview": "The quick brown fox",
+    "aiUsage": "AI Usage",
+    "tokensToday": "Tokens today",
+    "costToday": "Cost today",
+    "costThisWeek": "Cost this week",
+    "last7Days": "Last 7 days",
+    "usagePricingNote": "Estimated costs based on Anthropic Claude Sonnet pricing ($3/M input, $15/M output)."
   },
   "login": {
     "welcomeBack": "Welcome back",

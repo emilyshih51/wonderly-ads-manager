@@ -15,6 +15,8 @@ import {
   Palette,
   ChevronRight,
   Bot,
+  BarChart3,
+  Coins,
 } from 'lucide-react';
 import { MetaLogo } from '@/components/ui/meta-logo';
 import { useAssistantStore } from '@/stores/assistant-store';
@@ -109,6 +111,127 @@ function SlackLogo({ className }: { className?: string }) {
         fill="#E01E5A"
       />
     </svg>
+  );
+}
+
+/**
+ * Daily AI token usage section with 7-day history.
+ */
+function UsageSection() {
+  const t = useTranslations('settings');
+  const [usage, setUsage] = useState<{
+    today: {
+      date: string;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      estimated_cost: number;
+    };
+    history: Array<{
+      date: string;
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      estimated_cost: number;
+    }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/chat/usage?days=7')
+      .then((res) => res.json())
+      .then(setUsage)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const weekCost = usage?.history.reduce((sum, d) => sum + d.estimated_cost, 0) ?? 0;
+
+  // For the bar chart — find max to scale bars
+  const maxTokens = Math.max(...(usage?.history.map((d) => d.total_tokens) ?? [1]), 1);
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b border-[var(--color-border)] px-5 py-4">
+        <div className="flex items-center gap-2.5">
+          <Coins className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+          <CardTitle className="text-sm font-medium">{t('aiUsage')}</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="px-5 py-4">
+        {loading ? (
+          <div className="space-y-3">
+            <div className="h-4 w-32 animate-pulse rounded bg-[var(--color-muted)]" />
+            <div className="h-20 animate-pulse rounded bg-[var(--color-muted)]" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Today's stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-xs text-[var(--color-muted-foreground)]">{t('tokensToday')}</p>
+                <p className="text-lg font-semibold text-[var(--color-foreground)] tabular-nums">
+                  {(usage?.today.total_tokens ?? 0).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-[var(--color-muted-foreground)]">{t('costToday')}</p>
+                <p className="text-lg font-semibold text-[var(--color-foreground)] tabular-nums">
+                  ${(usage?.today.estimated_cost ?? 0).toFixed(4)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-[var(--color-muted-foreground)]">{t('costThisWeek')}</p>
+                <p className="text-lg font-semibold text-[var(--color-foreground)] tabular-nums">
+                  ${weekCost.toFixed(4)}
+                </p>
+              </div>
+            </div>
+
+            {/* 7-day bar chart */}
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)]">
+                <BarChart3 className="h-3 w-3" />
+                {t('last7Days')}
+              </div>
+              <div className="mt-2 flex items-end gap-1" style={{ height: '64px' }}>
+                {[...(usage?.history ?? [])].reverse().map((day) => {
+                  const pct = maxTokens > 0 ? (day.total_tokens / maxTokens) * 100 : 0;
+                  const dayLabel = new Date(day.date + 'T12:00:00').toLocaleDateString(undefined, {
+                    weekday: 'short',
+                  });
+
+                  return (
+                    <div
+                      key={day.date}
+                      className="group relative flex flex-1 flex-col items-center"
+                    >
+                      <div
+                        className="w-full rounded-t bg-[var(--color-primary)]/20 transition-colors group-hover:bg-[var(--color-primary)]/40"
+                        style={{ height: `${Math.max(pct, 2)}%` }}
+                      />
+                      <span className="mt-1 text-[9px] text-[var(--color-muted-foreground)]">
+                        {dayLabel}
+                      </span>
+                      {/* Tooltip */}
+                      <div className="pointer-events-none absolute -top-10 left-1/2 z-10 hidden -translate-x-1/2 rounded bg-[var(--color-foreground)] px-2 py-1 text-[10px] whitespace-nowrap text-[var(--color-background)] group-hover:block">
+                        {day.total_tokens.toLocaleString()} tokens &middot; $
+                        {day.estimated_cost.toFixed(4)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Pricing note */}
+            <p className="text-[10px] text-[var(--color-muted-foreground)]">
+              {t('usagePricingNote')}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -371,6 +494,9 @@ export function SettingsClient({
 
           {/* ── Right column ── */}
           <div className="space-y-6">
+            {/* AI Usage */}
+            <UsageSection />
+
             {/* AI Assistant */}
             <Card className="overflow-hidden">
               <AssistantToggle />

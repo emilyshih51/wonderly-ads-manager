@@ -5,6 +5,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/automations/budget-monitor",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/slack/digest?type=daily",
       "schedule": "0 9 * * 1-5"
     },

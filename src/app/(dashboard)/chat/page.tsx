@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Send,
@@ -13,6 +14,7 @@ import {
   Check,
   Copy,
   MessageSquarePlus,
+  ChevronDown,
 } from 'lucide-react';
 import {
   useChatEngine,
@@ -20,6 +22,42 @@ import {
   FOLLOW_UP_PROMPTS,
   COLOR_HEX,
 } from '@/hooks/use-chat-engine';
+
+/** Pricing per million tokens (Claude Sonnet). */
+const INPUT_COST_PER_M = 3.0;
+const OUTPUT_COST_PER_M = 15.0;
+
+/**
+ * Displays token usage summary for an assistant message.
+ * @param usage - Token usage object with input_tokens and output_tokens
+ */
+function TokenSummary({ usage }: { usage: { input_tokens: number; output_tokens: number } }) {
+  const [expanded, setExpanded] = useState(false);
+  const total = usage.input_tokens + usage.output_tokens;
+  const cost =
+    (usage.input_tokens / 1_000_000) * INPUT_COST_PER_M +
+    (usage.output_tokens / 1_000_000) * OUTPUT_COST_PER_M;
+
+  return (
+    <button
+      onClick={() => setExpanded(!expanded)}
+      className="mt-1.5 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-[10px] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)]/50"
+    >
+      <ChevronDown
+        className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+      />
+      <span>
+        {total.toLocaleString()} tokens &middot; ~${cost.toFixed(4)}
+      </span>
+      {expanded && (
+        <span className="ml-auto text-[10px] tabular-nums opacity-70">
+          {usage.input_tokens.toLocaleString()} in &middot; {usage.output_tokens.toLocaleString()}{' '}
+          out
+        </span>
+      )}
+    </button>
+  );
+}
 
 export default function ChatPage() {
   const engine = useChatEngine();
@@ -212,6 +250,7 @@ export default function ChatPage() {
                     </div>
                   )}
                 </div>
+                {msg.tokenUsage && !msg.isLoading && <TokenSummary usage={msg.tokenUsage} />}
                 {/* Timestamp */}
                 <p
                   className={`mt-1 text-[10px] text-[var(--color-muted-foreground)] ${

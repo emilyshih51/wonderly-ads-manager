@@ -16,7 +16,7 @@ export const META_OAUTH_URL = `https://www.facebook.com/${META_API_VERSION}/dial
  * needed for result counting.
  */
 export const INSIGHT_FIELDS_AD =
-  'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type';
+  'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type';
 
 /**
  * Insight fields requested for ad-set-level queries.
@@ -24,14 +24,14 @@ export const INSIGHT_FIELDS_AD =
  * a separate lookup.
  */
 export const INSIGHT_FIELDS_ADSET =
-  'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type';
+  'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,cost_per_action_type';
 
 /**
  * Insight fields requested for campaign-level queries.
  * Core performance metrics plus actions breakdown for result counting.
  */
 export const INSIGHT_FIELDS_CAMPAIGN =
-  'campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type';
+  'campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,cost_per_action_type';
 
 /**
  * Pre-serialized Meta API `filtering` parameter strings for each entity level.

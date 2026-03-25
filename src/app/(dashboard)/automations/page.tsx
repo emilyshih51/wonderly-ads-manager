@@ -346,15 +346,9 @@ export default function AutomationsPage() {
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [testSetupOpen, setTestSetupOpen] = useState(false);
   const [testChannel, setTestChannel] = useState('');
-  const [useFakeData, setUseFakeData] = useState(false);
-  const [fakeData, setFakeData] = useState({
-    entity_name: 'Sample Ad',
-    spend: 50,
-    results: 3,
-    clicks: 120,
-    impressions: 5000,
-    ctr: 0.024,
-  });
+  const [useHistoryData, setUseHistoryData] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedEntityIdx, setSelectedEntityIdx] = useState<number | null>(null);
 
   // Run Now state
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
@@ -470,8 +464,21 @@ export default function AutomationsPage() {
         payload.test_channel = testChannel;
       }
 
-      if (useFakeData) {
-        payload.test_data = fakeData;
+      if (useHistoryData && selectedRunId && selectedEntityIdx !== null) {
+        const selectedRun = activityLog.find((run) => run.id === selectedRunId);
+
+        if (selectedRun && selectedRun.results[selectedEntityIdx]) {
+          const selectedEntity = selectedRun.results[selectedEntityIdx];
+
+          payload.test_data = {
+            entity_name: selectedEntity.entity_name || 'Sample Ad',
+            spend: selectedEntity.metrics?.spend || 0,
+            results: selectedEntity.metrics?.results || 0,
+            clicks: 0,
+            impressions: 0,
+            ctr: 0,
+          };
+        }
       }
 
       const res = await fetch('/api/automations/evaluate', {
@@ -1652,102 +1659,115 @@ export default function AutomationsPage() {
               </div>
               <div className="border-t border-[var(--color-border)] pt-3">
                 <label className="flex cursor-pointer items-center gap-2.5">
-                  <Switch size="sm" checked={useFakeData} onCheckedChange={setUseFakeData} />
+                  <Switch size="sm" checked={useHistoryData} onCheckedChange={setUseHistoryData} />
                   <span className="text-sm font-medium text-[var(--color-foreground)]">
-                    {t('useFakeData')}
+                    {t('useHistoryData')}
                   </span>
                 </label>
                 <p className="mt-1 ml-8 text-xs text-[var(--color-muted-foreground)]">
-                  {useFakeData ? t('useFakeData') : t('useLiveData')}
+                  {useHistoryData ? t('useHistoryData') : t('useLiveData')}
                 </p>
               </div>
-              {useFakeData && (
+              {useHistoryData && (
                 <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-                  <div>
-                    <label className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('sampleEntityName')}
-                    </label>
-                    <Input
-                      value={fakeData.entity_name}
-                      onChange={(e) =>
-                        setFakeData((prev) => ({ ...prev, entity_name: e.target.value }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-[var(--color-muted-foreground)]">
-                        {t('sampleSpend')}
-                      </label>
-                      <Input
-                        type="number"
-                        value={fakeData.spend}
-                        onChange={(e) =>
-                          setFakeData((prev) => ({
-                            ...prev,
-                            spend: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                        className="mt-1 h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-[var(--color-muted-foreground)]">
-                        {t('sampleResults')}
-                      </label>
-                      <Input
-                        type="number"
-                        value={fakeData.results}
-                        onChange={(e) =>
-                          setFakeData((prev) => ({
-                            ...prev,
-                            results: parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="mt-1 h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-[var(--color-muted-foreground)]">
-                        {t('sampleClicks')}
-                      </label>
-                      <Input
-                        type="number"
-                        value={fakeData.clicks}
-                        onChange={(e) =>
-                          setFakeData((prev) => ({
-                            ...prev,
-                            clicks: parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="mt-1 h-8 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-[var(--color-muted-foreground)]">
-                        {t('sampleImpressions')}
-                      </label>
-                      <Input
-                        type="number"
-                        value={fakeData.impressions}
-                        onChange={(e) =>
-                          setFakeData((prev) => ({
-                            ...prev,
-                            impressions: parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="mt-1 h-8 text-sm"
-                      />
-                    </div>
-                  </div>
+                  {!activityLog || activityLog.length === 0 ? (
+                    <p className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('noHistoryRuns')}
+                    </p>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                          {t('selectRun')}
+                        </label>
+                        <Select
+                          value={selectedRunId || ''}
+                          onChange={(val: string) => setSelectedRunId(val)}
+                          placeholder={t('selectRun')}
+                          options={activityLog.map((run) => {
+                            const date = new Date(run.timestamp * 1000).toLocaleString();
+
+                            return {
+                              label: `${run.rule_name} — ${date}`,
+                              value: run.id,
+                            };
+                          })}
+                        />
+                      </div>
+
+                      {selectedRunId && (
+                        <>
+                          <div>
+                            <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                              {t('selectEntity')}
+                            </label>
+                            <Select
+                              value={selectedEntityIdx !== null ? String(selectedEntityIdx) : ''}
+                              onChange={(val: string) => setSelectedEntityIdx(parseInt(val))}
+                              placeholder={t('selectEntity')}
+                              options={
+                                activityLog
+                                  .find((run) => run.id === selectedRunId)
+                                  ?.results.map((entity, idx) => ({
+                                    label: `${entity.entity_name || 'Unknown Entity'} — ${entity.action || 'No action'}`,
+                                    value: String(idx),
+                                  })) ?? []
+                              }
+                            />
+                          </div>
+
+                          {selectedEntityIdx !== null && (
+                            <div className="rounded bg-[var(--color-accent)] p-2">
+                              <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
+                                {t('selectedMetrics')}
+                              </p>
+                              {(() => {
+                                const selectedRun = activityLog.find(
+                                  (run) => run.id === selectedRunId
+                                );
+                                const selectedEntity = selectedRun?.results[selectedEntityIdx];
+
+                                return (
+                                  <div className="space-y-1 text-xs text-[var(--color-muted-foreground)]">
+                                    <div>
+                                      <span className="font-medium">
+                                        {t('common:spendDollar')}:{' '}
+                                      </span>
+                                      ${(selectedEntity?.metrics?.spend ?? 0).toFixed(2)}
+                                    </div>
+                                    <div>
+                                      <span className="font-medium">{t('common:results')}: </span>
+                                      {selectedEntity?.metrics?.results ?? 0}
+                                    </div>
+                                    <div>
+                                      <span className="font-medium">
+                                        {t('common:costPerResult')}:{' '}
+                                      </span>
+                                      $
+                                      {typeof selectedEntity?.metrics?.cost_per_result === 'number'
+                                        ? selectedEntity.metrics.cost_per_result.toFixed(2)
+                                        : (selectedEntity?.metrics?.cost_per_result ?? 'N/A')}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setTestSetupOpen(false)}>
                   {tCommon('cancel')}
                 </Button>
-                <Button size="sm" onClick={handleTestWorkflow}>
+                <Button
+                  size="sm"
+                  onClick={handleTestWorkflow}
+                  disabled={useHistoryData && !selectedRunId}
+                >
                   <Play className="mr-1.5 h-3.5 w-3.5" /> {t('sendTest')}
                 </Button>
               </div>

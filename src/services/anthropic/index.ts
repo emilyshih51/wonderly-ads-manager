@@ -37,7 +37,7 @@ export class AnthropicService {
    * Start a streaming chat session.
    *
    * Returns a `ReadableStream` that emits Server-Sent Events:
-   * `data: {"text": "..."}` for each text delta, then `data: [DONE]`.
+   * `data: {"text": "..."}` for each text delta, then usage data, then `data: [DONE]`.
    *
    * @param params - Message, system prompt, optional context, and history
    * @returns SSE `ReadableStream` compatible with Next.js streaming responses
@@ -69,6 +69,15 @@ export class AnthropicService {
                 controller.enqueue(`data: ${JSON.stringify({ text: delta.text })}\n\n`);
               }
             }
+          }
+
+          // Emit usage data before closing
+          const finalMessage = await stream.finalMessage();
+
+          if (finalMessage.usage) {
+            controller.enqueue(
+              `data: ${JSON.stringify({ usage: { input_tokens: finalMessage.usage.input_tokens, output_tokens: finalMessage.usage.output_tokens } })}\n\n`
+            );
           }
 
           controller.enqueue('data: [DONE]\n\n');

@@ -162,7 +162,7 @@ export function parseInsightMetrics(
     spend,
     impressions: parseInt(row.impressions ?? '0', 10),
     clicks: parseInt(row.clicks ?? '0', 10),
-    ctr: parseFloat(row.ctr ?? '0'),
+    ctr: parseFloat(row.inline_link_click_ctr ?? row.ctr ?? '0'),
     cpc: parseFloat(row.cpc ?? '0'),
     cpm: parseFloat(row.cpm ?? '0'),
     frequency: parseFloat(row.frequency ?? '0'),

@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/session';
 import { getRedisClient } from '@/lib/redis';
 import { AnthropicService } from '@/services/anthropic';
 import { ChatMemoryService } from '@/services/chat-memory';
+import { UsageTrackerService, type TokenUsage } from '@/services/usage-tracker';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Chat');
@@ -174,15 +175,18 @@ export async function POST(request: NextRequest) {
 
     // Wrap the stream to accumulate the assistant's full response
     let fullContent = '';
+    let streamUsage: TokenUsage | null = null;
     const { readable, writable } = new TransformStream<string, string>({
       transform(chunk, controller) {
-        // Extract text from SSE chunks for accumulation
+        // Extract text and usage from SSE chunks for accumulation
         for (const line of chunk.split('\n')) {
           if (line.startsWith('data: ') && line !== 'data: [DONE]') {
             try {
-              const parsed = JSON.parse(line.slice(6)) as { text?: string };
+              const parsed = JSON.parse(line.slice(6)) as { text?: string; usage?: TokenUsage };
 
               if (parsed.text) fullContent += parsed.text;
+
+              if (parsed.usage) streamUsage = parsed.usage;
             } catch {
               // Ignore malformed chunks
             }
@@ -204,6 +208,12 @@ export async function POST(request: NextRequest) {
           content: fullContent,
           timestamp: Date.now(),
         });
+      }
+
+      if (streamUsage) {
+        const tracker = new UsageTrackerService(redis);
+
+        await tracker.recordUsage(session.id, streamUsage);
       }
     });
 

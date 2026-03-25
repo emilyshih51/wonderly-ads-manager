@@ -301,7 +301,7 @@ export class SlackService {
           .replace(/\{results\}/g, String(resultDisplay))
           .replace(/\{cpa\}/g, cpaDisplay)
           .replace(/\{clicks\}/g, String(metrics.clicks ?? 0))
-          .replace(/\{ctr\}/g, `${((metrics.ctr ?? 0) * 100).toFixed(2)}%`)
+          .replace(/\{ctr\}/g, `${(metrics.ctr ?? 0).toFixed(2)}%`)
           .replace(/\{campaign_name\}/g, SlackService.sanitizeMentions(campaignName || ''));
 
       bodySections.push(fallbackText);

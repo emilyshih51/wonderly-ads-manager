@@ -45,6 +45,8 @@ export interface Message {
   actions?: ParsedAction[];
   timestamp: Date;
   isLoading?: boolean;
+  /** Token usage for this assistant response (only present on assistant messages). */
+  tokenUsage?: { input_tokens: number; output_tokens: number };
 }
 
 export interface InsightRow {
@@ -1072,6 +1074,7 @@ export function useChatEngine() {
         if (!reader) throw new Error('No response body');
 
         let fullContent = '';
+        let messageUsage: { input_tokens: number; output_tokens: number } | null = null;
         const decoder = new TextDecoder();
 
         try {
@@ -1100,6 +1103,10 @@ export function useChatEngine() {
                       )
                     );
                   }
+
+                  if (parsed.usage) {
+                    messageUsage = parsed.usage;
+                  }
                 } catch {
                   // ignore JSON parse errors
                 }
@@ -1120,6 +1127,7 @@ export function useChatEngine() {
                   content,
                   actions: actions.length > 0 ? actions : undefined,
                   isLoading: false,
+                  tokenUsage: messageUsage ?? undefined,
                 }
               : m
           )

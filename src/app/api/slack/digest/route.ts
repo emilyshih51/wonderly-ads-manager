@@ -42,15 +42,20 @@ export async function GET(request: NextRequest) {
     logger.warn('CRON_SECRET not set — digest endpoint is unprotected (dev only)');
   }
 
-  const channelIds = (process.env.SLACK_DIGEST_CHANNEL_IDS ?? '')
+  // Digest is always sent to #emily-space only, regardless of SLACK_DIGEST_CHANNEL_IDS
+  const DIGEST_CHANNEL = 'C0951M3JF7H';
+  const channelIds = [DIGEST_CHANNEL];
+
+  const configuredChannels = (process.env.SLACK_DIGEST_CHANNEL_IDS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 
-  if (channelIds.length === 0) {
-    logger.warn('SLACK_DIGEST_CHANNEL_IDS is not set — cannot send digest');
-
-    return NextResponse.json({ error: 'SLACK_DIGEST_CHANNEL_IDS not configured' }, { status: 503 });
+  if (configuredChannels.length > 0) {
+    logger.info('SLACK_DIGEST_CHANNEL_IDS is set but digest is locked to #emily-space', {
+      configured: configuredChannels,
+      actual: channelIds,
+    });
   }
 
   const allowedChannels = (process.env.ALLOWED_SLACK_CHANNEL_IDS ?? '')

@@ -80,9 +80,16 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
     };
 
     el.addEventListener('scroll', update, { passive: true });
+
+    const ro = new ResizeObserver(update);
+
+    ro.observe(el);
     update();
 
-    return () => el.removeEventListener('scroll', update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
   }, [ads.length]);
 
   const scroll = (direction: 'left' | 'right') => {

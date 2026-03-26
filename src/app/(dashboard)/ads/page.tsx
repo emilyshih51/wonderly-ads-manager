@@ -14,7 +14,6 @@ import { useAppStore } from '@/stores/app-store';
 import { useCampaignList } from '@/lib/queries/meta/use-campaigns';
 import { useAds } from '@/lib/queries/meta/use-ads';
 import { formatCurrency, formatPercent, formatNumber, cn, DATE_PRESETS } from '@/lib/utils';
-import { getResultCount } from '@/lib/automation-utils';
 import {
   RefreshCw,
   Trophy,
@@ -24,6 +23,29 @@ import {
   LayoutList,
   X,
 } from 'lucide-react';
+
+function getAdResults(actions?: Array<{ action_type: string; value: string }> | null): number {
+  if (!actions) return 0;
+
+  const conversion = actions.find(
+    (a) =>
+      (a.action_type.startsWith('offsite_conversion.') ||
+        a.action_type.startsWith('onsite_conversion.') ||
+        a.action_type === 'lead' ||
+        a.action_type === 'complete_registration') &&
+      !a.action_type.includes('post_engagement') &&
+      !a.action_type.includes('page_engagement') &&
+      !a.action_type.includes('link_click')
+  );
+
+  if (conversion) return parseInt(conversion.value) || 0;
+
+  const linkClick = actions.find(
+    (a) => a.action_type === 'link_click' || a.action_type === 'landing_page_view'
+  );
+
+  return linkClick ? parseInt(linkClick.value) || 0 : 0;
+}
 
 import { useTranslations } from 'next-intl';
 
@@ -68,11 +90,7 @@ export default function TopPerformingAdsPage() {
 
     return processedAds
       .map((ad, idx) => {
-        const results = getResultCount(
-          { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
-          ad.campaign_id,
-          {}
-        );
+        const results = getAdResults(ad.insights?.actions);
         const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
         const cpa = results > 0 ? spend / results : null;
 

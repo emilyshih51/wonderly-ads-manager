@@ -13,6 +13,7 @@ const mockStream = {
         i < events.length ? { value: events[i++], done: false } : { value: undefined, done: true },
     };
   },
+  finalMessage: async () => ({ usage: { input_tokens: 10, output_tokens: 5 } }),
 };
 
 const mockMessagesStream = vi.fn().mockResolvedValue(mockStream);
@@ -121,6 +122,7 @@ describe('AnthropicService', () => {
 
       expect(chunks).toContain('data: {"text":"Hello "}\n\n');
       expect(chunks).toContain('data: {"text":"world"}\n\n');
+      expect(chunks).toContain('data: {"usage":{"input_tokens":10,"output_tokens":5}}\n\n');
       expect(chunks[chunks.length - 1]).toBe('data: [DONE]\n\n');
     });
   });

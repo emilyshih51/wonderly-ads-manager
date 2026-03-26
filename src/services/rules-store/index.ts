@@ -121,12 +121,24 @@ export class RulesStoreService {
   }
 
   /**
-   * Save a rule. Writes to BOTH the cookie store and Redis (when available)
-   * so that user requests and cron jobs both see the latest state.
+   * Save a rule. Writes to Redis when available; falls back to cookies in dev
+   * (no Redis). Never writes rule cookies when Redis is connected — rule JSON
+   * is large enough that cookie accumulation triggers Vercel's 494 header limit.
    *
    * @param rule - Rule to persist
    */
   async save(rule: StoredRule): Promise<void> {
+    if (this.redis) {
+      try {
+        await this.redis.hSet(RULES_REDIS_HASH_KEY, rule.id, JSON.stringify(rule));
+      } catch (e) {
+        this.logger.error('Redis write error', e);
+      }
+
+      return;
+    }
+
+    // Cookie-only fallback for dev without Redis
     if (this.cookieStore) {
       try {
         this.cookieStore.set(`${RULE_COOKIE_PREFIX}${rule.id}`, JSON.stringify(rule), {
@@ -140,35 +152,29 @@ export class RulesStoreService {
         this.logger.error('Cookie write error', e);
       }
     }
-
-    if (this.redis) {
-      try {
-        await this.redis.hSet(RULES_REDIS_HASH_KEY, rule.id, JSON.stringify(rule));
-      } catch (e) {
-        this.logger.error('Redis write error', e);
-      }
-    }
   }
 
   /**
-   * Delete a rule. Removes from BOTH the cookie store and Redis.
+   * Delete a rule. Removes from Redis when available, otherwise removes from cookies.
    *
    * @param ruleId - ID of the rule to delete
    */
   async delete(ruleId: string): Promise<void> {
-    if (this.cookieStore) {
-      try {
-        this.cookieStore.delete(`${RULE_COOKIE_PREFIX}${ruleId}`);
-      } catch (e) {
-        this.logger.error('Cookie delete error', e);
-      }
-    }
-
     if (this.redis) {
       try {
         await this.redis.hDel(RULES_REDIS_HASH_KEY, ruleId);
       } catch (e) {
         this.logger.error('Redis delete error', e);
+      }
+
+      return;
+    }
+
+    if (this.cookieStore) {
+      try {
+        this.cookieStore.delete(`${RULE_COOKIE_PREFIX}${ruleId}`);
+      } catch (e) {
+        this.logger.error('Cookie delete error', e);
       }
     }
   }

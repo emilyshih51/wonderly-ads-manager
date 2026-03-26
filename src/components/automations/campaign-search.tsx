@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { Search, X, Loader2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
@@ -12,13 +12,26 @@ interface Campaign {
   objective: string;
 }
 
+/** A single selected campaign entry (id + display name). */
+interface SelectedCampaign {
+  id: string;
+  name: string;
+}
+
 interface CampaignSearchProps {
+  /** Comma-separated campaign IDs (backward-compatible with single ID). */
   value: string;
+  /** Comma-separated campaign display names. */
   displayName: string;
+  /** Called with comma-separated IDs and names when selection changes. */
   onChange: (id: string, name: string) => void;
   placeholder?: string;
 }
 
+/**
+ * Multi-select campaign search component.
+ * Shows selected campaigns as chips and allows adding/removing via a search dropdown.
+ */
 export function CampaignSearch({ value, displayName, onChange, placeholder }: CampaignSearchProps) {
   const t = useTranslations('automations');
   const [open, setOpen] = useState(false);
@@ -27,6 +40,22 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  /** Parse comma-separated values into structured array. */
+  const selected: SelectedCampaign[] = useMemo(() => {
+    if (!value) return [];
+
+    const ids = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const names = displayName.split(',').map((s) => s.trim());
+
+    return ids.map((id, i) => ({ id, name: names[i] || id }));
+  }, [value, displayName]);
+
+  /** Set of selected IDs for quick lookup. */
+  const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -66,19 +95,63 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
     if (results.length === 0) searchCampaigns(query);
   };
 
+  /** Toggle a campaign in the selection. */
+  const toggleCampaign = (campaign: Campaign) => {
+    let next: SelectedCampaign[];
+
+    if (selectedIds.has(campaign.id)) {
+      next = selected.filter((s) => s.id !== campaign.id);
+    } else {
+      next = [...selected, { id: campaign.id, name: campaign.name }];
+    }
+
+    onChange(next.map((s) => s.id).join(','), next.map((s) => s.name).join(','));
+  };
+
+  /** Remove a single chip. */
+  const removeCampaign = (id: string) => {
+    const next = selected.filter((s) => s.id !== id);
+
+    onChange(next.map((s) => s.id).join(','), next.map((s) => s.name).join(','));
+  };
+
   return (
     <div ref={containerRef} className="relative">
+      {/* Selected campaign chips */}
+      {selected.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {selected.map((s) => (
+            <span
+              key={s.id}
+              className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+            >
+              <span className="max-w-[180px] truncate">{s.name}</span>
+              <button
+                type="button"
+                onClick={() => removeCampaign(s.id)}
+                className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-blue-200 dark:hover:bg-blue-800"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
       <div className="relative">
         <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
         <input
           type="text"
-          value={open ? query : displayName || query}
+          value={query}
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={handleFocus}
-          placeholder={placeholder || t('searchCampaigns')}
+          placeholder={
+            selected.length > 0 ? t('addMoreCampaigns') : placeholder || t('searchCampaigns')
+          }
           className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] pr-8 pl-9 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
-        {value && (
+        {selected.length > 0 && (
           <Button
             variant="ghost"
             size="icon"
@@ -92,6 +165,8 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
           </Button>
         )}
       </div>
+
+      {/* Dropdown results */}
       {open && (
         <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg">
           {loading ? (
@@ -103,29 +178,29 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
               {t('noCampaignsFound')}
             </div>
           ) : (
-            results.map((c) => (
-              <Button
-                key={c.id}
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  onChange(c.id, c.name);
-                  setQuery(c.name);
-                  setOpen(false);
-                }}
-                className={`h-auto w-full justify-between border-b border-[var(--color-border)] px-4 py-2.5 last:border-0 ${
-                  c.id === value ? 'bg-blue-500/10' : ''
-                }`}
-              >
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-sm text-[var(--color-foreground)]">{c.name}</p>
-                  <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
-                    {c.objective} · {c.status}
-                  </p>
-                </div>
-                {c.id === value && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
-              </Button>
-            ))
+            results.map((c) => {
+              const isSelected = selectedIds.has(c.id);
+
+              return (
+                <Button
+                  key={c.id}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleCampaign(c)}
+                  className={`h-auto w-full justify-between border-b border-[var(--color-border)] px-4 py-2.5 last:border-0 ${
+                    isSelected ? 'bg-blue-500/10' : ''
+                  }`}
+                >
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="truncate text-sm text-[var(--color-foreground)]">{c.name}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                      {c.objective} · {c.status}
+                    </p>
+                  </div>
+                  {isSelected && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
+                </Button>
+              );
+            })
           )}
         </div>
       )}

@@ -314,7 +314,7 @@ export function Sidebar() {
     { name: t('dashboard'), href: '/dashboard', icon: LayoutDashboard },
     { name: t('aiChat'), href: '/chat', icon: MessageSquare, isPrimary: true },
     { name: t('campaigns'), href: '/campaigns', icon: Megaphone },
-    { name: t('launch'), href: '/adsets', icon: Layers },
+    { name: t('launch'), href: '/launch', icon: Layers },
     { name: t('topAds'), href: '/ads', icon: Trophy },
     { name: t('automations'), href: '/automations', icon: Workflow },
     { name: t('settings'), href: '/settings', icon: Settings },

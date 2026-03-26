@@ -19,6 +19,9 @@ export interface AdRow {
     body?: string;
     image_url?: string;
     thumbnail_url?: string;
+    effective_image_url?: string;
+    video_id?: string;
+    video_source?: string;
     link_url?: string;
     call_to_action_type?: string;
   };

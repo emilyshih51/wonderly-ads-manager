@@ -189,18 +189,28 @@ export class MetaService {
         const goal = adset.optimization_goal as string;
         const promoted = adset.promoted_object as Record<string, string> | undefined;
 
-        if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_event_type) {
+        // Meta API v21+ uses OUTCOME_* names alongside legacy names
+        const isOffsite =
+          goal === 'OFFSITE_CONVERSIONS' || goal === 'OUTCOME_SALES' || goal === 'OUTCOME_LEADS';
+
+        if (isOffsite && promoted?.custom_event_type) {
           const actionType = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
 
           map[campaignId] = actionType
             ? actionType
             : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
-        } else if (goal === 'OFFSITE_CONVERSIONS' && promoted?.custom_conversion_id) {
+        } else if (isOffsite && promoted?.custom_conversion_id) {
           map[campaignId] = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
-        } else if (goal === 'LEAD_GENERATION') {
+        } else if (goal === 'LEAD_GENERATION' || goal === 'OUTCOME_LEADS') {
           map[campaignId] = 'onsite_conversion.lead_grouped';
-        } else if (goal === 'CONVERSATIONS') {
+        } else if (goal === 'CONVERSATIONS' || goal === 'OUTCOME_ENGAGEMENT') {
           map[campaignId] = 'onsite_conversion.messaging_conversation_started_7d';
+        } else if (
+          goal === 'LINK_CLICKS' ||
+          goal === 'LANDING_PAGE_VIEWS' ||
+          goal === 'OUTCOME_TRAFFIC'
+        ) {
+          map[campaignId] = goal === 'LANDING_PAGE_VIEWS' ? 'landing_page_view' : 'link_click';
         }
       }
 
@@ -457,9 +467,12 @@ export class MetaService {
     const data = await this.request<{ daily_budget?: string }>(`/${entityId}`, {
       params: { fields: 'daily_budget' },
     });
+
     if (!data.daily_budget) return null;
     const cents = parseInt(data.daily_budget, 10);
+
     if (Number.isNaN(cents)) return null;
+
     return cents;
   }
 

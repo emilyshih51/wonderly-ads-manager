@@ -107,6 +107,8 @@ export interface MetaAdCreative {
   object_story_spec?: Record<string, unknown>;
   /** Thumbnail URL for video creatives. */
   thumbnail_url?: string;
+  /** Rendered image URL returned by Meta for both image and video ads. */
+  effective_image_url?: string;
 }
 
 /** Aggregated performance metrics returned by the Meta Insights API. */

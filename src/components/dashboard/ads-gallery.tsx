@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
 import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
 import { getResultCount } from '@/lib/automation-utils';
-import { ChevronLeft, ChevronRight, Image as ImageIcon, TrendingUp, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Play, TrendingUp, X } from 'lucide-react';
 import type { AdRow } from '@/lib/queries/meta/use-ads';
 
 interface RankedAd extends AdRow {
@@ -132,7 +132,11 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
           className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 py-1"
         >
           {ads.map((ad) => {
-            const imgSrc = ad.creative?.image_url || ad.creative?.thumbnail_url;
+            const imgSrc =
+              ad.creative?.effective_image_url ||
+              ad.creative?.image_url ||
+              ad.creative?.thumbnail_url;
+            const isVideo = !!ad.creative?.video_id;
             const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
             const copySnippet = ad.creative?.title || ad.creative?.body;
 
@@ -161,6 +165,14 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
                   <div className="absolute top-2 left-2">
                     <StatusBadge status={ad.status} />
                   </div>
+                  {/* Video play icon */}
+                  {isVideo && imgSrc && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white">
+                        <Play className="h-5 w-5 fill-current" />
+                      </div>
+                    </div>
+                  )}
                   {/* Rank badge */}
                   <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs font-bold text-white">
                     {ad.rank}
@@ -283,7 +295,9 @@ export function AdsGallery({ ads }: AdsGalleryProps) {
 /** Full ad detail rendered inside the modal — two-column on desktop, stacked on mobile. */
 function AdDetail({ ad }: { ad: RankedAd }) {
   const tMetrics = useTranslations('metrics');
-  const imgSrc = ad.creative?.image_url || ad.creative?.thumbnail_url;
+  const imgSrc =
+    ad.creative?.effective_image_url || ad.creative?.image_url || ad.creative?.thumbnail_url;
+  const videoSrc = ad.creative?.video_source;
   const spend = ad.insights?.spend ? parseFloat(ad.insights.spend) : 0;
   const results = getResultCount(
     { actions: ad.insights?.actions, campaign_id: ad.campaign_id },
@@ -295,7 +309,19 @@ function AdDetail({ ad }: { ad: RankedAd }) {
     <div className="grid gap-6 md:grid-cols-2">
       {/* Left column — creative + copy */}
       <div className="space-y-4">
-        {imgSrc && (
+        {videoSrc ? (
+          <div className="relative w-full overflow-hidden rounded-lg bg-black">
+            {}
+            <video
+              src={videoSrc}
+              controls
+              playsInline
+              preload="metadata"
+              poster={imgSrc || undefined}
+              className="w-full"
+            />
+          </div>
+        ) : imgSrc ? (
           <div className="relative aspect-[4/5] w-full overflow-hidden rounded-lg bg-[var(--color-muted)]">
             <NextImage
               src={imgSrc}
@@ -305,7 +331,7 @@ function AdDetail({ ad }: { ad: RankedAd }) {
               sizes="(max-width: 768px) 90vw, 45vw"
             />
           </div>
-        )}
+        ) : null}
 
         {(ad.creative?.title || ad.creative?.body) && (
           <div className="space-y-2">

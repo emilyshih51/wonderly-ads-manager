@@ -8,7 +8,7 @@ import { META_BASE_URL } from '@/services/meta/constants';
 const logger = createLogger('Meta:Ads');
 
 const AD_CREATIVE_FIELDS =
-  'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type},created_time,updated_time';
+  'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,effective_image_url,video_id,link_url,call_to_action_type},created_time,updated_time';
 
 /**
  * GET /api/meta/ads
@@ -120,6 +120,53 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Batch-fetch video source URLs for ads with video_id
+      const videoIdToSource = new Map<string, string>();
+      const videoIds = [
+        ...new Set(
+          allAdDetails
+            .map((ad) => (ad.creative as Record<string, unknown>)?.video_id as string | undefined)
+            .filter(Boolean) as string[]
+        ),
+      ];
+
+      if (videoIds.length > 0) {
+        for (let i = 0; i < videoIds.length; i += BATCH_SIZE) {
+          const chunk = videoIds.slice(i, i + BATCH_SIZE);
+          const batchBody = chunk.map((vid) => ({
+            method: 'GET',
+            relative_url: `${vid}?fields=source`,
+          }));
+
+          const batchUrl = new URL(`${META_BASE_URL}/`);
+
+          batchUrl.searchParams.set('access_token', session.meta_access_token);
+          batchUrl.searchParams.set('batch', JSON.stringify(batchBody));
+
+          try {
+            const batchRes = await fetch(batchUrl.toString(), {
+              method: 'POST',
+              cache: 'no-store',
+            });
+            const batchData = (await batchRes.json()) as Array<{ code: number; body: string }>;
+
+            for (let j = 0; j < batchData.length; j++) {
+              if (batchData[j].code === 200) {
+                try {
+                  const parsed = JSON.parse(batchData[j].body) as { source?: string };
+
+                  if (parsed.source) videoIdToSource.set(chunk[j], parsed.source);
+                } catch {
+                  // skip malformed
+                }
+              }
+            }
+          } catch (e) {
+            logger.warn('Video source batch fetch failed', e);
+          }
+        }
+      }
+
       const adMap = new Map(allAdDetails.map((ad) => [ad.id, ad]));
       const insightsMap = new Map(insightRows.map((row) => [row.ad_id, row]));
 
@@ -130,6 +177,13 @@ export async function GET(request: NextRequest) {
 
           if (!insight) return null;
 
+          const creative = ad?.creative ? { ...(ad.creative as Record<string, unknown>) } : null;
+
+          // Attach video source URL if available
+          if (creative?.video_id && videoIdToSource.has(creative.video_id as string)) {
+            creative.video_source = videoIdToSource.get(creative.video_id as string);
+          }
+
           return {
             id: adId,
             name: ad?.name ?? insight.ad_name ?? adId,
@@ -137,7 +191,7 @@ export async function GET(request: NextRequest) {
             campaign_id: ad?.campaign_id ?? insight.campaign_id ?? '',
             campaign_name: insight.campaign_name,
             status: ad?.status ?? 'UNKNOWN',
-            creative: ad?.creative ?? null,
+            creative,
             insights: insight,
           };
         })

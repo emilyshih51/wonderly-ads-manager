@@ -91,7 +91,7 @@ function getResults(
     return found ? parseInt(found.value) : 0;
   }
 
-  // Try conversions first
+  // Try conversions first — only count actual conversion actions
   const conversion = actions.find(
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
@@ -101,19 +101,10 @@ function getResults(
 
   if (conversion) return parseInt(conversion.value);
 
-  // Fall back to link_click or landing_page_view as a result proxy
-  const linkClick = actions.find(
-    (a) => a.action_type === 'link_click' || a.action_type === 'landing_page_view'
-  );
-
-  if (linkClick) return parseInt(linkClick.value);
-
-  // Last resort: any action that isn't a vanity metric
-  const anyAction = actions.find(
-    (a) => a.action_type !== 'impressions' && a.action_type !== 'reach'
-  );
-
-  return anyAction ? parseInt(anyAction.value) : 0;
+  // Only fall back to link_click for campaigns without a conversion goal
+  // (e.g. traffic campaigns). Do NOT fall back for conversion-optimised campaigns
+  // where no conversions have been recorded yet — return 0 instead.
+  return 0;
 }
 
 function getCostPerResult(

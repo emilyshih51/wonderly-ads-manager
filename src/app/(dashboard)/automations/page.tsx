@@ -432,7 +432,12 @@ export default function AutomationsPage() {
         conditions: JSON.stringify(condParam),
       });
 
-      if (config.campaign_id) params.set('campaign_id', config.campaign_id);
+      if (config.campaign_id) {
+        // Pass first campaign ID for preview — preview shows a sample of matching ads
+        const firstCampaignId = config.campaign_id.split(',').filter(Boolean)[0];
+
+        if (firstCampaignId) params.set('campaign_id', firstCampaignId);
+      }
 
       const res = await fetch(`/api/automations/search?${params}`);
       const data = await res.json();
@@ -582,7 +587,7 @@ export default function AutomationsPage() {
   };
 
   /* ─── Step completeness checks ─── */
-  const isStep1Complete = !!config.campaign_id;
+  const isStep1Complete = !!config.campaign_id.split(',').filter(Boolean).length;
   const isStep2Complete =
     config.conditions.length > 0 && config.conditions.every((c) => c.threshold !== '');
   const isStep3Complete =
@@ -732,7 +737,11 @@ export default function AutomationsPage() {
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
                             {cfg.campaign_name && (
-                              <span className="max-w-[200px] truncate">{cfg.campaign_name}</span>
+                              <span className="max-w-[300px] truncate">
+                                {cfg.campaign_name.split(',').filter(Boolean).length > 1
+                                  ? `${cfg.campaign_name.split(',').filter(Boolean).length} campaigns`
+                                  : cfg.campaign_name}
+                              </span>
                             )}
                             {cfg.campaign_name && <span>·</span>}
                             <span>
@@ -1611,7 +1620,9 @@ export default function AutomationsPage() {
                                     .replace(/\{ctr\}/g, `${sampleAd?.ctr || '0.00'}%`)
                                     .replace(
                                       /\{campaign_name\}/g,
-                                      config.campaign_name || '<campaign name>'
+                                      config.campaign_name
+                                        ? config.campaign_name.split(',').filter(Boolean).join(', ')
+                                        : '<campaign name>'
                                     );
                                 })()}
                               </div>

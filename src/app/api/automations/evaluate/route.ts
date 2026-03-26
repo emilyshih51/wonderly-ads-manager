@@ -358,7 +358,12 @@ async function evaluateRule(
   const actionConfig = (actionNode.data?.config ?? {}) as NodeConfig;
   const entityType = triggerConfig.entity_type ?? 'ad';
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
-  const campaignId = triggerConfig.campaign_id;
+  // Support comma-separated campaign IDs for multi-campaign rules
+  const campaignIdRaw = triggerConfig.campaign_id ?? '';
+  const campaignIds = campaignIdRaw
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
 
   // When testData is provided, use synthetic data instead of querying Meta
   let insightsData: MetaInsightsRow[];
@@ -369,7 +374,7 @@ async function evaluateRule(
         ad_id: 'test_ad_001',
         ad_name: testData.entity_name || 'Sample Ad',
         adset_id: 'test_adset_001',
-        campaign_id: campaignId || 'test_campaign_001',
+        campaign_id: campaignIds[0] || 'test_campaign_001',
         campaign_name: triggerConfig.campaign_name || 'Sample Campaign',
         spend: String(testData.spend),
         impressions: String(testData.impressions),
@@ -383,11 +388,24 @@ async function evaluateRule(
             : [],
       },
     ];
-  } else {
+  } else if (campaignIds.length <= 1) {
+    // Single campaign or no filter — use existing single-query path
     insightsData = await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
       datePreset,
-      campaignId,
+      campaignId: campaignIds[0],
     });
+  } else {
+    // Multi-campaign: query each campaign and merge results
+    const allRows = await Promise.all(
+      campaignIds.map((cid) =>
+        meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+          datePreset,
+          campaignId: cid,
+        })
+      )
+    );
+
+    insightsData = allRows.flat();
   }
 
   if (insightsData.length === 0 && !dryRun) {

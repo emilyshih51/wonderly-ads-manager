@@ -743,6 +743,12 @@ export default function AutomationsPage() {
                                   : cfg.campaign_name}
                               </span>
                             )}
+                            {cfg.adset_name && cfg.adset_filter !== 'all' && (
+                              <>
+                                <span>·</span>
+                                <span className="max-w-[200px] truncate">{cfg.adset_name}</span>
+                              </>
+                            )}
                             {cfg.campaign_name && <span>·</span>}
                             <span>
                               {t(SCHEDULE_LABEL_KEYS[cfg.schedule] || 'scheduleLabels.hourly')}
@@ -1154,6 +1160,29 @@ export default function AutomationsPage() {
                     </div>
                     <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
                       {t('leaveEmptyAllCampaigns')}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+                      {t('adSet')}
+                    </label>
+                    <div className="mt-2">
+                      <AdSetSearch
+                        value={config.adset_filter === 'all' ? '' : config.adset_filter}
+                        displayName={config.adset_name}
+                        campaignId={config.campaign_id.split(',').filter(Boolean)[0] || undefined}
+                        onChange={(id, name) =>
+                          updateConfig({
+                            adset_filter: id || 'all',
+                            adset_name: name,
+                          })
+                        }
+                        placeholder={t('searchByAdSet')}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
+                      {t('leaveEmptyAllAdSets')}
                     </p>
                   </div>
 

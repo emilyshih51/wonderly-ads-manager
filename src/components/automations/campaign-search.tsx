@@ -106,6 +106,8 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
     }
 
     onChange(next.map((s) => s.id).join(','), next.map((s) => s.name).join(','));
+    // Keep dropdown open for multi-select
+    setOpen(true);
   };
 
   /** Remove a single chip. */
@@ -168,7 +170,10 @@ export function CampaignSearch({ value, displayName, onChange, placeholder }: Ca
 
       {/* Dropdown results */}
       {open && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg">
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg"
+        >
           {loading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="h-4 w-4 animate-spin text-[var(--color-muted-foreground)]" />

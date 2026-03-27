@@ -261,6 +261,8 @@ interface NodeConfig {
   date_preset?: string;
   campaign_id?: string;
   campaign_name?: string;
+  adset_filter?: string;
+  adset_name?: string;
   action_type?: string;
   target_adset_id?: string;
   slack_channel?: string;
@@ -406,6 +408,13 @@ async function evaluateRule(
     );
 
     insightsData = allRows.flat();
+  }
+
+  // Filter by ad set if specified
+  const adsetFilter = triggerConfig.adset_filter ?? 'all';
+
+  if (adsetFilter && adsetFilter !== 'all' && !testData) {
+    insightsData = insightsData.filter((row) => row.adset_id === adsetFilter);
   }
 
   if (insightsData.length === 0 && !dryRun) {

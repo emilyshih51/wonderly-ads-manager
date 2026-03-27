@@ -155,6 +155,58 @@ describe('getResultCount()', () => {
 
     expect(getResultCount(row, 'c_unknown', optMap)).toBe(6);
   });
+
+  it('fuzzy-matches omni_ prefixed action when optimization map expects offsite_conversion', () => {
+    const row = {
+      campaign_id: 'c1',
+      actions: [
+        { action_type: 'omni_lead', value: '5' },
+        { action_type: 'link_click', value: '100' },
+      ],
+    };
+
+    // optMap maps c1 → 'offsite_conversion.fb_pixel_lead'
+    // No exact match, but 'omni_lead' fuzzy-matches via extractEventName('lead')
+    expect(getResultCount(row, 'c1', optMap)).toBe(5);
+  });
+
+  it('fuzzy-matches omni_complete_registration for complete_registration campaigns', () => {
+    const map = { c2: 'offsite_conversion.fb_pixel_complete_registration' };
+    const row = {
+      campaign_id: 'c2',
+      actions: [
+        { action_type: 'omni_complete_registration', value: '3' },
+        { action_type: 'link_click', value: '50' },
+      ],
+    };
+
+    expect(getResultCount(row, 'c2', map)).toBe(3);
+  });
+
+  it('counts omni_ prefixed actions in generic fallback', () => {
+    const row = {
+      campaign_id: 'c_unknown',
+      actions: [
+        { action_type: 'omni_purchase', value: '8' },
+        { action_type: 'link_click', value: '200' },
+      ],
+    };
+
+    expect(getResultCount(row, 'c_unknown', optMap)).toBe(8);
+  });
+
+  it('prefers exact match over fuzzy match', () => {
+    const row = {
+      campaign_id: 'c1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_lead', value: '10' },
+        { action_type: 'omni_lead', value: '12' },
+      ],
+    };
+
+    // Exact match should win
+    expect(getResultCount(row, 'c1', optMap)).toBe(10);
+  });
 });
 
 describe('getCostPerResult()', () => {

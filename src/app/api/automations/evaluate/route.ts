@@ -453,6 +453,20 @@ async function evaluateRule(
 
     const metrics = parseInsightMetrics(row, optimizationMap);
 
+    // Debug: log action types when results are 0 but spend > 0 (suggests action type mismatch)
+    if (metrics.results === 0 && metrics.spend > 0 && row.actions?.length) {
+      const actionTypes = row.actions.map((a) => `${a.action_type}=${a.value}`).join(', ');
+      const campaignId = row.campaign_id;
+      const mappedType = campaignId ? optimizationMap[campaignId] : undefined;
+
+      logger.warn('Zero results despite spend > 0 — possible action type mismatch', {
+        entity: entityName,
+        spend: metrics.spend,
+        mappedResultType: mappedType || 'none',
+        actionTypes,
+      });
+    }
+
     let allConditionsMet = true;
 
     for (const condNode of conditionNodes) {

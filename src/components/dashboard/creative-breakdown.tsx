@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
-import { cn, formatNumber, formatCurrency } from '@/lib/utils';
+import { cn, formatNumber, formatCurrency, formatCtaLabel } from '@/lib/utils';
 import { TrendingUp, Type, MessageSquare, MousePointerClick, ChevronDown } from 'lucide-react';
 import type { AdRow } from '@/lib/queries/meta/use-ads';
 
@@ -92,7 +92,10 @@ function BreakdownSection({
           const isExpanded = expandedIdx === idx;
 
           return (
-            <div key={item.value} className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+            <div
+              key={item.value}
+              className="overflow-hidden rounded-lg border border-[var(--color-border)]"
+            >
               <button
                 onClick={() => setExpandedIdx(isExpanded ? null : idx)}
                 className="relative w-full overflow-hidden bg-[var(--color-card)] p-3 text-left transition-colors hover:bg-[var(--color-muted)]/30"
@@ -115,7 +118,9 @@ function BreakdownSection({
                       >
                         {idx + 1}
                       </span>
-                      <p className="truncate text-sm text-[var(--color-foreground)]">{item.value}</p>
+                      <p className="truncate text-sm text-[var(--color-foreground)]">
+                        {item.value}
+                      </p>
                       <ChevronDown
                         className={cn(
                           'h-3.5 w-3.5 shrink-0 text-[var(--color-muted-foreground)] transition-transform',
@@ -162,7 +167,10 @@ function BreakdownSection({
                               {ad.name}
                             </p>
                             <p className="text-[10px] text-[var(--color-muted-foreground)]">
-                              {tMetrics('spend')}: {formatCurrency(ad.insights?.spend ? parseFloat(ad.insights.spend) : 0)}
+                              {tMetrics('spend')}:{' '}
+                              {formatCurrency(
+                                ad.insights?.spend ? parseFloat(ad.insights.spend) : 0
+                              )}
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
@@ -206,7 +214,7 @@ export function CreativeBreakdown({ ads }: CreativeBreakdownProps) {
     () =>
       aggregateByField(ads, (ad) =>
         ad.creative?.call_to_action_type
-          ? ad.creative.call_to_action_type.replace(/_/g, ' ')
+          ? formatCtaLabel(ad.creative.call_to_action_type)
           : undefined
       ),
     [ads]

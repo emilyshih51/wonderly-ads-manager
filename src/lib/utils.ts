@@ -108,6 +108,64 @@ export const DATE_PRESETS = [
   { labelKey: 'lastMonth', value: 'last_month' },
 ];
 
+/**
+ * Maps Meta API `call_to_action_type` enum values to human-readable button labels.
+ * Meta's internal enum names often differ from the text displayed on the ad button
+ * (e.g. `BOOK_TRAVEL` renders as "Book Now" in the Meta UI).
+ */
+const CTA_DISPLAY_LABELS: Record<string, string> = {
+  BOOK_TRAVEL: 'Book Now',
+  LEARN_MORE: 'Learn More',
+  SIGN_UP: 'Sign Up',
+  SHOP_NOW: 'Shop Now',
+  CONTACT_US: 'Contact Us',
+  GET_OFFER: 'Get Offer',
+  GET_QUOTE: 'Get Quote',
+  SUBSCRIBE: 'Subscribe',
+  DOWNLOAD: 'Download',
+  APPLY_NOW: 'Apply Now',
+  ORDER_NOW: 'Order Now',
+  BOOK_NOW: 'Book Now',
+  BUY_NOW: 'Buy Now',
+  WATCH_MORE: 'Watch More',
+  SEND_MESSAGE: 'Send Message',
+  CALL_NOW: 'Call Now',
+  GET_DIRECTIONS: 'Get Directions',
+  OPEN_LINK: 'Open Link',
+  REQUEST_TIME: 'Request Time',
+  SEE_MENU: 'See Menu',
+  WHATSAPP_MESSAGE: 'WhatsApp Message',
+  INSTALL_APP: 'Install App',
+  USE_APP: 'Use App',
+  PLAY_GAME: 'Play Game',
+  LISTEN_NOW: 'Listen Now',
+  NO_BUTTON: 'No Button',
+  MESSAGE_PAGE: 'Message Page',
+  LIKE_PAGE: 'Like Page',
+  BUY_TICKETS: 'Buy Tickets',
+  GET_SHOWTIMES: 'Get Showtimes',
+  DONATE_NOW: 'Donate Now',
+  EVENT_RSVP: 'RSVP',
+  SELL_NOW: 'Sell Now',
+  SAVE: 'Save',
+};
+
+/**
+ * Convert a Meta CTA enum value to a human-readable label.
+ * Falls back to title-casing the underscore-separated value.
+ *
+ * @param raw - The raw `call_to_action_type` value from Meta's API (e.g. `"BOOK_TRAVEL"`).
+ * @returns A user-friendly label (e.g. `"Book Now"`).
+ */
+export function formatCtaLabel(raw: string): string {
+  if (CTA_DISPLAY_LABELS[raw]) return CTA_DISPLAY_LABELS[raw];
+
+  return raw
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 /** Supported call-to-action button types for Meta ad creatives. */
 export const CALL_TO_ACTION_TYPES = [
   'APPLY_NOW',

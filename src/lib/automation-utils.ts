@@ -43,6 +43,7 @@ export function calculateNewBudget(
 
   if (amountType === 'percent') {
     const factor = direction === 'increase' ? 1 + amount / 100 : 1 - amount / 100;
+
     newDollars = currentDollars * factor;
   } else {
     newDollars = direction === 'increase' ? currentDollars + amount : currentDollars - amount;
@@ -74,11 +75,36 @@ export function evaluateCondition(actual: number, operator: string, threshold: n
 }
 
 /**
+ * Extract the core event name from a Meta action type string.
+ * Strips prefixes like `offsite_conversion.fb_pixel_`, `onsite_conversion.`,
+ * and `omni_` to produce a canonical name for fuzzy matching.
+ *
+ * @example
+ * ```ts
+ * extractEventName('offsite_conversion.fb_pixel_complete_registration') // → 'complete_registration'
+ * extractEventName('omni_complete_registration') // → 'complete_registration'
+ * extractEventName('complete_registration') // → 'complete_registration'
+ * ```
+ */
+function extractEventName(actionType: string): string {
+  return actionType
+    .replace(/^offsite_conversion\.fb_pixel_/, '')
+    .replace(/^offsite_conversion\.custom\.\d+$/, '')
+    .replace(/^offsite_conversion\./, '')
+    .replace(/^onsite_conversion\./, '')
+    .replace(/^omni_/, '');
+}
+
+/**
  * Extract the result count from a Meta insights row's actions array.
  *
- * When the optimization goal is known (via the optimization map), ONLY that specific
- * action type is counted. Otherwise, falls back to the first conversion-type action,
- * excluding engagement-only events.
+ * When the optimization goal is known (via the optimization map), first tries an exact
+ * match on the mapped action type. If that fails, tries a fuzzy match by comparing
+ * the core event name (e.g. `complete_registration`) across all `omni_`, `offsite_`,
+ * and standalone variants — Meta's API sometimes returns different prefixes across
+ * API versions and campaign types.
+ *
+ * Falls back to the first conversion-type action when no optimization goal is known.
  */
 export function getResultCount(
   row: Pick<MetaInsightsRow, 'actions' | 'campaign_id'>,
@@ -92,18 +118,31 @@ export function getResultCount(
   const resultType = campaignId && optimizationMap[campaignId];
 
   if (resultType) {
+    // Exact match first
     const found = actions.find((a) => a.action_type === resultType);
 
-    return found ? parseInt(found.value) || 0 : 0;
+    if (found) return parseInt(found.value) || 0;
+
+    // Fuzzy match — Meta sometimes returns the same event under a different prefix
+    // (e.g. `omni_complete_registration` instead of `offsite_conversion.fb_pixel_complete_registration`)
+    const expectedEvent = extractEventName(resultType);
+
+    if (expectedEvent) {
+      const fuzzy = actions.find((a) => extractEventName(a.action_type) === expectedEvent);
+
+      if (fuzzy) return parseInt(fuzzy.value) || 0;
+    }
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.
-  // Includes standalone 'lead' and 'complete_registration' action types that Meta
-  // sometimes returns for certain campaign objectives.
+  // Includes `omni_` prefixed actions (Meta's newer cross-platform format),
+  // standalone `lead` and `complete_registration` action types, and traditional
+  // `offsite_conversion.*` / `onsite_conversion.*` types.
   const conversion = actions.find(
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
         a.action_type.startsWith('onsite_conversion.') ||
+        a.action_type.startsWith('omni_') ||
         a.action_type === 'lead' ||
         a.action_type === 'complete_registration') &&
       !a.action_type.includes('post_engagement') &&

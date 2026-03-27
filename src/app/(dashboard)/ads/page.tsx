@@ -31,6 +31,7 @@ function getAdResults(actions?: Array<{ action_type: string; value: string }> | 
     (a) =>
       (a.action_type.startsWith('offsite_conversion.') ||
         a.action_type.startsWith('onsite_conversion.') ||
+        a.action_type.startsWith('omni_') ||
         a.action_type === 'lead' ||
         a.action_type === 'complete_registration') &&
       !a.action_type.includes('post_engagement') &&

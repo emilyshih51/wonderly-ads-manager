@@ -155,7 +155,8 @@ const DEFAULT_CONFIG: RuleConfig = {
   target_adset_name: '',
   also_notify_slack: false,
   slack_channel: '',
-  slack_message: '',
+  slack_message:
+    '{campaign_name}\n{ad_link}\nSpend: {spend}  Results: {results}  CPA: {cpa}  CTR: {ctr}',
 };
 
 /* ─────────── Templates ─────────── */

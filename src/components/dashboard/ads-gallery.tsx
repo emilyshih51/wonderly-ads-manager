@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
-import { cn, formatCurrency, formatPercent, formatNumber } from '@/lib/utils';
+import { cn, formatCurrency, formatPercent, formatNumber, formatCtaLabel } from '@/lib/utils';
 import { getResultCount } from '@/lib/automation-utils';
 import { ChevronLeft, ChevronRight, Image as ImageIcon, Play, TrendingUp, X } from 'lucide-react';
 import type { AdRow } from '@/lib/queries/meta/use-ads';
@@ -357,7 +357,7 @@ function AdDetail({ ad }: { ad: RankedAd }) {
             )}
             {ad.creative.call_to_action_type && (
               <span className="inline-block rounded bg-[var(--color-muted)] px-2 py-0.5 text-xs font-medium text-[var(--color-foreground)]">
-                {ad.creative.call_to_action_type.replace(/_/g, ' ')}
+                {formatCtaLabel(ad.creative.call_to_action_type)}
               </span>
             )}
           </div>

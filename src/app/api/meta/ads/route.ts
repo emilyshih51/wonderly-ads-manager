@@ -94,11 +94,14 @@ export async function GET(request: NextRequest) {
       };
       const allAdDetails: AdDetail[] = [];
 
+      // URL-encode the fields parameter in relative_url for Meta batch compatibility
+      const encodedFields = encodeURIComponent(AD_CREATIVE_FIELDS);
+
       for (let i = 0; i < adIds.length; i += BATCH_SIZE) {
         const chunk = adIds.slice(i, i + BATCH_SIZE);
         const batchBody = chunk.map((id) => ({
           method: 'GET',
-          relative_url: `${id}?fields=${AD_CREATIVE_FIELDS}`,
+          relative_url: `${id}?fields=${encodedFields}`,
         }));
 
         const batchUrl = new URL(`${META_BASE_URL}/`);
@@ -106,16 +109,63 @@ export async function GET(request: NextRequest) {
         batchUrl.searchParams.set('access_token', session.meta_access_token);
         batchUrl.searchParams.set('batch', JSON.stringify(batchBody));
 
-        const batchRes = await fetch(batchUrl.toString(), { method: 'POST', cache: 'no-store' });
-        const batchData = (await batchRes.json()) as Array<{ code: number; body: string }>;
+        try {
+          const batchRes = await fetch(batchUrl.toString(), { method: 'POST', cache: 'no-store' });
+          const batchData = (await batchRes.json()) as Array<{ code: number; body: string }>;
 
-        for (const item of batchData) {
-          if (item.code === 200) {
-            try {
-              allAdDetails.push(JSON.parse(item.body) as AdDetail);
-            } catch {
-              // skip malformed
+          for (const item of batchData) {
+            if (item.code === 200) {
+              try {
+                allAdDetails.push(JSON.parse(item.body) as AdDetail);
+              } catch {
+                // skip malformed
+              }
+            } else {
+              logger.warn('Batch item failed', { code: item.code, body: item.body?.slice(0, 200) });
             }
+          }
+        } catch (e) {
+          logger.error('Ad detail batch request failed', e);
+        }
+      }
+
+      // Fallback: if batch returned zero results, retry with basic fields (no video/effective_image)
+      if (allAdDetails.length === 0 && adIds.length > 0) {
+        logger.warn('Batch returned zero ad details, retrying with basic fields');
+        const basicFields = encodeURIComponent(
+          'id,name,adset_id,campaign_id,status,creative{id,name,title,body,image_url,thumbnail_url,link_url,call_to_action_type}'
+        );
+
+        for (let i = 0; i < adIds.length; i += BATCH_SIZE) {
+          const chunk = adIds.slice(i, i + BATCH_SIZE);
+          const batchBody = chunk.map((id) => ({
+            method: 'GET',
+            relative_url: `${id}?fields=${basicFields}`,
+          }));
+
+          const batchUrl = new URL(`${META_BASE_URL}/`);
+
+          batchUrl.searchParams.set('access_token', session.meta_access_token);
+          batchUrl.searchParams.set('batch', JSON.stringify(batchBody));
+
+          try {
+            const batchRes = await fetch(batchUrl.toString(), {
+              method: 'POST',
+              cache: 'no-store',
+            });
+            const batchData = (await batchRes.json()) as Array<{ code: number; body: string }>;
+
+            for (const item of batchData) {
+              if (item.code === 200) {
+                try {
+                  allAdDetails.push(JSON.parse(item.body) as AdDetail);
+                } catch {
+                  // skip malformed
+                }
+              }
+            }
+          } catch (e) {
+            logger.error('Fallback batch also failed', e);
           }
         }
       }

@@ -132,6 +132,11 @@ export function getResultCount(
 
       if (fuzzy) return parseInt(fuzzy.value) || 0;
     }
+
+    // The campaign has a known optimization goal but no matching events were found.
+    // Return 0 — do NOT fall through to the generic fallback, which could pick up
+    // a different conversion type and report incorrect results.
+    return 0;
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.

@@ -114,6 +114,20 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', optMap)).toBe(0);
   });
 
+  it('returns 0 when optimization map exists but actions contain a different conversion type', () => {
+    // Campaign c1 is optimized for fb_pixel_lead, but actions only contain start_trial.
+    // Should NOT fall through to the generic fallback and pick up start_trial.
+    const row = {
+      campaign_id: 'c1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_start_trial', value: '5' },
+        { action_type: 'link_click', value: '50' },
+      ],
+    };
+
+    expect(getResultCount(row, 'c1', optMap)).toBe(0);
+  });
+
   it('uses generic fallback for campaigns not in the optimization map', () => {
     const row = {
       campaign_id: 'c_unknown',

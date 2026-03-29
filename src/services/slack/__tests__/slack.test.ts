@@ -249,6 +249,28 @@ describe('SlackService', () => {
       expect(body.text).toContain('High CPA Rule');
     });
 
+    it('uses campaign name brand in header instead of hardcoded Wonderly', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendAutomationNotification('C1', {
+        ...baseNotification,
+        campaignName: 'B2C 7 | Motion | Remarketing | Sales',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as {
+        text: string;
+        blocks: Array<{ text: { text: string } }>;
+      };
+
+      const headerBlock = body.blocks[0];
+
+      expect(headerBlock.text.text).toContain('[Motion]');
+      expect(headerBlock.text.text).not.toContain('[Wonderly]');
+      expect(body.text).toContain('[Motion]');
+    });
+
     it('renders a custom message template with placeholders', async () => {
       const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
       const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
@@ -415,6 +437,27 @@ describe('SlackService', () => {
 
       expect(allBlockText).toContain('1 ad created');
       expect(allBlockText).not.toContain('1 ads');
+    });
+  });
+
+  describe('extractBrand()', () => {
+    it('extracts brand from pipe-delimited campaign name, skipping codes with digits', () => {
+      expect(SlackService.extractBrand('B2C 7 | Motion | Remarketing | Sales')).toBe('Motion');
+    });
+
+    it('uses first segment when it has no digits', () => {
+      expect(SlackService.extractBrand('Wonderly | Prospecting | Website Signup (E)')).toBe(
+        'Wonderly'
+      );
+    });
+
+    it('falls back to first segment when all contain digits', () => {
+      expect(SlackService.extractBrand('B2C 7 | V2 Ads | Campaign 3')).toBe('B2C 7');
+    });
+
+    it('returns Wonderly when campaign name is empty or undefined', () => {
+      expect(SlackService.extractBrand(undefined)).toBe('Wonderly');
+      expect(SlackService.extractBrand('')).toBe('Wonderly');
     });
   });
 });

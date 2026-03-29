@@ -274,6 +274,7 @@ export class SlackService {
     } = notification;
 
     const adManagerLink = SlackService.buildAdManagerLink(adAccountId, entityName, entityId);
+    const brand = SlackService.extractBrand(campaignName);
 
     const actionEmoji = actionType === 'promote' ? '🚀' : actionType === 'activate' ? '▶️' : '⏸️';
     const actionVerb =
@@ -306,7 +307,7 @@ export class SlackService {
 
       bodySections.push(fallbackText);
     } else {
-      fallbackText = `${prefix}[Wonderly] ${actionEmoji} ${ruleName} — ${actionVerb} ${entityType}: ${entityName}`;
+      fallbackText = `${prefix}[${brand}] ${actionEmoji} ${ruleName} — ${actionVerb} ${entityType}: ${entityName}`;
       bodySections.push(`${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>`);
       bodySections.push(
         `*Spend:* $${metrics.spend.toFixed(2)}  *Results:* ${resultDisplay}  *CPA:* ${cpaDisplay}`
@@ -323,7 +324,7 @@ export class SlackService {
       bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
     }
 
-    const header = `${prefix}${actionEmoji} *[Wonderly]* ${ruleName}`;
+    const header = `${prefix}${actionEmoji} *[${brand}]* ${ruleName}`;
     const blocks = SlackService.buildNotificationBlocks(
       header,
       bodySections,
@@ -720,6 +721,28 @@ export class SlackService {
 
   static sanitizeMentions(text: string): string {
     return text.replace(/@(channel|here|everyone)/gi, '(@$1)');
+  }
+
+  /**
+   * Extract a short brand name from a pipe-delimited campaign name.
+   *
+   * Picks the first segment that doesn't contain digits (skipping project codes
+   * like "B2C 7") so that e.g. "B2C 7 | Motion | Remarketing | Sales" → "Motion"
+   * and "Wonderly | Prospecting | Website Signup (E)" → "Wonderly".
+   *
+   * @param campaignName - Full campaign name from Meta
+   * @returns A short brand identifier, defaulting to `"Wonderly"` when empty
+   */
+  static extractBrand(campaignName: string | undefined): string {
+    if (!campaignName) return 'Wonderly';
+
+    const segments = campaignName
+      .split('|')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const brand = segments.find((s) => !/\d/.test(s));
+
+    return brand || segments[0] || 'Wonderly';
   }
 
   async sendWebhookMessage(webhookUrl: string, text: string): Promise<void> {

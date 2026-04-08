@@ -87,12 +87,18 @@ export function evaluateCondition(actual: number, operator: string, threshold: n
  * ```
  */
 function extractEventName(actionType: string): string {
-  return actionType
-    .replace(/^offsite_conversion\.fb_pixel_/, '')
-    .replace(/^offsite_conversion\.custom\./, 'custom.')
-    .replace(/^offsite_conversion\./, '')
-    .replace(/^onsite_conversion\./, '')
-    .replace(/^omni_/, '');
+  return (
+    actionType
+      // Strip attribution window suffixes Meta appends when action_attribution_windows
+      // is specified (e.g. `.7d_click`, `.1d_view`, `.28d_click`). Must run first so
+      // the remaining replacements match the bare action type name.
+      .replace(/\.\d+d_(click|view)$/, '')
+      .replace(/^offsite_conversion\.fb_pixel_/, '')
+      .replace(/^offsite_conversion\.custom\./, 'custom.')
+      .replace(/^offsite_conversion\./, '')
+      .replace(/^onsite_conversion\./, '')
+      .replace(/^omni_/, '')
+  );
 }
 
 /**

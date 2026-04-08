@@ -271,9 +271,15 @@ export class SlackService {
       customMessage,
       duplicatedAdId,
       prefix = '',
+      datePreset = 'today',
     } = notification;
 
-    const adManagerLink = SlackService.buildAdManagerLink(adAccountId, entityName, entityId);
+    const adManagerLink = SlackService.buildAdManagerLink(
+      adAccountId,
+      entityName,
+      entityId,
+      datePreset
+    );
     const brand = SlackService.extractBrand(campaignName);
 
     const actionEmoji = actionType === 'promote' ? '🚀' : actionType === 'activate' ? '▶️' : '⏸️';
@@ -615,7 +621,8 @@ export class SlackService {
   private static buildAdManagerLink(
     adAccountId: string,
     entityName: string,
-    entityId: string
+    entityId: string,
+    datePreset = 'today'
   ): string {
     const encodedName = encodeURIComponent(`"[\\\"${entityName}\\\"]"`);
     const filterSet = `SEARCH_BY_ADGROUP_NAME-STRING%1ECONTAINS_ALL%1E${encodedName}`;
@@ -627,7 +634,7 @@ export class SlackService {
 
     url.searchParams.set('act', adAccountId);
     url.searchParams.set('selected_ad_ids', entityId);
-    url.searchParams.set('date_preset', 'today');
+    url.searchParams.set('date_preset', datePreset);
     url.searchParams.set('nav_source', 'ads_manager');
 
     return `${url.toString()}&filter_set=${filterSet}`;

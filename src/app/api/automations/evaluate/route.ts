@@ -634,6 +634,7 @@ async function evaluateRule(
                 // show only the campaign that actually matched, not all configured campaigns.
                 campaignName:
                   (row.campaign_name as string) || (triggerConfig.campaign_name as string) || '',
+                datePreset,
                 customMessage: actionConfig.slack_message,
                 prefix: dryRun ? '🧪 *[TEST]* ' : '',
               })

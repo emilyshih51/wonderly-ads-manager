@@ -172,6 +172,11 @@ export class MetaService {
       const params: Record<string, string> = {
         fields: 'campaign_id,optimization_goal,promoted_object',
         limit: '200',
+        // Exclude archived ad sets — their optimization goal may differ from active
+        // ad sets in the same campaign, which would poison the result-type lookup map.
+        filtering: JSON.stringify([
+          { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+        ]),
       };
 
       if (after) params.after = after;
@@ -552,6 +557,10 @@ export class MetaService {
         level,
         limit: limitByLevel[level],
         filtering: ACTIVE_FILTER[level],
+        // Match the attribution window Ads Manager uses by default (7-day click,
+        // 1-day view). Without this the API falls back to a narrower window and
+        // under-counts conversions compared to what Ads Manager shows.
+        action_attribution_windows: JSON.stringify(['7d_click', '1d_view']),
       },
     });
 

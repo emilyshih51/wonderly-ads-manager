@@ -76,6 +76,8 @@ export interface AutomationNotification {
   duplicatedAdId?: string;
   /** Optional prefix string (used in tests to identify test messages). */
   prefix?: string;
+  /** Date preset used to evaluate the rule — drives the Ads Manager deep link date range. */
+  datePreset?: string;
 }
 
 /**

@@ -429,7 +429,8 @@ export default function AutomationsPage() {
 
       const params = new URLSearchParams({
         type: 'preview',
-        date_preset: config.date_preset || 'today',
+        date_preset: config.date_preset || 'last_7d',
+        entity_type: config.entity_type || 'ad',
         conditions: JSON.stringify(condParam),
       });
 

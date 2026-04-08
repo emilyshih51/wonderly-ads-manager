@@ -89,7 +89,7 @@ export function evaluateCondition(actual: number, operator: string, threshold: n
 function extractEventName(actionType: string): string {
   return actionType
     .replace(/^offsite_conversion\.fb_pixel_/, '')
-    .replace(/^offsite_conversion\.custom\.\d+$/, '')
+    .replace(/^offsite_conversion\.custom\./, 'custom.')
     .replace(/^offsite_conversion\./, '')
     .replace(/^onsite_conversion\./, '')
     .replace(/^omni_/, '');

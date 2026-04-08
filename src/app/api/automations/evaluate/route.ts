@@ -630,7 +630,10 @@ async function evaluateRule(
                   ctr: metrics.ctr,
                 },
                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
-                campaignName: (triggerConfig.campaign_name as string) || '',
+                // Use the campaign name from the insight row so multi-campaign rules
+                // show only the campaign that actually matched, not all configured campaigns.
+                campaignName:
+                  (row.campaign_name as string) || (triggerConfig.campaign_name as string) || '',
                 customMessage: actionConfig.slack_message,
                 prefix: dryRun ? '🧪 *[TEST]* ' : '',
               })

@@ -116,7 +116,8 @@ export async function GET(request: NextRequest) {
 
     if (type === 'preview') {
       const conditionsJson = searchParams.get('conditions');
-      const datePreset = searchParams.get('date_preset') || 'today';
+      const datePreset = searchParams.get('date_preset') || 'last_7d';
+      const entityType = (searchParams.get('entity_type') || 'ad') as 'ad' | 'adset' | 'campaign';
       let conditions: Array<{ metric: string; operator: string; threshold: string }> = [];
 
       if (conditionsJson) {
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const insightsData = await meta.getFilteredInsights('ad', { datePreset, campaignId });
+      const insightsData = await meta.getFilteredInsights(entityType, { datePreset, campaignId });
 
       let optimizationMap: Record<string, string> = {};
 
@@ -140,6 +141,20 @@ export async function GET(request: NextRequest) {
       const matchingAds = insightsData
         .map((row) => {
           const metrics = parseInsightMetrics(row, optimizationMap);
+
+          // Debug: log action types when results are 0 but spend > 0 (suggests action type mismatch)
+          if (metrics.results === 0 && metrics.spend > 0 && row.actions?.length) {
+            const actionTypes = row.actions.map((a) => `${a.action_type}=${a.value}`).join(', ');
+            const rowCampaignId = row.campaign_id;
+            const mappedType = rowCampaignId ? optimizationMap[rowCampaignId] : undefined;
+
+            logger.warn('Preview: zero results despite spend > 0 — possible action type mismatch', {
+              entity: row.ad_name ?? row.adset_name ?? row.campaign_name ?? row.ad_id,
+              spend: metrics.spend,
+              mappedResultType: mappedType || 'none',
+              actionTypes,
+            });
+          }
 
           const allMet = conditions.every((cond) => {
             if (cond.metric === 'cost_per_result' && metrics.results === 0) return false;

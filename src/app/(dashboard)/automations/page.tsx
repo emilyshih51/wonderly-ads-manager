@@ -156,7 +156,7 @@ const DEFAULT_CONFIG: RuleConfig = {
   also_notify_slack: false,
   slack_channel: '',
   slack_message:
-    '{campaign_name}\n{ad_link}\nSpend: {spend}  Results: {results}  CPA: {cpa}  CTR: {ctr}',
+    '{campaign_name}\n{ad_link}\nSpend: {spend}  Results: {results}  CPA: {cpa}  CTR: {ctr}\nPeriod: {date_range}',
 };
 
 /* ─────────── Templates ─────────── */

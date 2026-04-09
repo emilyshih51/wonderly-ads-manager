@@ -22,6 +22,17 @@ import {
   ACTION_LABEL_MAX_CHARS,
   SLACK_TIMESTAMP_TOLERANCE_SECONDS,
 } from './constants';
+
+/** Map Meta date_preset values to human-readable labels for Slack notifications. */
+const DATE_PRESET_LABELS: Record<string, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  last_3d: 'Last 3 Days',
+  last_7d: 'Last 7 Days',
+  last_14d: 'Last 14 Days',
+  last_30d: 'Last 30 Days',
+};
+
 import type {
   SlackMessage,
   SlackThreadMessage,
@@ -291,6 +302,7 @@ export class SlackService {
       metrics.cost_per_result === 99999 || !isFinite(metrics.cost_per_result)
         ? 'N/A'
         : `$${metrics.cost_per_result.toFixed(2)}`;
+    const dateRangeLabel = DATE_PRESET_LABELS[datePreset] ?? datePreset;
 
     let fallbackText: string;
     const bodySections: string[] = [];
@@ -309,14 +321,15 @@ export class SlackService {
           .replace(/\{cpa\}/g, cpaDisplay)
           .replace(/\{clicks\}/g, String(metrics.clicks ?? 0))
           .replace(/\{ctr\}/g, `${(metrics.ctr ?? 0).toFixed(2)}%`)
-          .replace(/\{campaign_name\}/g, SlackService.sanitizeMentions(campaignName || ''));
+          .replace(/\{campaign_name\}/g, SlackService.sanitizeMentions(campaignName || ''))
+          .replace(/\{date_range\}/g, dateRangeLabel);
 
       bodySections.push(fallbackText);
     } else {
       fallbackText = `${prefix}[${brand}] ${actionEmoji} ${ruleName} — ${actionVerb} ${entityType}: ${entityName}`;
       bodySections.push(`${actionVerb} ${entityType}: <${adManagerLink}|${entityName}>`);
       bodySections.push(
-        `*Spend:* $${metrics.spend.toFixed(2)}  *Results:* ${resultDisplay}  *CPA:* ${cpaDisplay}`
+        `*Spend:* $${metrics.spend.toFixed(2)}  *Results:* ${resultDisplay}  *CPA:* ${cpaDisplay}  *Period:* ${dateRangeLabel}`
       );
     }
 

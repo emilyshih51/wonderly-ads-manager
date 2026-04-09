@@ -167,11 +167,10 @@ export function getResultCount(
     }
 
     // Neither exact nor fuzzy match found for the mapped result type.
-    // The ad set has a known optimization goal but the ad has zero of that specific
-    // conversion — return 0 rather than falling through to the generic fallback, which
-    // would incorrectly pick an unrelated conversion action (e.g. counting `lead` events
-    // for an ad set optimized for `purchase`).
-    return 0;
+    // This commonly happens when the campaign's optimization goal (e.g. START_TRIAL)
+    // differs from the pixel event that actually fires (e.g. CompleteRegistration).
+    // Fall through to the generic fallback so we still count the real conversion event
+    // rather than returning 0 and missing valid results entirely.
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.

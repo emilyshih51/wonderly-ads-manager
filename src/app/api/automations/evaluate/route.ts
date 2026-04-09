@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
   let optimizationMap: Record<string, string> = {};
 
   try {
-    optimizationMap = await meta.getCampaignOptimizationMap();
+    optimizationMap = await meta.getOptimizationMap();
   } catch (e) {
     logger.error('Failed to get optimization map', e);
   }

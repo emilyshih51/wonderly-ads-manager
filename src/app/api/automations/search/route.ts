@@ -185,6 +185,10 @@ export async function GET(request: NextRequest) {
 
           if (!allMet && conditions.length > 0) return null;
 
+          // Include raw action types and optimization map lookup info for debugging
+          const rowAdsetId = row.adset_id;
+          const mappedResultType = rowAdsetId ? optimizationMap[rowAdsetId] : undefined;
+
           return {
             ad_id: row.ad_id,
             ad_name: row.ad_name || row.ad_id,
@@ -199,6 +203,13 @@ export async function GET(request: NextRequest) {
             impressions: metrics.impressions,
             clicks: metrics.clicks,
             ctr: metrics.ctr.toFixed(2),
+            _debug: {
+              mapped_result_type: mappedResultType || null,
+              raw_actions: row.actions?.map((a) => ({
+                type: a.action_type,
+                value: a.value,
+              })),
+            },
           };
         })
         .filter(Boolean);

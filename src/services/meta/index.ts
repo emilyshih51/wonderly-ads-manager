@@ -16,7 +16,6 @@ import {
   META_OAUTH_URL,
   INSIGHT_FIELDS,
   INSIGHT_DETAIL_FIELDS,
-  CUSTOM_EVENT_TO_ACTION_TYPE,
   INSIGHT_FIELDS_AD,
   INSIGHT_FIELDS_ADSET,
   INSIGHT_FIELDS_CAMPAIGN,
@@ -231,18 +230,13 @@ export class MetaService {
 
         let actionType: string | undefined;
 
-        if (isOffsite && promoted?.custom_conversion_id) {
-          // Custom Conversions — Meta reports results as `fb_pixel_custom` in the
-          // actions array, regardless of the underlying event type. Check this BEFORE
-          // custom_event_type because an ad set can have both, and the custom_conversion_id
-          // determines how conversions actually appear in the API response.
+        if (isOffsite && (promoted?.custom_event_type || promoted?.custom_conversion_id)) {
+          // Meta API v21 reports all offsite pixel conversion events as
+          // `offsite_conversion.fb_pixel_custom` in the actions array — not under
+          // the specific event name (e.g. fb_pixel_start_trial). This applies to both
+          // standard pixel events (custom_event_type) and custom conversions
+          // (custom_conversion_id).
           actionType = 'offsite_conversion.fb_pixel_custom';
-        } else if (isOffsite && promoted?.custom_event_type) {
-          const mapped = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
-
-          actionType = mapped
-            ? mapped
-            : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
         } else if (goal === 'LEAD_GENERATION' || goal === 'OUTCOME_LEADS') {
           actionType = 'onsite_conversion.lead_grouped';
         } else if (goal === 'CONVERSATIONS' || goal === 'OUTCOME_ENGAGEMENT') {

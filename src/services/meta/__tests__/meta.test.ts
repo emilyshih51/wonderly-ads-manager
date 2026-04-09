@@ -242,7 +242,8 @@ describe('MetaService', () => {
       const map = await svc.getCampaignOptimizationMap();
 
       expect(map['c1']).toBe('onsite_conversion.lead_grouped');
-      expect(map['c2']).toBe('offsite_conversion.fb_pixel_lead');
+      // Meta API v21 reports offsite pixel conversions as fb_pixel_custom
+      expect(map['c2']).toBe('offsite_conversion.fb_pixel_custom');
     });
   });
 });

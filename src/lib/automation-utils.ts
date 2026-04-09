@@ -8,7 +8,7 @@
  * All functions are pure (no side effects) so they can be unit tested in isolation.
  */
 
-import type { MetaInsightsRow } from '@/types';
+import type { MetaAction, MetaInsightsRow } from '@/types';
 
 export const COST_PER_RESULT_NO_DATA = 99999;
 

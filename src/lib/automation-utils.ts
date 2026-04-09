@@ -166,12 +166,17 @@ export function getResultCount(
       if (fuzzy) return readActionValue(fuzzy);
     }
 
-    // Neither exact nor fuzzy match found for the mapped result type.
-    // Now that the optimization map is keyed per ad set (not per campaign), the map
-    // entry accurately reflects this ad set's optimization goal. Return 0 rather than
-    // falling through to the generic fallback, which would incorrectly count unrelated
-    // conversion actions (e.g. counting link_click or purchase events for an ad set
-    // optimized for start_trial that has 0 actual start_trial conversions).
+    // Custom conversion fallback — when the ad set's promoted_object says e.g.
+    // START_TRIAL but the actual conversions are tracked via a Custom Conversion rule,
+    // Meta reports them as `offsite_conversion.fb_pixel_custom` instead of the standard
+    // `offsite_conversion.fb_pixel_start_trial` action type. Check for this before
+    // returning 0, since it's often the true "Result" the ad set is optimized for.
+    const customConversion = actions.find(
+      (a) => a.action_type === 'offsite_conversion.fb_pixel_custom'
+    );
+
+    if (customConversion) return readActionValue(customConversion);
+
     return 0;
   }
 

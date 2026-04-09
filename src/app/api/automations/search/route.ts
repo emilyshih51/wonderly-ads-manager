@@ -233,6 +233,8 @@ export async function GET(request: NextRequest) {
           mapped_result_type: mappedType || null,
           raw_actions: row.actions?.map((a) => ({ type: a.action_type, value: a.value })) ?? null,
           actions_count: row.actions?.length ?? 0,
+          cost_per_action_type:
+            row.cost_per_action_type?.map((a) => ({ type: a.action_type, value: a.value })) ?? null,
         };
       });
 

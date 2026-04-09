@@ -599,12 +599,10 @@ export class MetaService {
         level,
         limit: limitByLevel[level],
         filtering: ACTIVE_FILTER[level],
-        // Specify the same attribution window Ads Manager uses (7-day click, 1-day view).
-        // Without this parameter Meta uses the account-level default attribution setting,
-        // which may be narrower and can return an empty `actions` array — causing 0 results.
-        // The `readActionValue()` helper in automation-utils handles extracting the correct
-        // count from per-window breakdowns when `value` only reflects a single window.
-        action_attribution_windows: JSON.stringify(['7d_click', '1d_view']),
+        // Do NOT specify action_attribution_windows — it causes Meta API v21 to omit
+        // conversion-type actions (e.g. start_trial, purchase) from the response entirely,
+        // returning only engagement actions. Without this parameter, Meta uses the ad set's
+        // own attribution setting, which matches what Ads Manager displays.
       },
     });
 

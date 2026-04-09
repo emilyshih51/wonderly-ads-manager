@@ -215,9 +215,12 @@ export async function GET(request: NextRequest) {
         })
         .filter(Boolean);
 
-      // Include a sample of raw data from the first few ads (regardless of match)
+      // Include a sample of raw data: top 5 ads by spend (most likely to have conversions)
       // so we can diagnose result-counting mismatches against Ads Manager.
-      const debugSample = insightsData.slice(0, 5).map((row) => {
+      const sortedBySpend = [...insightsData].sort(
+        (a, b) => parseFloat(b.spend || '0') - parseFloat(a.spend || '0')
+      );
+      const debugSample = sortedBySpend.slice(0, 5).map((row) => {
         const rowAdsetId = row.adset_id;
         const mappedType = rowAdsetId ? optimizationMap[rowAdsetId] : undefined;
         const metrics = parseInsightMetrics(row, optimizationMap);

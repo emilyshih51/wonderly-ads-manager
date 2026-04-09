@@ -139,10 +139,11 @@ export function getResultCount(
       if (fuzzy) return parseInt(fuzzy.value) || 0;
     }
 
-    // The campaign has a known optimization goal but no matching events were found.
-    // Return 0 — do NOT fall through to the generic fallback, which could pick up
-    // a different conversion type and report incorrect results.
-    return 0;
+    // Neither exact nor fuzzy match found for the mapped result type.
+    // Fall through to the generic fallback — the optimization map entry may be stale
+    // or the adset's promoted_object may not reflect the actual pixel event being fired.
+    // The generic fallback picks the first conversion-type action, which is safer than
+    // returning 0 and masking real conversions (e.g. start_trial) as non-existent.
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.

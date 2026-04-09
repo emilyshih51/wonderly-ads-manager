@@ -114,9 +114,11 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', optMap)).toBe(0);
   });
 
-  it('returns 0 when optimization map exists but actions contain a different conversion type', () => {
-    // Campaign c1 is optimized for fb_pixel_lead, but actions only contain start_trial.
-    // Should NOT fall through to the generic fallback and pick up start_trial.
+  it('falls through to generic fallback when optimization map type is not found in actions', () => {
+    // Campaign c1 is mapped to fb_pixel_lead, but actions only contain start_trial.
+    // The exact and fuzzy match both fail, so we fall through to the generic fallback
+    // which picks the first offsite_conversion.* action (start_trial in this case).
+    // This handles cases where the optimization map entry is stale or wrong.
     const row = {
       campaign_id: 'c1',
       actions: [
@@ -125,7 +127,33 @@ describe('getResultCount()', () => {
       ],
     };
 
+    expect(getResultCount(row, 'c1', optMap)).toBe(5);
+  });
+
+  it('returns 0 when optimization map type not found and no generic conversion match either', () => {
+    // Campaign c1 mapped to fb_pixel_lead, actions only contain link_click (not a conversion).
+    const row = {
+      campaign_id: 'c1',
+      actions: [{ action_type: 'link_click', value: '50' }],
+    };
+
     expect(getResultCount(row, 'c1', optMap)).toBe(0);
+  });
+
+  it('handles attribution window suffixes in action types via fuzzy match', () => {
+    // When action_attribution_windows is specified, Meta appends window suffixes
+    // to action types (e.g. .7d_click). Fuzzy match strips these and compares the core name.
+    const map = { c1: 'offsite_conversion.fb_pixel_start_trial' };
+    const row = {
+      campaign_id: 'c1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_start_trial.7d_click', value: '4' },
+        { action_type: 'offsite_conversion.fb_pixel_start_trial.1d_view', value: '1' },
+        { action_type: 'link_click', value: '50' },
+      ],
+    };
+
+    expect(getResultCount(row, 'c1', map)).toBe(4);
   });
 
   it('uses generic fallback for campaigns not in the optimization map', () => {

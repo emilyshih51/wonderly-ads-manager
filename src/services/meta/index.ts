@@ -231,14 +231,18 @@ export class MetaService {
 
         let actionType: string | undefined;
 
-        if (isOffsite && promoted?.custom_event_type) {
+        if (isOffsite && promoted?.custom_conversion_id) {
+          // Custom Conversions — Meta reports results as `fb_pixel_custom` in the
+          // actions array, regardless of the underlying event type. Check this BEFORE
+          // custom_event_type because an ad set can have both, and the custom_conversion_id
+          // determines how conversions actually appear in the API response.
+          actionType = 'offsite_conversion.fb_pixel_custom';
+        } else if (isOffsite && promoted?.custom_event_type) {
           const mapped = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
 
           actionType = mapped
             ? mapped
             : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
-        } else if (isOffsite && promoted?.custom_conversion_id) {
-          actionType = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
         } else if (goal === 'LEAD_GENERATION' || goal === 'OUTCOME_LEADS') {
           actionType = 'onsite_conversion.lead_grouped';
         } else if (goal === 'CONVERSATIONS' || goal === 'OUTCOME_ENGAGEMENT') {

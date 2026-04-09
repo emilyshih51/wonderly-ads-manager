@@ -167,10 +167,12 @@ export function getResultCount(
     }
 
     // Neither exact nor fuzzy match found for the mapped result type.
-    // This commonly happens when the campaign's optimization goal (e.g. START_TRIAL)
-    // differs from the pixel event that actually fires (e.g. CompleteRegistration).
-    // Fall through to the generic fallback so we still count the real conversion event
-    // rather than returning 0 and missing valid results entirely.
+    // Now that the optimization map is keyed per ad set (not per campaign), the map
+    // entry accurately reflects this ad set's optimization goal. Return 0 rather than
+    // falling through to the generic fallback, which would incorrectly count unrelated
+    // conversion actions (e.g. counting link_click or purchase events for an ad set
+    // optimized for start_trial that has 0 actual start_trial conversions).
+    return 0;
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.

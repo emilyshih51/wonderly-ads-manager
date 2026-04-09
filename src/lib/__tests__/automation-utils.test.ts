@@ -114,10 +114,10 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', optMap)).toBe(0);
   });
 
-  it('returns 0 when optimization map has entry but action is not in row (no fallthrough)', () => {
+  it('falls through to generic fallback when mapped type not found in actions', () => {
     // Campaign c1 is mapped to fb_pixel_lead, but actions only contain start_trial.
-    // The exact and fuzzy match both fail — return 0 instead of falling through to
-    // the generic fallback, which would incorrectly count unrelated conversions.
+    // The exact and fuzzy match both fail — fall through to the generic fallback
+    // which picks start_trial so we don't miss real conversions.
     const row = {
       campaign_id: 'c1',
       actions: [
@@ -126,7 +126,7 @@ describe('getResultCount()', () => {
       ],
     };
 
-    expect(getResultCount(row, 'c1', optMap)).toBe(0);
+    expect(getResultCount(row, 'c1', optMap)).toBe(5);
   });
 
   it('returns 0 when optimization map has entry but only non-conversion actions in row', () => {

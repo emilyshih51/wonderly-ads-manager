@@ -98,6 +98,7 @@ interface PreviewAd {
   ad_name: string;
   adset_id: string;
   campaign_id: string;
+  campaign_name: string;
   spend: string;
   results: number;
   cpa: string;
@@ -1651,9 +1652,7 @@ export default function AutomationsPage() {
                                     .replace(/\{ctr\}/g, `${sampleAd?.ctr || '0.00'}%`)
                                     .replace(
                                       /\{campaign_name\}/g,
-                                      config.campaign_name
-                                        ? config.campaign_name.split(',').filter(Boolean).join(', ')
-                                        : '<campaign name>'
+                                      sampleAd?.campaign_name || '<campaign name>'
                                     );
                                 })()}
                               </div>

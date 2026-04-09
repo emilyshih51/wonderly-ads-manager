@@ -194,6 +194,7 @@ export async function GET(request: NextRequest) {
             ad_name: row.ad_name || row.ad_id,
             adset_id: row.adset_id,
             campaign_id: row.campaign_id,
+            campaign_name: row.campaign_name || '',
             spend: metrics.spend.toFixed(2),
             results: metrics.results,
             cpa:

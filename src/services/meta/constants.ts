@@ -16,7 +16,7 @@ export const META_OAUTH_URL = `https://www.facebook.com/${META_API_VERSION}/dial
  * needed for result counting.
  */
 export const INSIGHT_FIELDS_AD =
-  'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type';
+  'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,date_start,date_stop';
 
 /**
  * Insight fields requested for ad-set-level queries.

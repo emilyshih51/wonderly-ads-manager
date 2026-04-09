@@ -231,6 +231,8 @@ export async function GET(request: NextRequest) {
           spend: metrics.spend.toFixed(2),
           computed_results: metrics.results,
           mapped_result_type: mappedType || null,
+          date_start: row.date_start ?? null,
+          date_stop: row.date_stop ?? null,
           raw_actions: row.actions?.map((a) => ({ type: a.action_type, value: a.value })) ?? null,
           actions_count: row.actions?.length ?? 0,
           cost_per_action_type:
@@ -240,6 +242,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         matched: matchingAds.length,
+        requested_date_preset: datePreset,
         total_ads: insightsData.length,
         data: matchingAds,
         _debug_sample: debugSample,

@@ -114,11 +114,10 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', optMap)).toBe(0);
   });
 
-  it('falls through to generic fallback when optimization map type is not found in actions', () => {
+  it('returns 0 when optimization map has entry but action is not in row (no fallthrough)', () => {
     // Campaign c1 is mapped to fb_pixel_lead, but actions only contain start_trial.
-    // The exact and fuzzy match both fail, so we fall through to the generic fallback
-    // which picks the first offsite_conversion.* action (start_trial in this case).
-    // This handles cases where the optimization map entry is stale or wrong.
+    // The exact and fuzzy match both fail — return 0 instead of falling through to
+    // the generic fallback, which would incorrectly count unrelated conversions.
     const row = {
       campaign_id: 'c1',
       actions: [
@@ -127,10 +126,10 @@ describe('getResultCount()', () => {
       ],
     };
 
-    expect(getResultCount(row, 'c1', optMap)).toBe(5);
+    expect(getResultCount(row, 'c1', optMap)).toBe(0);
   });
 
-  it('returns 0 when optimization map type not found and no generic conversion match either', () => {
+  it('returns 0 when optimization map has entry but only non-conversion actions in row', () => {
     // Campaign c1 mapped to fb_pixel_lead, actions only contain link_click (not a conversion).
     const row = {
       campaign_id: 'c1',

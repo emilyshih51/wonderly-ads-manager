@@ -140,10 +140,11 @@ export function getResultCount(
     }
 
     // Neither exact nor fuzzy match found for the mapped result type.
-    // Fall through to the generic fallback — the optimization map entry may be stale
-    // or the adset's promoted_object may not reflect the actual pixel event being fired.
-    // The generic fallback picks the first conversion-type action, which is safer than
-    // returning 0 and masking real conversions (e.g. start_trial) as non-existent.
+    // The campaign has a known optimization goal but the ad has zero of that specific
+    // conversion — return 0 rather than falling through to the generic fallback, which
+    // would incorrectly pick an unrelated conversion action (e.g. counting `lead` events
+    // for a campaign optimized for `purchase`).
+    return 0;
   }
 
   // Generic fallback — find the first conversion action, excluding non-conversion events.

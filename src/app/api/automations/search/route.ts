@@ -215,10 +215,29 @@ export async function GET(request: NextRequest) {
         })
         .filter(Boolean);
 
+      // Include a sample of raw data from the first few ads (regardless of match)
+      // so we can diagnose result-counting mismatches against Ads Manager.
+      const debugSample = insightsData.slice(0, 5).map((row) => {
+        const rowAdsetId = row.adset_id;
+        const mappedType = rowAdsetId ? optimizationMap[rowAdsetId] : undefined;
+        const metrics = parseInsightMetrics(row, optimizationMap);
+
+        return {
+          ad_name: row.ad_name || row.ad_id,
+          adset_id: row.adset_id,
+          spend: metrics.spend.toFixed(2),
+          computed_results: metrics.results,
+          mapped_result_type: mappedType || null,
+          raw_actions: row.actions?.map((a) => ({ type: a.action_type, value: a.value })) ?? null,
+          actions_count: row.actions?.length ?? 0,
+        };
+      });
+
       return NextResponse.json({
         matched: matchingAds.length,
         total_ads: insightsData.length,
         data: matchingAds,
+        _debug_sample: debugSample,
       });
     }
 

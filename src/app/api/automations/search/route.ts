@@ -142,19 +142,36 @@ export async function GET(request: NextRequest) {
         .map((row) => {
           const metrics = parseInsightMetrics(row, optimizationMap);
 
-          // Debug: log action types when results are 0 but spend > 0 (suggests action type mismatch)
-          if (metrics.results === 0 && metrics.spend > 0 && row.actions?.length) {
-            const actionTypes = row.actions.map((a) => `${a.action_type}=${a.value}`).join(', ');
+          // Debug: log when results are 0 but spend > 0 so we can distinguish between
+          // an empty actions array (reporting lag) vs a wrong action type (mapping bug)
+          if (metrics.results === 0 && metrics.spend > 0) {
             const rowAdsetId = row.adset_id;
             const mappedType = rowAdsetId ? optimizationMap[rowAdsetId] : undefined;
 
-            logger.warn('Preview: zero results despite spend > 0 — possible action type mismatch', {
-              entity: row.ad_name ?? row.adset_name ?? row.campaign_name ?? row.ad_id,
-              adsetId: rowAdsetId,
-              spend: metrics.spend,
-              mappedResultType: mappedType || 'none',
-              actionTypes,
-            });
+            if (!row.actions?.length) {
+              logger.warn(
+                'Preview: zero results and empty actions array — possible reporting lag',
+                {
+                  entity: row.ad_name ?? row.adset_name ?? row.campaign_name ?? row.ad_id,
+                  adsetId: rowAdsetId,
+                  spend: metrics.spend,
+                  mappedResultType: mappedType || 'none',
+                }
+              );
+            } else {
+              const actionTypes = row.actions.map((a) => `${a.action_type}=${a.value}`).join(', ');
+
+              logger.warn(
+                'Preview: zero results despite spend > 0 — possible action type mismatch',
+                {
+                  entity: row.ad_name ?? row.adset_name ?? row.campaign_name ?? row.ad_id,
+                  adsetId: rowAdsetId,
+                  spend: metrics.spend,
+                  mappedResultType: mappedType || 'none',
+                  actionTypes,
+                }
+              );
+            }
           }
 
           const allMet = conditions.every((cond) => {

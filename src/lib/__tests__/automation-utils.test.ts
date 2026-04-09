@@ -248,6 +248,38 @@ describe('getResultCount()', () => {
     // Exact match should win
     expect(getResultCount(row, 'c1', optMap)).toBe(10);
   });
+
+  it('uses ad-set-keyed map for accurate per-ad-set results', () => {
+    // Different ad sets in the same campaign can have different optimization goals.
+    // The map is keyed by ad set ID so each ad resolves the correct result type.
+    const adsetMap: Record<string, string> = {
+      adset_A: 'offsite_conversion.fb_pixel_complete_registration',
+      adset_B: 'offsite_conversion.fb_pixel_start_trial',
+    };
+
+    const adInAdsetA = {
+      adset_id: 'adset_A',
+      campaign_id: 'campaign_1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_complete_registration', value: '3' },
+        { action_type: 'offsite_conversion.fb_pixel_start_trial', value: '10' },
+      ],
+    };
+
+    const adInAdsetB = {
+      adset_id: 'adset_B',
+      campaign_id: 'campaign_1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_complete_registration', value: '3' },
+        { action_type: 'offsite_conversion.fb_pixel_start_trial', value: '10' },
+      ],
+    };
+
+    // Ad in adset A → should count complete_registration (3)
+    expect(getResultCount(adInAdsetA, 'adset_A', adsetMap)).toBe(3);
+    // Ad in adset B → should count start_trial (10)
+    expect(getResultCount(adInAdsetB, 'adset_B', adsetMap)).toBe(10);
+  });
 });
 
 describe('getCostPerResult()', () => {

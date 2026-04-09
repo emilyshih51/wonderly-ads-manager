@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
     let optimizationMap: Record<string, string> = {};
 
     try {
-      optimizationMap = await meta.getCampaignOptimizationMap();
+      optimizationMap = await meta.getOptimizationMap();
     } catch (e) {
       logger.error(`Failed to get optimization map for account ${adAccountId}`, e);
     }
@@ -456,11 +456,12 @@ async function evaluateRule(
     // Debug: log action types when results are 0 but spend > 0 (suggests action type mismatch)
     if (metrics.results === 0 && metrics.spend > 0 && row.actions?.length) {
       const actionTypes = row.actions.map((a) => `${a.action_type}=${a.value}`).join(', ');
-      const campaignId = row.campaign_id;
-      const mappedType = campaignId ? optimizationMap[campaignId] : undefined;
+      const rowAdsetId = row.adset_id;
+      const mappedType = rowAdsetId ? optimizationMap[rowAdsetId] : undefined;
 
       logger.warn('Zero results despite spend > 0 — possible action type mismatch', {
         entity: entityName,
+        adsetId: rowAdsetId,
         spend: metrics.spend,
         mappedResultType: mappedType || 'none',
         actionTypes,

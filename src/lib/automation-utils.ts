@@ -96,38 +96,65 @@ function extractEventName(actionType: string): string {
       .replace(/^offsite_conversion\.fb_pixel_/, '')
       .replace(/^offsite_conversion\.custom\./, 'custom.')
       .replace(/^offsite_conversion\./, '')
+      .replace(/^onsite_app_conversion\./, '')
       .replace(/^onsite_conversion\./, '')
       .replace(/^omni_/, '')
   );
 }
 
 /**
+ * Read the numeric count from a Meta action object.
+ *
+ * When `action_attribution_windows` is specified in the insights query, Meta sets
+ * `value` to the count for the `default_attribution_window` (we request `7d_click`).
+ * As a defensive fallback, if `value` is absent or zero, this function checks for
+ * an explicit `7d_click` key on the object — Meta attaches per-window breakdowns as
+ * additional keys alongside `value`.
+ *
+ * @param action - A Meta action object from the insights `actions` array
+ * @returns The action count as an integer, or 0 if no count can be determined
+ */
+function readActionValue(action: MetaAction): number {
+  const v = parseInt(action.value);
+
+  if (!isNaN(v) && v > 0) return v;
+
+  // Defensive fallback: try the explicit 7d_click key that Meta attaches when
+  // action_attribution_windows is requested. This protects against value being
+  // absent or set to a narrower window count that is 0.
+  const record = action as unknown as Record<string, string>;
+  const windowValue = parseInt(record['7d_click'] ?? record['28d_click'] ?? '0');
+
+  return windowValue > 0 ? windowValue : isNaN(v) ? 0 : v;
+}
+
+/**
  * Extract the result count from a Meta insights row's actions array.
  *
- * When the optimization goal is known (via the optimization map), first tries an exact
- * match on the mapped action type. If that fails, tries a fuzzy match by comparing
- * the core event name (e.g. `complete_registration`) across all `omni_`, `offsite_`,
- * and standalone variants — Meta's API sometimes returns different prefixes across
- * API versions and campaign types.
+ * When the optimization goal is known (via the optimization map keyed by ad set ID),
+ * first tries an exact match on the mapped action type. If that fails, tries a fuzzy
+ * match by comparing the core event name (e.g. `complete_registration`) across all
+ * `omni_`, `offsite_`, and standalone variants — Meta's API sometimes returns different
+ * prefixes across API versions and campaign types.
  *
  * Falls back to the first conversion-type action when no optimization goal is known.
  */
 export function getResultCount(
-  row: Pick<MetaInsightsRow, 'actions' | 'campaign_id'>,
-  campaignId: string | undefined,
+  row: Pick<MetaInsightsRow, 'actions' | 'adset_id' | 'campaign_id'>,
+  lookupId: string | undefined,
   optimizationMap: Record<string, string>
 ): number {
   const actions = row.actions;
 
   if (!actions || !Array.isArray(actions)) return 0;
 
-  const resultType = campaignId && optimizationMap[campaignId];
+  const resultType = lookupId && optimizationMap[lookupId];
 
   if (resultType) {
     // Exact match first
     const found = actions.find((a) => a.action_type === resultType);
 
-    if (found) return parseInt(found.value) || 0;
+    if (found) return readActionValue(found);
 
     // Fuzzy match — Meta sometimes returns the same event under a different prefix
     // (e.g. `omni_complete_registration` instead of `offsite_conversion.fb_pixel_complete_registration`)
@@ -136,14 +163,14 @@ export function getResultCount(
     if (expectedEvent) {
       const fuzzy = actions.find((a) => extractEventName(a.action_type) === expectedEvent);
 
-      if (fuzzy) return parseInt(fuzzy.value) || 0;
+      if (fuzzy) return readActionValue(fuzzy);
     }
 
     // Neither exact nor fuzzy match found for the mapped result type.
-    // The campaign has a known optimization goal but the ad has zero of that specific
+    // The ad set has a known optimization goal but the ad has zero of that specific
     // conversion — return 0 rather than falling through to the generic fallback, which
     // would incorrectly pick an unrelated conversion action (e.g. counting `lead` events
-    // for a campaign optimized for `purchase`).
+    // for an ad set optimized for `purchase`).
     return 0;
   }
 
@@ -163,23 +190,23 @@ export function getResultCount(
       !a.action_type.includes('link_click')
   );
 
-  return conversion ? parseInt(conversion.value) || 0 : 0;
+  return conversion ? readActionValue(conversion) : 0;
 }
 
 /**
  * Compute the cost-per-result for a Meta insights row.
  *
  * @param row - A Meta insights row with `spend` and `actions` fields
- * @param campaignId - Campaign ID used to look up the optimization goal
- * @param optimizationMap - Map of campaign ID → Meta action type string
+ * @param lookupId - ID used to look up the optimization goal (ad set ID or campaign ID)
+ * @param optimizationMap - Map of ID → Meta action type string (keyed by ad set or campaign)
  * @returns Cost per result as a number, or `null` when there are zero results
  */
 export function getCostPerResult(
-  row: Pick<MetaInsightsRow, 'spend' | 'actions' | 'campaign_id'>,
-  campaignId: string | undefined,
+  row: Pick<MetaInsightsRow, 'spend' | 'actions' | 'adset_id' | 'campaign_id'>,
+  lookupId: string | undefined,
   optimizationMap: Record<string, string>
 ): number | null {
-  const results = getResultCount(row, campaignId, optimizationMap);
+  const results = getResultCount(row, lookupId, optimizationMap);
 
   if (results === 0) return null;
 
@@ -200,14 +227,22 @@ export interface ParsedMetrics {
   cost_per_result: number;
 }
 
-/** Parse numeric metrics from a Meta insights row. */
+/**
+ * Parse numeric metrics from a Meta insights row.
+ *
+ * The optimization map can be keyed by ad set ID or campaign ID. This function
+ * tries `adset_id` first (for per-ad-set accuracy), then falls back to
+ * `campaign_id` (for campaign-level queries where `adset_id` is absent).
+ */
 export function parseInsightMetrics(
   row: MetaInsightsRow,
   optimizationMap: Record<string, string>
 ): ParsedMetrics {
   const spend = parseFloat(row.spend ?? '0');
-  const campaignId = row.campaign_id;
-  const resultCount = getResultCount(row, campaignId, optimizationMap);
+  // Try ad set first (more accurate), then campaign (for campaign-level data)
+  const lookupId =
+    (row.adset_id && optimizationMap[row.adset_id] ? row.adset_id : undefined) ?? row.campaign_id;
+  const resultCount = getResultCount(row, lookupId, optimizationMap);
   const costPerResult = resultCount > 0 ? spend / resultCount : Infinity;
 
   return {

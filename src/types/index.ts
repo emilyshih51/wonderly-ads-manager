@@ -141,8 +141,15 @@ export interface MetaInsights {
 export interface MetaAction {
   /** Action type identifier (e.g. `lead`, `purchase`, `link_click`). */
   action_type: string;
-  /** Number of times this action occurred, as a string. */
+  /**
+   * Number of times this action occurred, as a string.
+   * When `action_attribution_windows` is requested, this reflects the count for the
+   * `default_attribution_window` (we set this to `7d_click`). Per-window breakdown
+   * values are attached as additional string keys (e.g. `7d_click`, `1d_view`).
+   */
   value: string;
+  /** Per-window breakdown values attached by Meta when action_attribution_windows is requested. */
+  [window: string]: string;
 }
 
 /**

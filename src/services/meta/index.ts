@@ -155,22 +155,52 @@ export class MetaService {
   }
 
   /**
+   * Build a map of ad set ID → Meta action type used to count "Results".
+   *
+   * Meta's "Results" metric depends on the optimization goal of each ad set.
+   * Different ad sets within the same campaign can have different goals (e.g.
+   * one optimizes for `start_trial`, another for `complete_registration`), so
+   * the map is keyed per ad set — not per campaign.
+   *
+   * @returns `{ [adsetId]: actionType }` e.g. `{ "456": "offsite_conversion.fb_pixel_start_trial" }`
+   */
+  async getOptimizationMap(): Promise<Record<string, string>> {
+    const { adsetMap } = await this.fetchOptimizationMaps();
+
+    return adsetMap;
+  }
+
+  /**
    * Build a map of campaign ID → Meta action type used to count "Results".
    *
-   * Meta's "Results" metric depends on the optimization goal of the ad sets
-   * within each campaign. Fetches all ad sets and returns a lookup map so
-   * callers can resolve the correct `action_type` per campaign.
+   * Uses the first ad set per campaign to determine the optimization goal.
+   * Suitable for campaign-level displays; for ad-level accuracy use
+   * `getOptimizationMap()` which keys by ad set ID.
    *
    * @returns `{ [campaignId]: actionType }` e.g. `{ "123": "offsite_conversion.fb_pixel_lead" }`
    */
   async getCampaignOptimizationMap(): Promise<Record<string, string>> {
-    const map: Record<string, string> = {};
+    const { campaignMap } = await this.fetchOptimizationMaps();
+
+    return campaignMap;
+  }
+
+  /**
+   * Internal helper that fetches ad sets once and builds both the ad-set-keyed
+   * and campaign-keyed optimization maps in a single pass.
+   */
+  private async fetchOptimizationMaps(): Promise<{
+    adsetMap: Record<string, string>;
+    campaignMap: Record<string, string>;
+  }> {
+    const adsetMap: Record<string, string> = {};
+    const campaignMap: Record<string, string> = {};
     let after: string | undefined;
 
     // Paginate through all ad sets to handle accounts with >200 ad sets
     for (;;) {
       const params: Record<string, string> = {
-        fields: 'campaign_id,optimization_goal,promoted_object',
+        fields: 'id,campaign_id,optimization_goal,promoted_object',
         limit: '200',
         // Exclude archived ad sets — their optimization goal may differ from active
         // ad sets in the same campaign, which would poison the result-type lookup map.
@@ -182,40 +212,52 @@ export class MetaService {
       if (after) params.after = after;
 
       const data = (await this.request(`/act_${this.adAccountId}/adsets`, { params })) as {
-        data?: Array<Record<string, unknown>>;
+        data?: Array<{
+          id: string;
+          campaign_id: string;
+          optimization_goal?: string;
+          promoted_object?: Record<string, string>;
+        }>;
         paging?: { cursors?: { after?: string }; next?: string };
       };
 
       for (const adset of data.data || []) {
-        const campaignId = adset.campaign_id as string;
-
-        if (map[campaignId]) continue;
-
         const goal = adset.optimization_goal as string;
-        const promoted = adset.promoted_object as Record<string, string> | undefined;
+        const promoted = adset.promoted_object;
 
         // Meta API v21+ uses OUTCOME_* names alongside legacy names
         const isOffsite =
           goal === 'OFFSITE_CONVERSIONS' || goal === 'OUTCOME_SALES' || goal === 'OUTCOME_LEADS';
 
-        if (isOffsite && promoted?.custom_event_type) {
-          const actionType = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
+        let actionType: string | undefined;
 
-          map[campaignId] = actionType
-            ? actionType
+        if (isOffsite && promoted?.custom_event_type) {
+          const mapped = CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type];
+
+          actionType = mapped
+            ? mapped
             : `offsite_conversion.fb_pixel_${promoted.custom_event_type.toLowerCase()}`;
         } else if (isOffsite && promoted?.custom_conversion_id) {
-          map[campaignId] = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
+          actionType = `offsite_conversion.custom.${promoted.custom_conversion_id}`;
         } else if (goal === 'LEAD_GENERATION' || goal === 'OUTCOME_LEADS') {
-          map[campaignId] = 'onsite_conversion.lead_grouped';
+          actionType = 'onsite_conversion.lead_grouped';
         } else if (goal === 'CONVERSATIONS' || goal === 'OUTCOME_ENGAGEMENT') {
-          map[campaignId] = 'onsite_conversion.messaging_conversation_started_7d';
+          actionType = 'onsite_conversion.messaging_conversation_started_7d';
         } else if (
           goal === 'LINK_CLICKS' ||
           goal === 'LANDING_PAGE_VIEWS' ||
           goal === 'OUTCOME_TRAFFIC'
         ) {
-          map[campaignId] = goal === 'LANDING_PAGE_VIEWS' ? 'landing_page_view' : 'link_click';
+          actionType = goal === 'LANDING_PAGE_VIEWS' ? 'landing_page_view' : 'link_click';
+        }
+
+        if (actionType) {
+          adsetMap[adset.id] = actionType;
+
+          // Campaign map uses first ad set's goal (for campaign-level displays)
+          if (!campaignMap[adset.campaign_id]) {
+            campaignMap[adset.campaign_id] = actionType;
+          }
         }
       }
 
@@ -225,7 +267,7 @@ export class MetaService {
       if (!after) break;
     }
 
-    return map;
+    return { adsetMap, campaignMap };
   }
 
   /**
@@ -557,10 +599,12 @@ export class MetaService {
         level,
         limit: limitByLevel[level],
         filtering: ACTIVE_FILTER[level],
-        // Match the attribution window Ads Manager uses by default (7-day click,
-        // 1-day view). Without this the API falls back to a narrower window and
-        // under-counts conversions compared to what Ads Manager shows.
-        action_attribution_windows: JSON.stringify(['7d_click', '1d_view']),
+        // Do NOT specify action_attribution_windows. When omitted, Meta returns the
+        // combined deduplicated 7d_click + 1d_view count in the `value` field —
+        // exactly what Ads Manager displays for any date preset, including "today".
+        // Specifying explicit windows splits the count per-window and sets `value`
+        // to a single window only, which caused automations to report 0 results when
+        // all conversions came via 7d_click but the 1d_view window had 0.
       },
     });
 

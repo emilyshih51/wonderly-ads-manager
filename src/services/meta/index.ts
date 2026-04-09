@@ -599,12 +599,12 @@ export class MetaService {
         level,
         limit: limitByLevel[level],
         filtering: ACTIVE_FILTER[level],
-        // Do NOT specify action_attribution_windows. When omitted, Meta returns the
-        // combined deduplicated 7d_click + 1d_view count in the `value` field —
-        // exactly what Ads Manager displays for any date preset, including "today".
-        // Specifying explicit windows splits the count per-window and sets `value`
-        // to a single window only, which caused automations to report 0 results when
-        // all conversions came via 7d_click but the 1d_view window had 0.
+        // Specify the same attribution window Ads Manager uses (7-day click, 1-day view).
+        // Without this parameter Meta uses the account-level default attribution setting,
+        // which may be narrower and can return an empty `actions` array — causing 0 results.
+        // The `readActionValue()` helper in automation-utils handles extracting the correct
+        // count from per-window breakdowns when `value` only reflects a single window.
+        action_attribution_windows: JSON.stringify(['7d_click', '1d_view']),
       },
     });
 

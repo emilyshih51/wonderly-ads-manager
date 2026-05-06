@@ -78,9 +78,16 @@ export async function fetchAdContextData(
     const fetches = {
       todayCampaigns: meta.getCampaignLevelInsights('today'),
       yesterdayCampaigns: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'campaign'),
-      todayAdSets: meta.getAdSetLevelInsights('today'),
+      // Use getFilteredInsights (ACTIVE only) for today's ad sets and ads so that Claude
+      // is only given IDs of currently-active entities. Without this filter the context
+      // includes paused/deleted ads whose IDs will fail when a pause/budget action is attempted.
+      todayAdSets: meta
+        .getFilteredInsights('adset', { datePreset: 'today' })
+        .then((rows) => ({ data: rows })),
       yesterdayAdSets: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'adset'),
-      todayAds: meta.getAdLevelInsights('today'),
+      todayAds: meta
+        .getFilteredInsights('ad', { datePreset: 'today' })
+        .then((rows) => ({ data: rows })),
       yesterdayAds: meta.getInsightsForDateRange(yesterdayStr, yesterdayStr, 'ad'),
       todayHourly: meta.getHourlyInsights('today', 'campaign'),
       yesterdayHourly: meta.getHourlyInsightsForDate(yesterdayStr, yesterdayStr, 'campaign'),
@@ -289,7 +296,10 @@ export function formatContextForClaude(data: AdContextData): string {
 
   // Ad Set breakdown
   if (data.today.adSets.length > 0 || data.yesterday.adSets.length > 0) {
-    sections.push('\n--- AD SETS (TODAY vs YESTERDAY) ---');
+    sections.push(
+      '\n--- AD SETS (TODAY vs YESTERDAY) ---',
+      'NOTE: Only ad sets listed with TODAY data have verified active IDs — use those IDs for pause/resume/budget actions. Yesterday-only rows are historical reference and must NOT be used for actions.'
+    );
     const allAdSetIds = new Set<string>();
 
     for (const a of [...data.today.adSets, ...data.yesterday.adSets]) {
@@ -320,7 +330,10 @@ export function formatContextForClaude(data: AdContextData): string {
 
   // Ad breakdown
   if (data.today.ads.length > 0 || data.yesterday.ads.length > 0) {
-    sections.push('\n--- ADS (TODAY vs YESTERDAY) ---');
+    sections.push(
+      '\n--- ADS (TODAY vs YESTERDAY) ---',
+      'NOTE: Only ads listed with TODAY data have verified active IDs — use those IDs for pause/resume/budget actions. Yesterday-only rows are historical reference; their IDs may belong to deleted or paused ads and must NOT be used for actions.'
+    );
     const allAdIds = new Set<string>();
 
     for (const a of [...data.today.ads, ...data.yesterday.ads]) {

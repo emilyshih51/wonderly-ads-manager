@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { SlackService, createSlackService } from '@/services/slack';
-import { MetaService } from '@/services/meta';
+import { MetaService, MetaApiError } from '@/services/meta';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('Slack:Interactions');
@@ -74,6 +74,37 @@ interface InteractionPayload {
   channel?: { id: string };
   user?: { id: string };
   message?: { ts: string };
+}
+
+/**
+ * Convert a caught error into a short, human-readable Slack message.
+ *
+ * Meta error code 100 means the object doesn't exist or the operation isn't
+ * supported (e.g. the ad was deleted after the Slack notification was sent).
+ * Code 200 is a permissions error — the system token lacks access to the object.
+ * All other MetaApiErrors fall back to the raw message with the developer URL stripped.
+ *
+ * @param error - The caught error.
+ * @param label - Display name or ID of the object being acted on.
+ * @returns A short, user-friendly error string.
+ */
+function friendlyMetaError(error: unknown, label: string): string {
+  if (error instanceof MetaApiError) {
+    const { code, message } = error.metaError;
+
+    if (code === 100 || message.toLowerCase().includes('does not exist')) {
+      return `"${label}" could not be found in Meta — it may have been deleted or the Slack notification is outdated.`;
+    }
+
+    if (code === 200 || code === 190) {
+      return `Wonderly doesn't have permission to modify "${label}". Check that the system access token has the correct ad account access in Meta Business Manager.`;
+    }
+
+    // Strip the developer docs URL from Meta's raw messages to keep Slack tidy.
+    return message.replace(/\s*Please read the Graph API documentation.*$/i, '').trim();
+  }
+
+  return error instanceof Error ? error.message : 'Unknown error';
 }
 
 async function processInteraction(payload: InteractionPayload, slack: SlackService): Promise<void> {
@@ -177,7 +208,7 @@ async function processInteraction(payload: InteractionPayload, slack: SlackServi
   } catch (error) {
     logger.error('Error executing action', error);
 
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorMsg = friendlyMetaError(error, actionValue.action_name || actionValue.action_id);
     const channelId = actionValue.channel_id ?? channel?.id;
 
     if (channelId && payload.message?.ts) {

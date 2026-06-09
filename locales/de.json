@@ -365,6 +365,8 @@
     "pauseAdAdSet": "Anzeige/Anzeigengruppe pausieren",
     "activateAdAdSet": "Anzeige/Anzeigengruppe aktivieren",
     "sendSlackNotification": "Slack-Benachrichtigung senden",
+    "pauseOriginalWinner": "Ursprüngliche Gewinneranzeige pausieren",
+    "pauseOriginalWinnerHint": "Wenn aktiviert, wird die Gewinneranzeige nach dem Duplizieren in das Gewinner-Anzeigenset in ihrer ursprünglichen Kampagne pausiert. Deaktivieren, um sie an beiden Stellen aktiv zu lassen.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Kampagnen suchen...",
     "searchAdSets": "Anzeigengruppen suchen...",

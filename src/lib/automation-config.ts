@@ -21,6 +21,9 @@ export interface ActionNodeConfig {
   action_type?: string;
   target_adset_id?: string;
   target_adset_name?: string;
+  // promote only: whether to pause the original winning ad in its source campaign.
+  // Absent/true = pause (legacy behaviour); false = leave the winner running.
+  pause_original?: string | boolean;
   also_notify_slack?: string | boolean;
   slack_channel?: string;
   slack_message?: string;
@@ -59,6 +62,7 @@ export interface RuleConfig {
   action_type: string;
   target_adset_id: string;
   target_adset_name: string;
+  pause_original: boolean;
   also_notify_slack: boolean;
   slack_channel: string;
   slack_message: string;
@@ -137,6 +141,7 @@ export function configToNodes(config: RuleConfig) {
         action_type: config.action_type,
         target_adset_id: config.target_adset_id,
         target_adset_name: config.target_adset_name,
+        pause_original: String(config.pause_original),
         also_notify_slack: String(config.also_notify_slack),
         slack_channel: config.slack_channel,
         slack_message: config.slack_message,
@@ -190,6 +195,9 @@ export function nodesToConfig(nodes: AutomationNode[]): RuleConfig {
     action_type: ac.action_type || 'pause',
     target_adset_id: ac.target_adset_id || '',
     target_adset_name: ac.target_adset_name || '',
+    // Default to true so existing promote rules (saved before this field existed)
+    // keep pausing the original winner.
+    pause_original: ac.pause_original === undefined ? true : ac.pause_original === 'true' || ac.pause_original === true,
     also_notify_slack: ac.also_notify_slack === 'true' || ac.also_notify_slack === true,
     slack_channel: ac.slack_channel || '',
     slack_message: ac.slack_message || '',
@@ -331,6 +339,7 @@ export function parseCopilotInput(text: string): { config: Partial<RuleConfig>; 
     action_type: actionType,
     target_adset_id: '',
     target_adset_name: '',
+    pause_original: true,
     also_notify_slack: actionType === 'notify',
     slack_channel: '',
     slack_message: '',

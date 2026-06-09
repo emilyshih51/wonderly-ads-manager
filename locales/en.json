@@ -365,6 +365,8 @@
     "pauseAdAdSet": "Pause ad/ad set",
     "activateAdAdSet": "Activate ad/ad set",
     "sendSlackNotification": "Send Slack notification",
+    "pauseOriginalWinner": "Pause the original winning ad",
+    "pauseOriginalWinnerHint": "When on, the winning ad is paused in its original campaign after being duplicated to the winners ad set. Turn off to keep it running in both places.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Search campaigns...",
     "searchAdSets": "Search ad sets...",

@@ -365,6 +365,8 @@
     "pauseAdAdSet": "暫停廣告/廣告組合",
     "activateAdAdSet": "啟用廣告/廣告組合",
     "sendSlackNotification": "傳送 Slack 通知",
+    "pauseOriginalWinner": "暫停原始獲勝廣告",
+    "pauseOriginalWinnerHint": "開啟後，獲勝廣告在複製到獲勝廣告組後會在其原始廣告活動中暫停。關閉則在兩處都繼續投放。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "搜尋廣告活動...",
     "searchAdSets": "搜尋廣告組合...",

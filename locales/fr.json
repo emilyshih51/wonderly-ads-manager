@@ -365,6 +365,8 @@
     "pauseAdAdSet": "Mettre en pause la publicité/l'ensemble",
     "activateAdAdSet": "Activer la publicité/l'ensemble",
     "sendSlackNotification": "Envoyer une notification Slack",
+    "pauseOriginalWinner": "Mettre en pause l'annonce gagnante d'origine",
+    "pauseOriginalWinnerHint": "Lorsque activé, l'annonce gagnante est mise en pause dans sa campagne d'origine après duplication vers l'ensemble gagnant. Désactivez pour la garder active aux deux endroits.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Rechercher des campagnes...",
     "searchAdSets": "Rechercher des ensembles de publicités...",

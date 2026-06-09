@@ -265,6 +265,7 @@ interface NodeConfig {
   adset_name?: string;
   action_type?: string;
   target_adset_id?: string;
+  pause_original?: string | boolean;
   slack_channel?: string;
   also_notify_slack?: string | boolean;
   slack_message?: string;
@@ -530,16 +531,26 @@ async function evaluateRule(
         actionResult.action = 'activated';
         if (actionCap) actionCap.executed++;
       } else if (actionType === 'promote') {
-        await meta.updateStatus(entityId, 'PAUSED');
+        // Default to pausing the original winner (legacy behaviour). Only skip
+        // the pause when pause_original is explicitly set to false.
+        const pauseOriginal =
+          actionConfig.pause_original !== false && actionConfig.pause_original !== 'false';
+
+        if (pauseOriginal) {
+          await meta.updateStatus(entityId, 'PAUSED');
+        }
+
         const targetAdSetId = actionConfig.target_adset_id;
 
         if (targetAdSetId) {
           const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
 
-          actionResult.action = 'promoted';
+          actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
           actionResult.duplicated_ad_id = duplicated.id;
         } else {
-          actionResult.action = 'paused (no target adset for duplication)';
+          actionResult.action = pauseOriginal
+            ? 'paused (no target adset for duplication)'
+            : 'no action (no target adset for duplication)';
         }
 
         if (actionCap) actionCap.executed++;

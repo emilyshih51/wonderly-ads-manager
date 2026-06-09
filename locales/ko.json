@@ -365,6 +365,8 @@
     "pauseAdAdSet": "광고/광고 세트 일시정지",
     "activateAdAdSet": "광고/광고 세트 활성화",
     "sendSlackNotification": "Slack 알림 보내기",
+    "pauseOriginalWinner": "원본 우승 광고 일시중지",
+    "pauseOriginalWinnerHint": "켜면 우승 광고가 우승 광고 세트로 복제된 후 원래 캠페인에서 일시중지됩니다. 끄면 두 곳 모두에서 계속 게재됩니다.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "캠페인 검색...",
     "searchAdSets": "광고 세트 검색...",

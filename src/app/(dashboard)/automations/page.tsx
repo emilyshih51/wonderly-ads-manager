@@ -154,6 +154,7 @@ const DEFAULT_CONFIG: RuleConfig = {
   action_type: 'pause',
   target_adset_id: '',
   target_adset_name: '',
+  pause_original: true,
   also_notify_slack: false,
   slack_channel: '',
   slack_message:
@@ -1462,6 +1463,22 @@ export default function AutomationsPage() {
                           placeholder={t('searchForWinnersAdSet')}
                         />
                       </div>
+
+                      <label className="mt-4 flex cursor-pointer items-center gap-2.5">
+                        <Switch
+                          size="sm"
+                          checked={config.pause_original}
+                          onCheckedChange={(checked) =>
+                            updateConfig({ pause_original: checked })
+                          }
+                        />
+                        <span className="text-sm font-medium text-[var(--color-foreground)]">
+                          {t('pauseOriginalWinner')}
+                        </span>
+                      </label>
+                      <p className="mt-1 ml-[2.6rem] text-xs text-[var(--color-muted-foreground)]">
+                        {t('pauseOriginalWinnerHint')}
+                      </p>
                     </div>
                   )}
 

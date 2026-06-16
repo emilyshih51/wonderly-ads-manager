@@ -30,7 +30,7 @@ export class AnthropicService {
    */
   constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });
-    this.model = model ?? DEFAULT_MODEL;
+    this.model = model?.trim() || DEFAULT_MODEL;
   }
 
   /**

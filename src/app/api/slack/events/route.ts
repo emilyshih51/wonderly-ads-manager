@@ -235,7 +235,7 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
         });
       } catch (claudeError) {
         logger.error('Claude API error', claudeError);
-        analysisText = 'I encountered an error analyzing your ad data. Please try again.';
+        analysisText = `Debug - Claude error: ${claudeError instanceof Error ? claudeError.message : String(claudeError)}`;
       }
     } else {
       analysisText = 'Claude API not configured.';

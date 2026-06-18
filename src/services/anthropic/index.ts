@@ -17,7 +17,7 @@ import type { CompletionParams, MessageParam } from './types';
 
 export type { CompletionParams, MessageParam };
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_MAX_TOKENS = 4000;
 
 export class AnthropicService {
@@ -26,7 +26,7 @@ export class AnthropicService {
 
   /**
    * @param apiKey - Anthropic API key (`ANTHROPIC_API_KEY`)
-   * @param model - Model ID override (defaults to `claude-sonnet-4-20250514`)
+   * @param model - Model ID override (defaults to `claude-sonnet-4-6`)
    */
   constructor(apiKey: string, model?: string) {
     this.client = new Anthropic({ apiKey });

@@ -74,7 +74,11 @@ export class AmplitudeService {
     );
     url.searchParams.set('start', toAmplitudeDate(since));
     url.searchParams.set('end', toAmplitudeDate(until));
-    url.searchParams.set('m', 'totals');
+    // 'uniques' = distinct users per day, not raw event count. The booking and
+    // qualified events fire ~twice per person (a tracking double-fire), so 'totals'
+    // roughly doubles the real number. Counting unique people gives the true count
+    // and stays correct even if the double-fire is fixed upstream.
+    url.searchParams.set('m', 'uniques');
     url.searchParams.set('i', '1');
 
     const response = await this.fetchFn(url.toString(), {

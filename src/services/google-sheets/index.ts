@@ -132,8 +132,11 @@ export class GoogleSheetsService {
       body: JSON.stringify({}),
     });
 
+    // USER_ENTERED (not RAW) so "2026-07-21" is parsed into a real date value and
+    // numbers into real numbers — exactly as if typed. RAW stores dates as text,
+    // which silently breaks MAX() and date-range formulas in the Summary tab.
     await this.request(
-      `/${spreadsheetId}/values/${encodeURIComponent(`${tabName}!A1`)}?valueInputOption=RAW`,
+      `/${spreadsheetId}/values/${encodeURIComponent(`${tabName}!A1`)}?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
         body: JSON.stringify({ values: [headers, ...rows] }),

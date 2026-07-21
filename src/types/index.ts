@@ -177,6 +177,8 @@ export interface MetaInsightsRow {
   clicks: string;
   /** Click-through rate as a percentage string. */
   ctr: string;
+  /** Clicks on links only, excluding other engagement. Present when requested explicitly. */
+  inline_link_clicks?: string;
   /** Link click-through rate (link clicks ÷ impressions), as a percentage string. */
   inline_link_click_ctr?: string;
   /** Cost per click as a string. */

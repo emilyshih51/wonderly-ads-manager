@@ -33,6 +33,7 @@ import {
   type MetaVideoUploadResponse,
   type MetaAdAccountInfo,
 } from './types';
+import type { MetaDailySpend } from '@/lib/marketing-daily';
 import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightsRow, UserSession } from '@/types';
 
 export { MetaApiError };
@@ -747,6 +748,47 @@ export class MetaService {
     return this.request<{ data: MetaInsightsRow[] }>(`/act_${this.adAccountId}/insights`, {
       params,
     });
+  }
+
+  /**
+   * Get daily account-level spend for a date range.
+   *
+   * Used by the marketing sheet cron. `getDailyInsights()` gives daily rows but
+   * only accepts a date preset; `getInsightsForDateRange()` accepts a range but
+   * omits `time_increment`, returning one aggregate row. This needs both.
+   *
+   * Requests only the four fields the sheet consumes rather than the full
+   * INSIGHT_FIELDS set — there is no reason to pull creative-level detail to
+   * fill a spend column.
+   *
+   * Reports spend only. Meta's own `lead`/`actions` counts are not usable for
+   * Wonderly: the pixel does not fire booking events back, so Meta reports ~2
+   * leads against ~514 real bookings. Booking counts come from AmplitudeService.
+   *
+   * @param since - Start date in `YYYY-MM-DD` format (inclusive)
+   * @param until - End date in `YYYY-MM-DD` format (inclusive)
+   * @returns One entry per day with spend, impressions, and link clicks
+   */
+  async getDailySpendForDateRange(since: string, until: string): Promise<MetaDailySpend[]> {
+    const response = await this.request<{ data?: MetaInsightsRow[] }>(
+      `/act_${this.adAccountId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,inline_link_clicks',
+          time_range: JSON.stringify({ since, until }),
+          time_increment: '1',
+          limit: '500',
+        },
+      }
+    );
+
+    // Meta returns every numeric insight field as a string.
+    return (response.data ?? []).map((row) => ({
+      date: row.date_start as string,
+      spend: Number(row.spend ?? 0),
+      impressions: Number(row.impressions ?? 0),
+      clicks: Number(row.inline_link_clicks ?? 0),
+    }));
   }
 
   /**

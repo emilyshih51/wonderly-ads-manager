@@ -38,8 +38,14 @@ const QUALIFIED_EVENT = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED';
 
 const RAW_TAB_NAME = 'wonderly_daily';
 
-/** Meta restates spend for 24–48h, so refetch a window rather than appending one day. */
-const REFETCH_DAYS = 7;
+/**
+ * How many trailing days to re-pull from source each run.
+ *
+ * Meta only needs ~2 days (it restates spend for 24–48h), but a wider window means
+ * the whole visible sheet is always sourced fresh rather than relying on reading
+ * old rows back — so a formatting/parse hiccup can't leave stale or zeroed rows.
+ */
+const REFETCH_DAYS = 35;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -151,12 +157,12 @@ async function notifySlack(message: string): Promise<void> {
  *
  * @param values - Raw cell matrix from the sheet, header row first
  */
-function parseExistingRows(values: string[][]): MarketingDailyRow[] {
+function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
   return values
     .slice(1)
-    .filter((row) => row[0]?.match(/^\d{4}-\d{2}-\d{2}$/))
+    .filter((row) => String(row[0] ?? '').match(/^\d{4}-\d{2}-\d{2}$/))
     .map((row) => ({
-      date: row[0],
+      date: String(row[0]),
       fbSpend: num(row[1]),
       fbImpressions: num(row[2]),
       fbClicks: num(row[3]),
@@ -167,7 +173,7 @@ function parseExistingRows(values: string[][]): MarketingDailyRow[] {
     }));
 }
 
-function num(value: string | undefined): number {
+function num(value: string | number | undefined): number {
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : 0;

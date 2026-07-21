@@ -148,9 +148,13 @@ export class GoogleSheetsService {
    * @param tabName - Exact tab name
    * @returns Raw cell values, or an empty array if the tab is empty
    */
-  async readRows(spreadsheetId: string, tabName: string): Promise<string[][]> {
-    const data = await this.request<{ values?: string[][] }>(
-      `/${spreadsheetId}/values/${encodeURIComponent(tabName)}`
+  async readRows(spreadsheetId: string, tabName: string): Promise<(string | number)[][]> {
+    // UNFORMATTED_VALUE returns raw numbers, not the cell's display string — so a
+    // currency-formatted spend cell reads back as 5406.88, not "$5,406.88" (which
+    // Number() can't parse, silently becoming 0 and wiping preserved rows).
+    // FORMATTED_STRING keeps date cells as "2026-07-20" strings for the date regex.
+    const data = await this.request<{ values?: (string | number)[][] }>(
+      `/${spreadsheetId}/values/${encodeURIComponent(tabName)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`
     );
 
     return data.values ?? [];

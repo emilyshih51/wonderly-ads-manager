@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = ['/login', '/api/auth', '/api/slack', '/api/automations/evaluate'];
+const publicPaths = ['/login', '/api/auth', '/api/slack', '/api/automations/evaluate', '/api/cron'];
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // Sliding window per IP. Not distributed — each Vercel instance tracks its own

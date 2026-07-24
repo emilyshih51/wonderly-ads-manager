@@ -206,7 +206,7 @@ export class SnowflakeService {
          ROUND(SUM(PNL_USD)) AS pnl
        FROM ${CUSTOMER_VALUE_DAILY}
        WHERE METRIC_DATE >= DATEADD('day', ?, CURRENT_DATE)
-       GROUP BY 1 ORDER BY METRIC_DATE DESC`,
+       GROUP BY 1 ORDER BY 1 DESC`,
       [-days]
     );
 

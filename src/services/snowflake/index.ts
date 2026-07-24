@@ -138,27 +138,31 @@ export class SnowflakeService {
                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_organic
          FROM mkt GROUP BY day
        ),
-       -- Sales cohort keyed by the day the deal entered "Call 1 Scheduled" (the
-       -- booking). Acceptance and no-show are the deal's CURRENT stage in the CRM,
-       -- so recent cohorts read low until they mature — which is what makes the
-       -- acceptance rate forecastable.
-       call1 AS (
-         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id, MIN(EVENT_TIME::date) AS booked_day
+       -- Sales COHORT keyed by the day each deal entered "Call 1 Scheduled" (the
+       -- booking). For that day's cohort: how many of those exact leads EVER
+       -- reached "Accepted" (the milestone, from the stage-change event — so it
+       -- still counts even if the deal later moved on), and how many are currently
+       -- a no-show ("Call Missed Several Times" in the CRM). Recent cohorts read
+       -- low until they mature, which is what makes acceptance forecastable.
+       deal AS (
+         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN EVENT_TIME::date END) AS booked_day,
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
-           AND EVENT_PROPERTIES:to_stage_name::string = 'Call 1 Scheduled'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
        s AS (
-         SELECT c.booked_day AS day,
+         SELECT d.booked_day AS day,
            COUNT(*) AS call1_booked,
-           COUNT(CASE WHEN st.NAME IN ('Accepted','Quote & Contract Sent','Reviewing Contract','Quote & Contract Signed','On-site Scheduled') THEN 1 END) AS accepted,
-           COUNT(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 END) AS no_show
-         FROM call1 c
-         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS d ON d.ID = c.deal_id
-         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = d.PIPELINE_STAGE_ID
+           SUM(d.ever_accepted) AS accepted,
+           SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show
+         FROM deal d
+         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
+         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         WHERE d.booked_day IS NOT NULL
          GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,

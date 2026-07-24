@@ -1,12 +1,12 @@
 /**
  * GET /api/cron/marketing-daily
  *
- * Refreshes the Marketing Performance sheet's raw tab. Runs every 3 hours via
- * Vercel cron (see vercel.json).
+ * Refreshes the Marketing Performance sheet's raw (Blended) tab. Runs every 3 hours
+ * via Vercel cron (see vercel.json).
  *
- * Pulls Meta spend and Amplitude bookings for a trailing window, joins them on
- * date, and overwrites the raw tab. The sheet's INDIRECT/MATCH formulas do the
- * rest — this endpoint writes one tab and computes no ratios.
+ * Pulls Meta spend from the Meta API and the funnel/booking/sales counts from
+ * Snowflake, joins them on date, and overwrites the tab. The Overview tab's formulas
+ * do the rest — this endpoint writes raw counts only, computes no ratios.
  *
  * Auth follows the existing cron pattern: `Authorization: Bearer <CRON_SECRET>`
  * when CRON_SECRET is set; 503 in production when it is not.
@@ -14,6 +14,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
   joinMarketingDaily,
   mergeRows,
@@ -22,28 +23,31 @@ import {
   RAW_TAB_HEADERS,
   type MarketingDailyRow,
 } from '@/lib/marketing-daily';
-import { AmplitudeService } from '@/services/amplitude';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 import { MetaService } from '@/services/meta';
 import { SlackService } from '@/services/slack';
+import { SnowflakeService } from '@/services/snowflake';
 
 const logger = createLogger('MarketingDailyCron');
 
 /** Wonderly's own ad account. Not the client accounts — their spend is not our CAC. */
 const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
-const BOOKED_EVENT = 'MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE';
-const QUALIFIED_EVENT = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED';
-
 const RAW_TAB_NAME = 'wonderly_daily';
+
+/** Customer P&L tab (Wonderly's servicing economics), written by the same cron. */
+const CUSTOMER_PNL_TAB = 'customer_pnl';
+
+/** Customer P&L is a cheap aggregate view — pull a longer window for the trend. */
+const CUSTOMER_PNL_DAYS = 90;
 
 /**
  * How many trailing days to re-pull from source each run.
  *
  * Meta only needs ~2 days (it restates spend for 24–48h), but a wider window means
- * the whole visible sheet is always sourced fresh rather than relying on reading
- * old rows back — so a formatting/parse hiccup can't leave stale or zeroed rows.
+ * the whole visible sheet is always sourced fresh rather than relying on reading old
+ * rows back — so a formatting/parse hiccup can't leave stale or zeroed rows.
  */
 const REFETCH_DAYS = 35;
 
@@ -66,6 +70,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'MARKETING_SHEET_ID is not configured' }, { status: 503 });
   }
 
+  const snow = SnowflakeService.fromEnv();
+
   try {
     const today = isoDate(new Date());
     const since = isoDate(daysAgo(REFETCH_DAYS - 1));
@@ -74,25 +80,31 @@ export async function GET(request: Request) {
       process.env.META_SYSTEM_ACCESS_TOKEN ?? '',
       WONDERLY_AD_ACCOUNT_ID
     );
-    const amplitude = new AmplitudeService(
-      process.env.AMPLITUDE_API_KEY ?? '',
-      process.env.AMPLITUDE_SECRET_KEY ?? ''
-    );
     const sheets = GoogleSheetsService.fromEnv();
 
-    // Meta answers the money question; Amplitude answers the meetings question.
-    // Neither can answer both — that is why there are two calls and one join.
-    const [spend, qualified, booked] = await Promise.all([
+    // Meta answers the money question; Snowflake answers the funnel + sales question.
+    // Neither knows the other — that is why there are two reads and one join on date.
+    const [spend, marketing] = await Promise.all([
       meta.getDailySpendForDateRange(since, today),
-      amplitude.getDailyEventCountsBySource(QUALIFIED_EVENT, since, today),
-      amplitude.getDailyEventCountsBySource(BOOKED_EVENT, since, today),
+      snow.getDailyMarketing(REFETCH_DAYS),
     ]);
 
-    const fresh = joinMarketingDaily(spend, qualified, booked);
+    const fresh = joinMarketingDaily(spend, marketing);
     const existing = parseExistingRows(await sheets.readRows(sheetId, RAW_TAB_NAME));
     const merged = mergeRows(existing, fresh);
 
     await sheets.replaceRows(sheetId, RAW_TAB_NAME, [...RAW_TAB_HEADERS], toSheetValues(merged));
+
+    // Customer P&L: a self-contained daily aggregate from the customer-value view.
+    // Full-window rewrite each run, so no read-back/merge needed.
+    const customerPnl = await snow.getDailyCustomerPnl(CUSTOMER_PNL_DAYS);
+
+    await sheets.replaceRows(
+      sheetId,
+      CUSTOMER_PNL_TAB,
+      [...CUSTOMER_PNL_HEADERS],
+      toCustomerPnlValues(customerPnl)
+    );
 
     const staleReason = checkStaleness(merged, today);
 
@@ -121,14 +133,15 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({ error: 'Refresh failed' }, { status: 500 });
+  } finally {
+    await snow.close();
   }
 }
 
 /**
  * Post a failure or staleness warning to Slack.
  *
- * Swallows its own errors: a broken alert must not mask the problem it is trying
- * to report, and the cron result matters more than the notification.
+ * Swallows its own errors: a broken alert must not mask the problem it is reporting.
  *
  * @param message - Human-readable description of what went wrong
  */
@@ -150,10 +163,9 @@ async function notifySlack(message: string): Promise<void> {
 }
 
 /**
- * Parse the raw tab's existing cells back into typed rows.
+ * Parse the raw tab's existing cells back into typed rows, in RAW_TAB_HEADERS order.
  *
- * Skips the header row and any row without a date. Older rows outside the refetch
- * window are preserved this way rather than being refetched every run.
+ * Older rows outside the refetch window are preserved this way rather than refetched.
  *
  * @param values - Raw cell matrix from the sheet, header row first
  */
@@ -166,10 +178,16 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       fbSpend: num(row[1]),
       fbImpressions: num(row[2]),
       fbClicks: num(row[3]),
-      fbQualified: num(row[4]),
-      fbBooked: num(row[5]),
-      otherQualified: num(row[6]),
-      otherBooked: num(row[7]),
+      pageView: num(row[4]),
+      ctaClicked: num(row[5]),
+      submitPartial: num(row[6]),
+      submitQualified: num(row[7]),
+      bookedAll: num(row[8]),
+      bookedFb: num(row[9]),
+      bookedOrganic: num(row[10]),
+      call1Booked: num(row[11]),
+      accepted: num(row[12]),
+      noShow: num(row[13]),
     }));
 }
 

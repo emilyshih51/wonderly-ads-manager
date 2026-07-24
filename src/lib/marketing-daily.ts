@@ -1,74 +1,18 @@
 /**
- * Pure functions for building the marketing performance sheet's raw tab.
+ * Pure functions for building the marketing performance sheet's raw (Blended) tab.
  *
- * The sheet is Motion's architecture, stripped to Wonderly's funnel. Meta knows
- * what we spent; Amplitude knows what we got. Neither knows the other. These
- * functions are the join — they put both in the same row because they share a
- * date, which is the only thread connecting a dollar to a booking.
+ * Two sources, one join. Meta knows what we spent; Snowflake (Amplitude + the
+ * WONDERLY_SALES pipeline) knows the funnel, the bookings by source, and the sales
+ * stages. Neither knows the other — these functions put both in the same row
+ * because they share a date.
  *
- * Deliberately free of I/O so the join can be unit tested without hitting either
- * API. All ratios (cost per booking, w/w) are left to the sheet's formulas: the
- * cron reports only what each API said, so a wrong number is always traceable to
- * either the API or the formula, never both.
+ * Deliberately free of I/O so the join can be unit tested without hitting Snowflake
+ * or Meta. All ratios (CPC, conversion %, acceptance rate, w/w) are left to the
+ * sheet's formulas — the cron writes only raw counts, so a wrong number is always
+ * traceable to either the query or the formula, never both.
  */
 
-/** A channel bucket in the marketing sheet. Maps one or more utm_source values. */
-export type MarketingChannel = 'fb' | 'other';
-
-/**
- * One day of a single event's occurrences, bucketed by utm_source.
- *
- * Source-agnostic on purpose: today these counts come from Snowflake
- * (`AMPLITUDE.AMPLITUDE.EVENTS_766268`), but the join doesn't care whether they
- * came from Snowflake, the Amplitude REST API, or anywhere else.
- */
-export interface EventDailyCounts {
-  /** `YYYY-MM-DD` */
-  date: string;
-  /** utm_source value, lowercased, e.g. `facebook`, `(none)`. */
-  utmSource: string;
-  /** Event occurrences on this date for this source. */
-  count: number;
-}
-
-/** Header row for the raw tab. The sheet's INDIRECT/MATCH formulas match on these. */
-export const RAW_TAB_HEADERS = [
-  'DATE',
-  'FB_SPEND',
-  'FB_IMPRESSIONS',
-  'FB_CLICKS',
-  'FB_QUALIFIED',
-  'FB_BOOKED',
-  'OTHER_QUALIFIED',
-  'OTHER_BOOKED',
-] as const;
-
-/**
- * utm_source → channel bucket.
- *
- * `facebook` and `ig` are both Meta and both billed to the same ad account, so
- * they must fold into one channel or spend will not reconcile against bookings.
- * Everything else (including `(none)`, ~17% of bookings) is unattributed and has
- * no spend — it lands in `other` so the totals still add up.
- */
-export const UTM_SOURCE_TO_CHANNEL: Record<string, MarketingChannel> = {
-  facebook: 'fb',
-  ig: 'fb',
-};
-
-/** One fully joined day, ready to write to the sheet. */
-export interface MarketingDailyRow {
-  date: string;
-  fbSpend: number;
-  fbImpressions: number;
-  fbClicks: number;
-  fbQualified: number;
-  fbBooked: number;
-  otherQualified: number;
-  otherBooked: number;
-}
-
-/** Daily spend as reported by Meta, one entry per day. */
+/** Daily spend as reported by the Meta Marketing API, one entry per day. */
 export interface MetaDailySpend {
   date: string;
   spend: number;
@@ -77,76 +21,97 @@ export interface MetaDailySpend {
 }
 
 /**
- * Bucket a utm_source into a channel.
- *
- * @param utmSource - Raw value from Amplitude, e.g. `facebook`, `ig`, `(none)`
- * @returns The channel this source belongs to
+ * One aggregated day of funnel + booking-by-source + sales-stage counts from
+ * Snowflake. Counts are unique people per stage (bookings) / events (sales stages).
  */
-export function channelForSource(utmSource: string): MarketingChannel {
-  return UTM_SOURCE_TO_CHANNEL[utmSource.toLowerCase()] ?? 'other';
+export interface DailyMarketingRow {
+  date: string;
+  pageView: number;
+  ctaClicked: number;
+  submitPartial: number;
+  submitQualified: number;
+  bookedAll: number;
+  bookedFb: number;
+  bookedOrganic: number;
+  call1Booked: number;
+  accepted: number;
+  noShow: number;
 }
 
 /**
- * Sum Amplitude counts into `{ [date]: { fb, other } }`.
- *
- * @param counts - Flattened per-date, per-source counts
+ * Header row for the Blended tab. Column order here is the contract the Overview
+ * formulas reference by position, so do not reorder without updating the sheet.
  */
-export function bucketByChannel(
-  counts: EventDailyCounts[]
-): Record<string, Record<MarketingChannel, number>> {
-  const out: Record<string, Record<MarketingChannel, number>> = {};
+export const RAW_TAB_HEADERS = [
+  'DATE',
+  'FB_SPEND',
+  'FB_IMPRESSIONS',
+  'FB_CLICKS',
+  'PAGE_VIEW',
+  'CTA_CLICKED',
+  'SUBMIT_PARTIAL',
+  'SUBMIT_QUALIFIED',
+  'BOOKED_ALL',
+  'BOOKED_FB',
+  'BOOKED_ORGANIC',
+  'CALL1_BOOKED',
+  'ACCEPTED',
+  'NO_SHOW',
+] as const;
 
-  for (const { date, utmSource, count } of counts) {
-    out[date] ??= { fb: 0, other: 0 };
-    out[date][channelForSource(utmSource)] += count;
-  }
-
-  return out;
+/** One fully joined day, ready to write to the Blended tab. */
+export interface MarketingDailyRow extends DailyMarketingRow {
+  fbSpend: number;
+  fbImpressions: number;
+  fbClicks: number;
 }
 
 /**
- * Join Meta spend to Amplitude outcomes on date.
+ * Join Meta spend to the Snowflake funnel on date.
  *
- * A date appearing in either source produces a row — spend with no bookings is a
- * real (bad) day, and bookings with no spend are the unattributed `(none)` traffic.
- * Dropping either would quietly flatter the numbers.
+ * A date appearing in either source produces a row — spend with no funnel is a real
+ * (dead) day, and funnel with no spend is organic traffic. Dropping either would
+ * quietly flatter the numbers.
  *
- * @param spend - Daily spend rows from Meta
- * @param qualified - `MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED` counts by date × source
- * @param booked - `MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE` counts by date × source
+ * @param spend - Daily spend rows from the Meta API
+ * @param marketing - Daily funnel/booking/sales rows from Snowflake
  * @returns Joined rows sorted newest first, matching the sheet's row order
  */
 export function joinMarketingDaily(
   spend: MetaDailySpend[],
-  qualified: EventDailyCounts[],
-  booked: EventDailyCounts[]
+  marketing: DailyMarketingRow[]
 ): MarketingDailyRow[] {
   const spendByDate = new Map(spend.map((s) => [s.date, s]));
-  const qualifiedByDate = bucketByChannel(qualified);
-  const bookedByDate = bucketByChannel(booked);
-
-  const dates = new Set([
-    ...spendByDate.keys(),
-    ...Object.keys(qualifiedByDate),
-    ...Object.keys(bookedByDate),
-  ]);
+  const marketingByDate = new Map(marketing.map((m) => [m.date, m]));
+  const dates = new Set([...spendByDate.keys(), ...marketingByDate.keys()]);
 
   return [...dates]
     .sort((a, b) => b.localeCompare(a))
-    .map((date) => ({
-      date,
-      fbSpend: round2(spendByDate.get(date)?.spend ?? 0),
-      fbImpressions: spendByDate.get(date)?.impressions ?? 0,
-      fbClicks: spendByDate.get(date)?.clicks ?? 0,
-      fbQualified: qualifiedByDate[date]?.fb ?? 0,
-      fbBooked: bookedByDate[date]?.fb ?? 0,
-      otherQualified: qualifiedByDate[date]?.other ?? 0,
-      otherBooked: bookedByDate[date]?.other ?? 0,
-    }));
+    .map((date) => {
+      const s = spendByDate.get(date);
+      const m = marketingByDate.get(date);
+
+      return {
+        date,
+        fbSpend: round2(s?.spend ?? 0),
+        fbImpressions: s?.impressions ?? 0,
+        fbClicks: s?.clicks ?? 0,
+        pageView: m?.pageView ?? 0,
+        ctaClicked: m?.ctaClicked ?? 0,
+        submitPartial: m?.submitPartial ?? 0,
+        submitQualified: m?.submitQualified ?? 0,
+        bookedAll: m?.bookedAll ?? 0,
+        bookedFb: m?.bookedFb ?? 0,
+        bookedOrganic: m?.bookedOrganic ?? 0,
+        call1Booked: m?.call1Booked ?? 0,
+        accepted: m?.accepted ?? 0,
+        noShow: m?.noShow ?? 0,
+      };
+    });
 }
 
 /**
- * Convert joined rows to the sheet's cell matrix.
+ * Convert joined rows to the sheet's cell matrix, in RAW_TAB_HEADERS order.
  *
  * @param rows - Joined daily rows
  */
@@ -156,22 +121,27 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.fbSpend,
     r.fbImpressions,
     r.fbClicks,
-    r.fbQualified,
-    r.fbBooked,
-    r.otherQualified,
-    r.otherBooked,
+    r.pageView,
+    r.ctaClicked,
+    r.submitPartial,
+    r.submitQualified,
+    r.bookedAll,
+    r.bookedFb,
+    r.bookedOrganic,
+    r.call1Booked,
+    r.accepted,
+    r.noShow,
   ]);
 }
 
 /**
  * Merge freshly fetched rows over existing ones, keyed by date.
  *
- * Meta restates spend for 24–48h as billing reconciles and attribution windows
- * close, so the last few days are never final on first fetch. Fresh rows always
- * win; older dates outside the refetch window are preserved.
+ * The refetch window covers the whole visible sheet, so fresh rows always win and
+ * older dates outside the window are preserved untouched.
  *
  * @param existing - Rows already in the sheet
- * @param fresh - Rows just fetched (typically the last 7 days)
+ * @param fresh - Rows just fetched
  * @returns Merged rows, newest first
  */
 export function mergeRows(
@@ -186,12 +156,10 @@ export function mergeRows(
 }
 
 /**
- * Check whether the newest row is older than expected.
+ * Check whether the newest row is older than expected, or whether spend has flatlined.
  *
- * This is the check Motion's sheet does not have. Their Facebook connector died
- * on 2026-04-06 and every layer downstream kept reporting success — dbt ran, the
- * sync ran, the sheet rendered — while `FB_SPEND` read $0 for three months. No
- * link in the chain was responsible for asking whether the number was real.
+ * This is the check Motion's sheet does not have. Their Facebook connector died and
+ * every downstream layer kept reporting success while spend read $0 for months.
  *
  * @param rows - Rows about to be written, newest first
  * @param today - Current date as `YYYY-MM-DD`
@@ -214,13 +182,14 @@ export function checkStaleness(
     return `marketing sheet is stale — newest data is ${newest} (${ageDays} days old)`;
   }
 
-  // Spend that is zero across every recent day means the Meta side is broken, not
-  // that we stopped advertising. This is the exact failure Motion missed.
   const recent = rows.slice(0, maxAgeDays + 1);
-  const allZeroSpend = recent.length > 0 && recent.every((r) => r.fbSpend === 0);
 
-  if (allZeroSpend) {
+  if (recent.length > 0 && recent.every((r) => r.fbSpend === 0)) {
     return `marketing sheet: FB_SPEND is $0 across the last ${recent.length} days — Meta side is probably broken, not paused`;
+  }
+
+  if (recent.length > 0 && recent.every((r) => r.pageView === 0)) {
+    return `marketing sheet: PAGE_VIEW is 0 across the last ${recent.length} days — Snowflake side is probably broken`;
   }
 
   return null;

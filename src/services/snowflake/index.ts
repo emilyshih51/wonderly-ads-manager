@@ -167,7 +167,8 @@ export class SnowflakeService {
        s AS (
          SELECT d.booked_day AS day,
            SUM(d.ever_accepted) AS accepted,
-           SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show
+           SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show,
+           SUM(CASE WHEN st.NAME = 'Disqualified or Lost' THEN 1 ELSE 0 END) AS disqualified_lost
          FROM deal d
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
@@ -182,7 +183,8 @@ export class SnowflakeService {
          -- exceed CALL1_BOOKED on a given day (sales books Call 1s the form never sees).
          f.booked_all AS call1_booked,
          COALESCE(s.accepted,0) AS accepted,
-         COALESCE(s.no_show,0) AS no_show
+         COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.disqualified_lost,0) AS disqualified_lost
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days]
@@ -200,6 +202,7 @@ export class SnowflakeService {
       call1Booked: num(r.CALL1_BOOKED),
       accepted: num(r.ACCEPTED),
       noShow: num(r.NO_SHOW),
+      disqualifiedLost: num(r.DISQUALIFIED_LOST),
     }));
   }
 

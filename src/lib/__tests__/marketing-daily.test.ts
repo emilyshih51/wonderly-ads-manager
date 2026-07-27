@@ -28,6 +28,7 @@ function mkt(date: string, o: Partial<DailyMarketingRow> = {}): DailyMarketingRo
     call1Booked: 0,
     accepted: 0,
     noShow: 0,
+    disqualifiedLost: 0,
     ...o,
   };
 }
@@ -96,6 +97,7 @@ describe('toSheetValues', () => {
         call1Booked: 23,
         accepted: 6,
         noShow: 2,
+        disqualifiedLost: 3,
       }),
     ]);
 
@@ -114,6 +116,7 @@ describe('toSheetValues', () => {
       23,
       6,
       2,
+      3,
     ]);
     expect(values[0]).toHaveLength(RAW_TAB_HEADERS.length);
   });

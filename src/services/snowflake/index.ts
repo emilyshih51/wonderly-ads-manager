@@ -245,6 +245,14 @@ export class SnowflakeService {
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
+       ),
+       em AS (
+         SELECT CONTACT_ID,
+           MAX(CASE WHEN IS_PRIMARY THEN EMAIL END) AS primary_email,
+           MAX(EMAIL) AS any_email
+         FROM AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS
+         WHERE DELETED_AT IS NULL
+         GROUP BY CONTACT_ID
        )
        SELECT de.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
@@ -255,11 +263,13 @@ export class SnowflakeService {
          CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
-         COALESCE(ct.PHONE_NUMBER,'') AS PHONE
+         COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
+         COALESCE(em.primary_email, em.any_email, '') AS EMAIL
        FROM de
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
+       LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
        WHERE de.booked_day IS NOT NULL
        ORDER BY de.booked_day DESC`,
       [-days]
@@ -276,6 +286,7 @@ export class SnowflakeService {
       estAmount: num(r.EST_AMOUNT),
       contactName: String(r.CONTACT_NAME ?? ''),
       phone: String(r.PHONE ?? ''),
+      email: String(r.EMAIL ?? ''),
     }));
   }
 

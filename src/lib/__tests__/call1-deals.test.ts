@@ -20,6 +20,7 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     estAmount: 0,
     contactName: 'Jane Doe',
     phone: '+15551234567',
+    email: 'jane@example.com',
     ...o,
   };
 }
@@ -47,6 +48,7 @@ describe('toCall1DealsValues', () => {
         estAmount: 12000,
         contactName: 'Harrison Wermuth',
         phone: '+15550001111',
+        email: 'harrison@dewittbuilding.com',
       }),
     ]);
 
@@ -61,6 +63,7 @@ describe('toCall1DealsValues', () => {
       12000,
       'Harrison Wermuth',
       '+15550001111',
+      'harrison@dewittbuilding.com',
     ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
   });

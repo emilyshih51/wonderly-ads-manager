@@ -31,8 +31,10 @@ export interface Call1DealRow {
   estAmount: number;
   /** Primary contact's full name, for tracking down the person. */
   contactName: string;
-  /** Primary contact's phone. The CRM stores no email, so phone is the direct contact key. */
+  /** Primary contact's phone. */
   phone: string;
+  /** Primary contact's email (Apple relay addresses appear as-is — that's what was submitted). */
+  email: string;
 }
 
 /** Header row for the call1_deals tab. */
@@ -47,6 +49,7 @@ export const CALL1_DEALS_HEADERS = [
   'EST_AMOUNT',
   'CONTACT_NAME',
   'PHONE',
+  'EMAIL',
 ] as const;
 
 /**
@@ -66,6 +69,7 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.estAmount,
     r.contactName,
     r.phone,
+    r.email,
   ]);
 }
 

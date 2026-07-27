@@ -11,7 +11,7 @@
  * stage. Accepted = the deal EVER reached "Accepted" (milestone, from the event).
  */
 
-import type { MetaDailySpend } from '@/lib/marketing-daily';
+import type { MarketingDailyRow } from '@/lib/marketing-daily';
 
 /** One deal's Call 1 journey. */
 export interface Call1DealRow {
@@ -87,35 +87,38 @@ function money(value: number): number {
 }
 
 /**
- * Roll the deal-level rows + FB spend into the headline Call 1 economics.
+ * Roll the deal-level rows + daily marketing/spend into the headline Call 1 economics,
+ * over a trailing window (last `windowDays`).
  *
- * Computed over a trailing cohort window (deals booked in the last `windowDays`)
- * so cost-per figures line up with the FB spend from the same days. Acceptance is
- * reported over the same window but flagged "maturing": the newest cohorts haven't
- * finished converting, so this understates the eventual accepted rate — the
- * deal-level tab is where you watch those flags fill in.
+ * Two different Call 1 counts on purpose:
+ *  - CALL1_BOOKED (marketing) = the `BOOKING_COMPLETE` event count (matches Amplitude),
+ *    and it's the denominator for cost-per-Call 1.
+ *  - SALES_CALL1 (pipeline) = deals that entered "Call 1 Scheduled", the denominator for
+ *    the held / accepted / no-show rates — because those flags only exist on sales deals.
+ * Mixing them (e.g. sales-accepted ÷ marketing-bookings) would produce nonsense rates,
+ * so each rate is kept against its own population.
  *
- * Cost figures use FB spend as the numerator (organic bookings are ~5% and can't be
- * attributed to a specific deal, so an FB-only CAC is the honest, slightly
- * conservative number). Cost per succeeding customer is left pending — it needs a
- * signed-deal → provisioned-customer link into the customer-value view that isn't
- * established yet.
+ * Acceptance is flagged "maturing": the newest cohorts haven't finished converting, so it
+ * understates the eventual rate — the deal-level tab is where those flags fill in. Cost
+ * figures use FB spend as the numerator (organic is ~5% and unattributable per deal, so
+ * an FB-only figure is the honest, slightly conservative number). Cost per succeeding
+ * customer stays pending until the deal→customer-team link is wired.
  *
- * @param deals - All deal-level rows
- * @param spend - Daily FB spend (from the Meta API)
- * @param windowDays - Trailing cohort window, e.g. 30
+ * @param deals - All deal-level rows (sales pipeline)
+ * @param marketing - Daily rows carrying FB spend and the BOOKING_COMPLETE count
+ * @param windowDays - Trailing window, e.g. 30
  * @param today - `YYYY-MM-DD` of the run
  */
 export function computeCall1Summary(
   deals: Call1DealRow[],
-  spend: MetaDailySpend[],
+  marketing: MarketingDailyRow[],
   windowDays: number,
   today: string
 ): (string | number)[][] {
   const cutoff = isoDaysBefore(today, windowDays);
 
   const inWindow = deals.filter((d) => d.bookedDay >= cutoff && d.bookedDay <= today);
-  const call1 = inWindow.length;
+  const salesCall1 = inWindow.length;
   const held = inWindow.reduce((sum, d) => sum + d.held, 0);
   const accepted = inWindow.reduce((sum, d) => sum + d.accepted, 0);
   const noShow = inWindow.reduce((sum, d) => sum + d.noShow, 0);
@@ -123,21 +126,22 @@ export function computeCall1Summary(
     .filter((d) => d.accepted === 1)
     .reduce((sum, d) => sum + d.estAmount, 0);
 
-  const fbSpend = spend
-    .filter((s) => s.date >= cutoff && s.date <= today)
-    .reduce((sum, s) => sum + s.spend, 0);
+  const windowRows = marketing.filter((m) => m.date >= cutoff && m.date <= today);
+  const marketingBookings = windowRows.reduce((sum, m) => sum + m.bookedAll, 0);
+  const fbSpend = windowRows.reduce((sum, m) => sum + m.fbSpend, 0);
 
   return [
-    ['WINDOW', `Last ${windowDays} days booked (${cutoff} → ${today})`],
-    ['REAL_CALL1_BOOKED', call1],
-    ['HELD', held],
-    ['HELD_RATE', rate(held, call1)],
-    ['ACCEPTED (still maturing)', accepted],
-    ['BOOKED_TO_ACCEPTED_RATE', rate(accepted, call1)],
-    ['NO_SHOW', noShow],
-    ['NO_SHOW_RATE', rate(noShow, call1)],
+    ['WINDOW', `Last ${windowDays} days (${cutoff} → ${today})`],
+    ['CALL1_BOOKED (marketing)', marketingBookings],
     ['FB_SPEND', money(fbSpend)],
-    ['COST_PER_REAL_CALL1', money(call1 > 0 ? fbSpend / call1 : 0)],
+    ['COST_PER_CALL1', money(marketingBookings > 0 ? fbSpend / marketingBookings : 0)],
+    ['SALES_CALL1 (pipeline)', salesCall1],
+    ['HELD', held],
+    ['HELD_RATE', rate(held, salesCall1)],
+    ['ACCEPTED (maturing)', accepted],
+    ['BOOKED_TO_ACCEPTED_RATE', rate(accepted, salesCall1)],
+    ['NO_SHOW', noShow],
+    ['NO_SHOW_RATE', rate(noShow, salesCall1)],
     ['ACCEPTED_CUSTOMER_CAC', money(accepted > 0 ? fbSpend / accepted : 0)],
     ['ACCEPTED_PIPELINE_VALUE', money(acceptedValue)],
     ['COST_PER_SUCCEEDING_CUSTOMER', 'pending deal→customer link'],

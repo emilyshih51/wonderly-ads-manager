@@ -148,7 +148,7 @@ export async function GET(request: Request) {
       sheetId,
       CALL1_SUMMARY_TAB,
       [...CALL1_SUMMARY_HEADERS],
-      computeCall1Summary(call1Deals, spend, CALL1_SUMMARY_DAYS, today)
+      computeCall1Summary(call1Deals, merged, CALL1_SUMMARY_DAYS, today)
     );
 
     const staleReason = checkStaleness(merged, today);

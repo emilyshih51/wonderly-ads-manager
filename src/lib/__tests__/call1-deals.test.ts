@@ -11,12 +11,15 @@ import type { MetaDailySpend } from '@/lib/marketing-daily';
 function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
   return {
     dealId: 'd1',
+    dealName: 'Test Deal',
     bookedDay: '2026-07-20',
     currentStage: 'Call 1 Scheduled',
     held: 0,
     accepted: 0,
     noShow: 0,
     estAmount: 0,
+    contactName: 'Jane Doe',
+    phone: '+15551234567',
     ...o,
   };
 }
@@ -35,16 +38,30 @@ describe('toCall1DealsValues', () => {
     const values = toCall1DealsValues([
       deal({
         dealId: 'abc',
+        dealName: 'Harrison Wermuth (Dewittbuilding)',
         bookedDay: '2026-07-22',
         currentStage: 'Accepted',
         held: 1,
         accepted: 1,
         noShow: 0,
         estAmount: 12000,
+        contactName: 'Harrison Wermuth',
+        phone: '+15550001111',
       }),
     ]);
 
-    expect(values[0]).toEqual(['abc', '2026-07-22', 'Accepted', 1, 1, 0, 12000]);
+    expect(values[0]).toEqual([
+      'abc',
+      'Harrison Wermuth (Dewittbuilding)',
+      '2026-07-22',
+      'Accepted',
+      1,
+      1,
+      0,
+      12000,
+      'Harrison Wermuth',
+      '+15550001111',
+    ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
   });
 });

@@ -246,15 +246,20 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        )
-       SELECT de.deal_id AS DEAL_ID, TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
+       SELECT de.deal_id AS DEAL_ID,
+         COALESCE(cd.NAME,'') AS DEAL_NAME,
+         TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END AS HELD,
          de.ever_accepted AS ACCEPTED,
          CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
-         COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT
+         COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
+         TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
+         COALESCE(ct.PHONE_NUMBER,'') AS PHONE
        FROM de
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
+       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        WHERE de.booked_day IS NOT NULL
        ORDER BY de.booked_day DESC`,
       [-days]
@@ -262,12 +267,15 @@ export class SnowflakeService {
 
     return rows.map((r) => ({
       dealId: String(r.DEAL_ID),
+      dealName: String(r.DEAL_NAME ?? ''),
       bookedDay: String(r.BOOKED_DAY),
       currentStage: String(r.CURRENT_STAGE),
       held: num(r.HELD),
       accepted: num(r.ACCEPTED),
       noShow: num(r.NO_SHOW),
       estAmount: num(r.EST_AMOUNT),
+      contactName: String(r.CONTACT_NAME ?? ''),
+      phone: String(r.PHONE ?? ''),
     }));
   }
 

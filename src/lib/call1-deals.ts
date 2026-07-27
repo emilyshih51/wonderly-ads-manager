@@ -16,6 +16,8 @@ import type { MetaDailySpend } from '@/lib/marketing-daily';
 /** One deal's Call 1 journey. */
 export interface Call1DealRow {
   dealId: string;
+  /** CRM deal name, e.g. "Harrison Wermuth (Dewittbuilding)". Handy for Amplitude lookups. */
+  dealName: string;
   /** `YYYY-MM-DD` — day it entered "Call 1 Scheduled". */
   bookedDay: string;
   currentStage: string;
@@ -27,17 +29,24 @@ export interface Call1DealRow {
   noShow: number;
   /** Estimated deal value in USD, 0 when not entered. */
   estAmount: number;
+  /** Primary contact's full name, for tracking down the person. */
+  contactName: string;
+  /** Primary contact's phone. The CRM stores no email, so phone is the direct contact key. */
+  phone: string;
 }
 
 /** Header row for the call1_deals tab. */
 export const CALL1_DEALS_HEADERS = [
   'DEAL_ID',
+  'DEAL_NAME',
   'BOOKED_DAY',
   'CURRENT_STAGE',
   'HELD',
   'ACCEPTED',
   'NO_SHOW',
   'EST_AMOUNT',
+  'CONTACT_NAME',
+  'PHONE',
 ] as const;
 
 /**
@@ -48,12 +57,15 @@ export const CALL1_DEALS_HEADERS = [
 export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] {
   return rows.map((r) => [
     r.dealId,
+    r.dealName,
     r.bookedDay,
     r.currentStage,
     r.held,
     r.accepted,
     r.noShow,
     r.estAmount,
+    r.contactName,
+    r.phone,
   ]);
 }
 

@@ -157,7 +157,6 @@ export class SnowflakeService {
        ),
        s AS (
          SELECT d.booked_day AS day,
-           COUNT(*) AS call1_booked,
            SUM(d.ever_accepted) AS accepted,
            SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show
          FROM deal d
@@ -169,7 +168,11 @@ export class SnowflakeService {
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.cta_clicked, f.submit_partial, f.submit_qualified,
          f.booked_all, f.booked_fb, f.booked_organic,
-         COALESCE(s.call1_booked,0) AS call1_booked, COALESCE(s.accepted,0) AS accepted,
+         -- CALL1_BOOKED mirrors the marketing BOOKING_COMPLETE event (matches Amplitude).
+         -- ACCEPTED / NO_SHOW stay sourced from the sales pipeline cohort, so they can
+         -- exceed CALL1_BOOKED on a given day (sales books Call 1s the form never sees).
+         f.booked_all AS call1_booked,
+         COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.no_show,0) AS no_show
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,

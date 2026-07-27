@@ -33,8 +33,11 @@ export interface DailyMarketingRow {
   bookedAll: number;
   bookedFb: number;
   bookedOrganic: number;
+  /** Booking-complete count (same source as bookedAll) — mirrors Amplitude's BOOKING_COMPLETE. */
   call1Booked: number;
+  /** Sales-pipeline cohort: of that day's booked deals, how many ever reached "Accepted". */
   accepted: number;
+  /** Sales-pipeline cohort: how many of that day's booked deals are currently a no-show. */
   noShow: number;
 }
 

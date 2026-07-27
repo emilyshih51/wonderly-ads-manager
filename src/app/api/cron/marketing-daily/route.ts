@@ -235,6 +235,8 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       accepted: num(row[12]),
       noShow: num(row[13]),
       disqualifiedLost: num(row[14]),
+      salesCall1: num(row[15]),
+      held: num(row[16]),
     }));
 }
 

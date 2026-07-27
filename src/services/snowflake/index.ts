@@ -166,6 +166,8 @@ export class SnowflakeService {
        ),
        s AS (
          SELECT d.booked_day AS day,
+           COUNT(*) AS sales_call1,
+           SUM(CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END) AS held,
            SUM(d.ever_accepted) AS accepted,
            SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show,
            SUM(CASE WHEN st.NAME = 'Disqualified or Lost' THEN 1 ELSE 0 END) AS disqualified_lost
@@ -184,7 +186,9 @@ export class SnowflakeService {
          f.booked_all AS call1_booked,
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.no_show,0) AS no_show,
-         COALESCE(s.disqualified_lost,0) AS disqualified_lost
+         COALESCE(s.disqualified_lost,0) AS disqualified_lost,
+         COALESCE(s.sales_call1,0) AS sales_call1,
+         COALESCE(s.held,0) AS held
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days]
@@ -203,6 +207,8 @@ export class SnowflakeService {
       accepted: num(r.ACCEPTED),
       noShow: num(r.NO_SHOW),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
+      salesCall1: num(r.SALES_CALL1),
+      held: num(r.HELD),
     }));
   }
 
@@ -270,17 +276,39 @@ export class SnowflakeService {
          WHERE DELETED_AT IS NULL
          GROUP BY CONTACT_ID
        ),
-       -- Marketing source per email, from the form-submit events (which carry both
-       -- the email the person typed and the utm_source of the ad they came from).
-       -- MAX_BY takes the most recent submit's source. This is the clean bridge the
-       -- anonymous booking event couldn't provide.
-       src AS (
-         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email,
-           MAX_BY(EVENT_PROPERTIES:utm_source::string, EVENT_TIME) AS utm_source
+       -- Marketing source per email, from the form-submit events (which carry the
+       -- email the person typed). The source can live in several places, so we fall
+       -- back in order: event utm_source -> user utm_source -> initial utm_source ->
+       -- the referrer domain (facebook.com etc.) -> a Facebook click id. Reading only
+       -- event utm_source missed everyone whose tag was a user property or just a
+       -- referrer/fbclid.
+       src_raw AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, EVENT_TIME,
+           COALESCE(
+             NULLIF(EVENT_PROPERTIES:utm_source::string,''),
+             NULLIF(USER_PROPERTIES:utm_source::string,''),
+             NULLIF(USER_PROPERTIES:initial_utm_source::string,''),
+             CASE
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%facebook%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%facebook%'
+                 OR EVENT_PROPERTIES:fbclid IS NOT NULL THEN 'facebook'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%google%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%google%' THEN 'google'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%yahoo%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%yahoo%' THEN 'yahoo'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%bing%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%bing%' THEN 'bing'
+             END
+           ) AS source
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
            AND EVENT_PROPERTIES:email IS NOT NULL
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+       ),
+       src AS (
+         SELECT email,
+           MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
+         FROM src_raw
          GROUP BY 1
        )
        SELECT de.deal_id AS DEAL_ID,

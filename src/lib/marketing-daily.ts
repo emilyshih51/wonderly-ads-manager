@@ -41,6 +41,10 @@ export interface DailyMarketingRow {
   noShow: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently "Disqualified or Lost". */
   disqualifiedLost: number;
+  /** Sales-pipeline cohort size: deals that entered "Call 1 Scheduled" that day. Denominator for the rates. */
+  salesCall1: number;
+  /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
+  held: number;
 }
 
 /**
@@ -63,6 +67,8 @@ export const RAW_TAB_HEADERS = [
   'ACCEPTED',
   'NO_SHOW',
   'DISQUALIFIED_LOST',
+  'SALES_CALL1',
+  'HELD',
 ] as const;
 
 /** One fully joined day, ready to write to the Blended tab. */
@@ -113,6 +119,8 @@ export function joinMarketingDaily(
         accepted: m?.accepted ?? 0,
         noShow: m?.noShow ?? 0,
         disqualifiedLost: m?.disqualifiedLost ?? 0,
+        salesCall1: m?.salesCall1 ?? 0,
+        held: m?.held ?? 0,
       };
     });
 }
@@ -139,6 +147,8 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.accepted,
     r.noShow,
     r.disqualifiedLost,
+    r.salesCall1,
+    r.held,
   ]);
 }
 

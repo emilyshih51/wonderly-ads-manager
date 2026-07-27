@@ -35,6 +35,8 @@ export interface Call1DealRow {
   phone: string;
   /** Primary contact's email (Apple relay addresses appear as-is — that's what was submitted). */
   email: string;
+  /** Marketing source (e.g. facebook), from the form-submit event's utm_source, joined by email. Blank when unattributed. */
+  source: string;
 }
 
 /** Header row for the call1_deals tab. */
@@ -50,6 +52,7 @@ export const CALL1_DEALS_HEADERS = [
   'CONTACT_NAME',
   'PHONE',
   'EMAIL',
+  'SOURCE',
 ] as const;
 
 /**
@@ -70,6 +73,7 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.contactName,
     r.phone,
     r.email,
+    r.source,
   ]);
 }
 

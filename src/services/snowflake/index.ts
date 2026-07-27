@@ -264,10 +264,24 @@ export class SnowflakeService {
        em AS (
          SELECT CONTACT_ID,
            MAX(CASE WHEN IS_PRIMARY THEN EMAIL END) AS primary_email,
-           MAX(EMAIL) AS any_email
+           MAX(EMAIL) AS any_email,
+           LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
          FROM AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS
          WHERE DELETED_AT IS NULL
          GROUP BY CONTACT_ID
+       ),
+       -- Marketing source per email, from the form-submit events (which carry both
+       -- the email the person typed and the utm_source of the ad they came from).
+       -- MAX_BY takes the most recent submit's source. This is the clean bridge the
+       -- anonymous booking event couldn't provide.
+       src AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email,
+           MAX_BY(EVENT_PROPERTIES:utm_source::string, EVENT_TIME) AS utm_source
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1
        )
        SELECT de.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
@@ -279,15 +293,17 @@ export class SnowflakeService {
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
          COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
-         COALESCE(em.primary_email, em.any_email, '') AS EMAIL
+         COALESCE(em.primary_email, em.any_email, '') AS EMAIL,
+         COALESCE(src.utm_source,'') AS SOURCE
        FROM de
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
+       LEFT JOIN src ON src.email=em.join_email
        WHERE de.booked_day IS NOT NULL
        ORDER BY de.booked_day DESC`,
-      [-days]
+      [-days, -days]
     );
 
     return rows.map((r) => ({
@@ -302,6 +318,7 @@ export class SnowflakeService {
       contactName: String(r.CONTACT_NAME ?? ''),
       phone: String(r.PHONE ?? ''),
       email: String(r.EMAIL ?? ''),
+      source: String(r.SOURCE ?? ''),
     }));
   }
 

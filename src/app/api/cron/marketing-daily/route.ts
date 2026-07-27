@@ -231,12 +231,10 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       bookedAll: num(row[8]),
       bookedFb: num(row[9]),
       bookedOrganic: num(row[10]),
-      call1Booked: num(row[11]),
-      accepted: num(row[12]),
-      noShow: num(row[13]),
-      disqualifiedLost: num(row[14]),
-      salesCall1: num(row[15]),
-      held: num(row[16]),
+      accepted: num(row[11]),
+      noShow: num(row[12]),
+      disqualifiedLost: num(row[13]),
+      held: num(row[14]),
     }));
 }
 

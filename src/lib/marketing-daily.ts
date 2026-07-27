@@ -30,19 +30,16 @@ export interface DailyMarketingRow {
   ctaClicked: number;
   submitPartial: number;
   submitQualified: number;
+  /** BOOKING_COMPLETE count. The single booking number; rates divide by this. */
   bookedAll: number;
   bookedFb: number;
   bookedOrganic: number;
-  /** Booking-complete count (same source as bookedAll) — mirrors Amplitude's BOOKING_COMPLETE. */
-  call1Booked: number;
   /** Sales-pipeline cohort: of that day's booked deals, how many ever reached "Accepted". */
   accepted: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently a no-show. */
   noShow: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently "Disqualified or Lost". */
   disqualifiedLost: number;
-  /** Sales-pipeline cohort size: deals that entered "Call 1 Scheduled" that day. Denominator for the rates. */
-  salesCall1: number;
   /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
   held: number;
 }
@@ -63,11 +60,9 @@ export const RAW_TAB_HEADERS = [
   'BOOKED_ALL',
   'BOOKED_FB',
   'BOOKED_ORGANIC',
-  'CALL1_BOOKED',
   'ACCEPTED',
   'NO_SHOW',
   'DISQUALIFIED_LOST',
-  'SALES_CALL1',
   'HELD',
 ] as const;
 
@@ -115,11 +110,9 @@ export function joinMarketingDaily(
         bookedAll: m?.bookedAll ?? 0,
         bookedFb: m?.bookedFb ?? 0,
         bookedOrganic: m?.bookedOrganic ?? 0,
-        call1Booked: m?.call1Booked ?? 0,
         accepted: m?.accepted ?? 0,
         noShow: m?.noShow ?? 0,
         disqualifiedLost: m?.disqualifiedLost ?? 0,
-        salesCall1: m?.salesCall1 ?? 0,
         held: m?.held ?? 0,
       };
     });
@@ -143,11 +136,9 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.bookedAll,
     r.bookedFb,
     r.bookedOrganic,
-    r.call1Booked,
     r.accepted,
     r.noShow,
     r.disqualifiedLost,
-    r.salesCall1,
     r.held,
   ]);
 }

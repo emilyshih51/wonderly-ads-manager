@@ -13,6 +13,7 @@
 
 import snowflake, { type Connection } from 'snowflake-sdk';
 
+import type { Call1DealRow } from '@/lib/call1-deals';
 import type { CustomerPnlRow } from '@/lib/customer-pnl';
 import type { DailyMarketingRow } from '@/lib/marketing-daily';
 
@@ -220,6 +221,53 @@ export class SnowflakeService {
       evTake: num(r.EV_TAKE),
       adSpend: num(r.AD_SPEND),
       pnl: num(r.PNL),
+    }));
+  }
+
+  /**
+   * Deal-level Call 1 fact table — one row per deal booked in the last N days.
+   *
+   * Held = advanced past "Call 1 Scheduled" and not a no-show. Accepted = ever
+   * reached the "Accepted" stage (from the event, so later movement doesn't undo
+   * it). Current stage + amount come from the CRM snapshot.
+   *
+   * @param days - Trailing window, e.g. 90 (keeps cohorts open ~3 months)
+   * @returns One row per deal, newest booking first
+   */
+  async getCall1Deals(days: number): Promise<Call1DealRow[]> {
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH de AS (
+         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN EVENT_TIME::date END) AS booked_day,
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND EVENT_PROPERTIES:deal_id IS NOT NULL
+         GROUP BY 1
+       )
+       SELECT de.deal_id AS DEAL_ID, TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
+         COALESCE(st.NAME,'') AS CURRENT_STAGE,
+         CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END AS HELD,
+         de.ever_accepted AS ACCEPTED,
+         CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
+         COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT
+       FROM de
+       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
+       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
+       WHERE de.booked_day IS NOT NULL
+       ORDER BY de.booked_day DESC`,
+      [-days]
+    );
+
+    return rows.map((r) => ({
+      dealId: String(r.DEAL_ID),
+      bookedDay: String(r.BOOKED_DAY),
+      currentStage: String(r.CURRENT_STAGE),
+      held: num(r.HELD),
+      accepted: num(r.ACCEPTED),
+      noShow: num(r.NO_SHOW),
+      estAmount: num(r.EST_AMOUNT),
     }));
   }
 

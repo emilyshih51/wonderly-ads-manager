@@ -145,6 +145,33 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Create a tab if it does not already exist. Idempotent — safe to call every run.
+   *
+   * Lets the cron own its output tabs: a newly added tab (or one someone deleted)
+   * is recreated automatically instead of failing the whole refresh with an
+   * "Unable to parse range" error.
+   *
+   * @param spreadsheetId - Sheet ID from its URL
+   * @param tabName - Exact tab name to ensure exists
+   */
+  async ensureTab(spreadsheetId: string, tabName: string): Promise<void> {
+    const meta = await this.request<{ sheets?: { properties?: { title?: string } }[] }>(
+      `/${spreadsheetId}?fields=sheets.properties.title`
+    );
+
+    const exists = (meta.sheets ?? []).some((s) => s.properties?.title === tabName);
+
+    if (exists) return;
+
+    await this.request(`/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: tabName } } }],
+      }),
+    });
+  }
+
+  /**
    * Read the values of a tab, including the header row.
    *
    * @param spreadsheetId - Sheet ID from its URL

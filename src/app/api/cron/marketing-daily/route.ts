@@ -14,6 +14,12 @@
 
 import { NextResponse } from 'next/server';
 
+import {
+  CALL1_DEALS_HEADERS,
+  CALL1_SUMMARY_HEADERS,
+  computeCall1Summary,
+  toCall1DealsValues,
+} from '@/lib/call1-deals';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
   joinMarketingDaily,
@@ -41,6 +47,24 @@ const CUSTOMER_PNL_TAB = 'customer_pnl';
 
 /** Customer P&L is a cheap aggregate view — pull a longer window for the trend. */
 const CUSTOMER_PNL_DAYS = 90;
+
+/** Deal-level Call 1 fact table (audit trail behind the acceptance rates). */
+const CALL1_DEALS_TAB = 'call1_deals';
+
+/**
+ * Cohort window for the deal-level tab. Recent Call 1s keep maturing (held → accepted)
+ * for weeks, so we re-derive a 90-day window each run and let those flags fill in.
+ */
+const CALL1_DEALS_DAYS = 90;
+
+/** Headline Call 1 economics tab (cost per Call 1, held rate, accepted CAC). */
+const CALL1_SUMMARY_TAB = 'call1_summary';
+
+/**
+ * Cohort window for the summary. 30 days keeps it aligned with the FB spend the cron
+ * pulls (REFETCH_DAYS), so cost-per figures share a numerator/denominator window.
+ */
+const CALL1_SUMMARY_DAYS = 30;
 
 /**
  * How many trailing days to re-pull from source each run.
@@ -106,6 +130,27 @@ export async function GET(request: Request) {
       toCustomerPnlValues(customerPnl)
     );
 
+    // Deal-level Call 1 fact table: one row per booked deal, re-derived each run so
+    // recent cohorts keep maturing. Full-window rewrite, no read-back/merge needed.
+    const call1Deals = await snow.getCall1Deals(CALL1_DEALS_DAYS);
+
+    await sheets.ensureTab(sheetId, CALL1_DEALS_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      CALL1_DEALS_TAB,
+      [...CALL1_DEALS_HEADERS],
+      toCall1DealsValues(call1Deals)
+    );
+
+    // Headline economics derived from the same deals + FB spend, over a 30-day window.
+    await sheets.ensureTab(sheetId, CALL1_SUMMARY_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      CALL1_SUMMARY_TAB,
+      [...CALL1_SUMMARY_HEADERS],
+      computeCall1Summary(call1Deals, spend, CALL1_SUMMARY_DAYS, today)
+    );
+
     const staleReason = checkStaleness(merged, today);
 
     if (staleReason) {
@@ -124,6 +169,7 @@ export async function GET(request: Request) {
       refreshed: fresh.length,
       totalRows: merged.length,
       newestDate: merged[0]?.date ?? null,
+      call1Deals: call1Deals.length,
       stale: staleReason,
     });
   } catch (error) {

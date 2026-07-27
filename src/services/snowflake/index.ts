@@ -20,6 +20,15 @@ import type { DailyMarketingRow } from '@/lib/marketing-daily';
 /** wonderly-prod events table. The name embeds the Amplitude project id. */
 const EVENTS_TABLE = 'AMPLITUDE.AMPLITUDE.EVENTS_766268';
 
+/**
+ * Timezone the daily buckets are cut on. Amplitude events land in UTC, but the
+ * Amplitude UI (and how the team reads these numbers) is in the project's timezone.
+ * Bucketing on UTC pushes a US-evening booking into the next calendar day, so the
+ * sheet would read higher than Amplitude on the current day. Grouping by this tz
+ * makes every day line up with Amplitude. Change this if the project timezone changes.
+ */
+const REPORT_TZ = 'America/Los_Angeles';
+
 /** Data-team-owned view: one row per customer per day of funnel value + P&L. */
 const CUSTOMER_VALUE_DAILY =
   'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY';
@@ -119,7 +128,7 @@ export class SnowflakeService {
   async getDailyMarketing(days: number): Promise<DailyMarketingRow[]> {
     const rows = await this.query<Record<string, unknown>>(
       `WITH mkt AS (
-         SELECT EVENT_TIME::date AS day, EVENT_TYPE, AMPLITUDE_ID,
+         SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID,
            LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) AS src,
            EVENT_PROPERTIES:fbclid::string AS fbclid
          FROM ${EVENTS_TABLE}
@@ -147,7 +156,7 @@ export class SnowflakeService {
        -- low until they mature, which is what makes acceptance forecastable.
        deal AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN EVENT_TIME::date END) AS booked_day,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
@@ -241,7 +250,7 @@ export class SnowflakeService {
     const rows = await this.query<Record<string, unknown>>(
       `WITH de AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN EVENT_TIME::date END) AS booked_day,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'

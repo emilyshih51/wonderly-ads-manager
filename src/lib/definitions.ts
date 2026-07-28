@@ -331,11 +331,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'w/w compares each day to the same weekday last week (7 rows back). FB/Organic populated for spend and the funnel steps; blank for CPC, Held, Accepted (no channel split yet).',
   ],
   [
-    '7d avg / MTD / Prev Month',
+    '7d total / MTD / Prev Month',
     'Daily Metrics',
-    'Summary rows above the daily grid.',
+    'Summary rows above the daily grid (all totals, so counts and their FB/Organic split stay whole numbers).',
     'Derived',
-    '7d avg = mean of the last 7 days (w/w vs the 7 before); MTD = month-to-date sum (w/w vs the same span last month); Prev Month = last month’s total.',
+    '7d total = sum of the last 7 days (w/w vs the 7 before); MTD = month-to-date sum (w/w vs the same span last month); Prev Month = last month’s total. CPC is a blended Σspend÷Σclicks.',
   ],
 ];
 

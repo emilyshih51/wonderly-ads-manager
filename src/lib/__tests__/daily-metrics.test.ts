@@ -56,7 +56,7 @@ describe('computeDailyMetrics', () => {
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
     expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
-    expect(m[2][0]).toBe('7d avg');
+    expect(m[2][0]).toBe('7d total');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
   });

@@ -1,7 +1,7 @@
 /**
  * Daily Metrics — the Motion-style grid: one row per day, each funnel metric shown as
  * ALL, a week-over-week % (that day vs the same weekday last week, i.e. 7 rows back),
- * then the FB and Organic channel split, with a 7d-average / MTD / Prev-Month summary
+ * then the FB and Organic channel split, with a 7d-total / MTD / Prev-Month summary
  * block on top.
  *
  * Every marketing event carries the session's utm_source / fbclid, so the funnel steps
@@ -131,7 +131,7 @@ function prevMonthKey(today: string): string {
  * Build the Daily Metrics matrix.
  *
  * Layout: a group-header row (metric names), a sub-header row (Date + ALL/w-w/FB/Organic
- * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first.
+ * per metric), the 7d-total / MTD / Prev-Month summary rows, then daily rows newest-first.
  *
  * @param rows - Daily rows, newest first
  * @param today - Pacific `YYYY-MM-DD`, for the MTD / Prev-Month windows
@@ -186,7 +186,9 @@ export function computeDailyMetrics(
   const matrix: (string | number)[][] = [
     groupHeader,
     subHeader,
-    summaryRow('7d avg', last7, prev7, 'mean'),
+    // 7-day TOTAL (not a daily mean): consistent with MTD/Prev Month, and it keeps the
+    // FB/Organic split as whole numbers instead of fractional means that round to 0.
+    summaryRow('7d total', last7, prev7, 'sum'),
     summaryRow('MTD', mtd, prevMtd, 'sum'),
     summaryRow('Prev Month', prevMonthAll, null, 'sum'),
   ];

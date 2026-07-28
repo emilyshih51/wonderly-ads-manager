@@ -22,6 +22,7 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     phone: '+15551234567',
     email: 'jane@example.com',
     source: 'facebook',
+    acceptedDate: '',
     ...o,
   };
 }
@@ -40,6 +41,7 @@ function mkt(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRo
     noShow: 0,
     disqualifiedLost: 0,
     held: 0,
+    confirmedCall1: 0,
     fbSpend: 0,
     fbImpressions: 0,
     fbClicks: 0,
@@ -68,6 +70,7 @@ describe('toCall1DealsValues', () => {
         phone: '+15550001111',
         email: 'harrison@dewittbuilding.com',
         source: 'google',
+        acceptedDate: '2026-07-24',
       }),
     ]);
 
@@ -84,6 +87,7 @@ describe('toCall1DealsValues', () => {
       '+15550001111',
       'harrison@dewittbuilding.com',
       'google',
+      '2026-07-24',
     ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
   });

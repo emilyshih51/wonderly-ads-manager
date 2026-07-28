@@ -42,6 +42,9 @@ const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
 const RAW_TAB_NAME = 'wonderly_daily';
 
+/** Freshness/health tab. Other tabs reference it, and it never gets cleared with the data. */
+const META_TAB = 'meta';
+
 /** Customer P&L tab (Wonderly's servicing economics), written by the same cron. */
 const CUSTOMER_PNL_TAB = 'customer_pnl';
 
@@ -151,6 +154,26 @@ export async function GET(request: Request) {
       computeCall1Summary(call1Deals, merged, CALL1_SUMMARY_DAYS, today)
     );
 
+    // Freshness stamp on its own tab (never cleared with the data tabs).
+    const refreshedPt = new Date().toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+
+    await sheets.ensureTab(sheetId, META_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      META_TAB,
+      ['METRIC', 'VALUE'],
+      [
+        ['LAST_REFRESHED_PT', refreshedPt],
+        ['NEWEST_DATE', merged[0]?.date ?? ''],
+        ['DAILY_ROWS', merged.length],
+        ['CALL1_DEALS_ROWS', call1Deals.length],
+      ]
+    );
+
     const staleReason = checkStaleness(merged, today);
 
     if (staleReason) {
@@ -235,6 +258,7 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       noShow: num(row[12]),
       disqualifiedLost: num(row[13]),
       held: num(row[14]),
+      confirmedCall1: num(row[15]),
     }));
 }
 

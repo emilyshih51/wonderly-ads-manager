@@ -42,6 +42,8 @@ export interface DailyMarketingRow {
   disqualifiedLost: number;
   /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
   held: number;
+  /** Confirmed Call 1s: deduped deals that entered "Call 1 Scheduled" that day (the cohort size). */
+  confirmedCall1: number;
 }
 
 /**
@@ -64,6 +66,7 @@ export const RAW_TAB_HEADERS = [
   'NO_SHOW',
   'DISQUALIFIED_LOST',
   'HELD',
+  'CONFIRMED_CALL1',
 ] as const;
 
 /** One fully joined day, ready to write to the Blended tab. */
@@ -114,6 +117,7 @@ export function joinMarketingDaily(
         noShow: m?.noShow ?? 0,
         disqualifiedLost: m?.disqualifiedLost ?? 0,
         held: m?.held ?? 0,
+        confirmedCall1: m?.confirmedCall1 ?? 0,
       };
     });
 }
@@ -140,6 +144,7 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.noShow,
     r.disqualifiedLost,
     r.held,
+    r.confirmedCall1,
   ]);
 }
 

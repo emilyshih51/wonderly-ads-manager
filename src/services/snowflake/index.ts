@@ -166,6 +166,7 @@ export class SnowflakeService {
        ),
        s AS (
          SELECT d.booked_day AS day,
+           COUNT(*) AS confirmed_call1,
            SUM(CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END) AS held,
            SUM(d.ever_accepted) AS accepted,
            SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show,
@@ -185,7 +186,8 @@ export class SnowflakeService {
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.no_show,0) AS no_show,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
-         COALESCE(s.held,0) AS held
+         COALESCE(s.held,0) AS held,
+         COALESCE(s.confirmed_call1,0) AS confirmed_call1
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days]
@@ -204,6 +206,7 @@ export class SnowflakeService {
       noShow: num(r.NO_SHOW),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
       held: num(r.HELD),
+      confirmedCall1: num(r.CONFIRMED_CALL1),
     }));
   }
 
@@ -255,7 +258,8 @@ export class SnowflakeService {
       `WITH de AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
            MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -317,7 +321,8 @@ export class SnowflakeService {
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
          COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
          COALESCE(em.primary_email, em.any_email, '') AS EMAIL,
-         COALESCE(src.utm_source,'') AS SOURCE
+         COALESCE(src.utm_source,'') AS SOURCE,
+         COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
        FROM de
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
@@ -342,6 +347,7 @@ export class SnowflakeService {
       phone: String(r.PHONE ?? ''),
       email: String(r.EMAIL ?? ''),
       source: String(r.SOURCE ?? ''),
+      acceptedDate: String(r.ACCEPTED_DATE ?? ''),
     }));
   }
 

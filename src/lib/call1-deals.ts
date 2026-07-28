@@ -37,6 +37,8 @@ export interface Call1DealRow {
   email: string;
   /** Marketing source (e.g. facebook), from the form-submit event's utm_source, joined by email. Blank when unattributed. */
   source: string;
+  /** `YYYY-MM-DD` the deal first reached "Accepted" (the 60/90-day clock start). Blank if never accepted. */
+  acceptedDate: string;
 }
 
 /** Header row for the call1_deals tab. */
@@ -53,6 +55,7 @@ export const CALL1_DEALS_HEADERS = [
   'PHONE',
   'EMAIL',
   'SOURCE',
+  'ACCEPTED_DATE',
 ] as const;
 
 /**
@@ -74,6 +77,7 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.phone,
     r.email,
     r.source,
+    r.acceptedDate,
   ]);
 }
 

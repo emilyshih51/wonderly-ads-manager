@@ -21,7 +21,7 @@ import {
   toCall1DealsValues,
 } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
-import { WEEK_OVER_WEEK_HEADERS, computeWeekOverWeek } from '@/lib/week-over-week';
+import { computeOverview } from '@/lib/overview';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
   joinMarketingDaily,
@@ -47,8 +47,8 @@ const RAW_TAB_NAME = 'wonderly_daily';
 /** Daily Funnel tab: per-step count, conversion rate, and cost, one row per day. */
 const DAILY_FUNNEL_TAB = 'Daily Funnel';
 
-/** Week-over-Week tab: this 7 days vs the previous 7 days for every funnel step. */
-const WEEK_OVER_WEEK_TAB = 'Week over Week';
+/** Overview: the KPI dashboard — freshness, cost-per, warnings, and week-over-week. */
+const OVERVIEW_TAB = 'Overview';
 
 /** Freshness/health tab. Other tabs reference it, and it never gets cleared with the data. */
 const META_TAB = 'meta';
@@ -139,15 +139,6 @@ export async function GET(request: Request) {
       toDailyFunnelValues(merged)
     );
 
-    // Week-over-Week: this 7 days vs previous 7 days, per funnel step.
-    await sheets.ensureTab(sheetId, WEEK_OVER_WEEK_TAB);
-    await sheets.replaceRows(
-      sheetId,
-      WEEK_OVER_WEEK_TAB,
-      [...WEEK_OVER_WEEK_HEADERS],
-      computeWeekOverWeek(merged)
-    );
-
     // Customer P&L: a self-contained daily aggregate from the customer-value view.
     // Full-window rewrite each run, so no read-back/merge needed.
     const customerPnl = await snow.getDailyCustomerPnl(CUSTOMER_PNL_DAYS);
@@ -199,6 +190,18 @@ export async function GET(request: Request) {
         ['CALL1_DEALS_ROWS', call1Deals.length],
       ]
     );
+
+    // Overview KPI dashboard: freshness, cost-per, warnings, and week-over-week.
+    const ptToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    const overview = computeOverview({
+      rows: merged,
+      call1Deals,
+      lastRefreshedPt: refreshedPt,
+      today: ptToday,
+    });
+
+    await sheets.ensureTab(sheetId, OVERVIEW_TAB);
+    await sheets.replaceRows(sheetId, OVERVIEW_TAB, overview[0].map(String), overview.slice(1));
 
     const staleReason = checkStaleness(merged, today);
 

@@ -5,8 +5,9 @@
  * via Vercel cron (see vercel.json).
  *
  * Pulls Meta spend from the Meta API and the funnel/booking/sales counts from
- * Snowflake, joins them on date, and overwrites the tab. The Overview tab's formulas
- * do the rest — this endpoint writes raw counts only, computes no ratios.
+ * Snowflake, joins them on date, and writes every tab: the raw `wonderly_daily`, the
+ * Daily Funnel, customer P&L, the deal-level Call 1 tab + summary, the `meta` freshness
+ * stamp, and the Overview KPI dashboard (freshness, cost-per, warnings, week-over-week).
  *
  * Auth follows the existing cron pattern: `Authorization: Bearer <CRON_SECRET>`
  * when CRON_SECRET is set; 503 in production when it is not.

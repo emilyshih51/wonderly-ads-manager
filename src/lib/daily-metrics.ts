@@ -36,8 +36,11 @@ const METRICS: Metric[] = [
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
   {
+    // 100% of spend and clicks are Facebook, so CPC's FB mirrors ALL; there is no
+    // organic ad spend to divide, so Organic stays blank (no accessor) rather than 0.
     label: 'CPC',
     daily: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
+    fb: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
     numer: (r) => r.fbSpend,
     denom: (r) => r.fbClicks,
   },

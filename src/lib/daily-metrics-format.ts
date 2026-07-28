@@ -21,6 +21,22 @@ export interface MetricFormat {
   money: boolean;
 }
 
+/**
+ * Metric groups in the exact order `computeDailyMetrics` writes them. Spend and CPC are
+ * money; the rest are counts. Kept here so the cron and the admin formatter share one source.
+ */
+export const DAILY_METRICS_FORMAT: MetricFormat[] = [
+  { label: 'Spend', money: true },
+  { label: 'CPC', money: true },
+  { label: 'Page views', money: false },
+  { label: 'CTA', money: false },
+  { label: 'Partial', money: false },
+  { label: 'Qualified', money: false },
+  { label: 'Call 1 booked', money: false },
+  { label: 'Held', money: false },
+  { label: 'Accepted', money: false },
+];
+
 /** Columns per metric group in the grid: ALL, w/w, FB, Organic. */
 const COLS_PER_METRIC = 4;
 
@@ -57,6 +73,9 @@ export function buildDailyMetricsFormatRequests(
   metrics: MetricFormat[]
 ): SheetsRequest[] {
   const requests: SheetsRequest[] = [
+    // Unmerge the group-header row first so re-running (e.g. every cron) can't fail on
+    // an already-merged range. Unmerging a non-merged range is a no-op.
+    { unmergeCells: { range: { sheetId, startRowIndex: 0, endRowIndex: 1 } } },
     // Freeze the two header rows + three summary rows, and the Date column.
     {
       updateSheetProperties: {

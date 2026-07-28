@@ -15,26 +15,13 @@
 
 import { NextResponse } from 'next/server';
 
-import { buildDailyMetricsFormatRequests, type MetricFormat } from '@/lib/daily-metrics-format';
+import { DAILY_METRICS_FORMAT, buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('FormatMarketingSheet');
 
 const DAILY_METRICS_TAB = 'Daily Metrics';
-
-/** Metric groups in the exact column order computeDailyMetrics writes them. */
-const METRICS: MetricFormat[] = [
-  { label: 'Spend', money: true },
-  { label: 'CPC', money: true },
-  { label: 'Page views', money: false },
-  { label: 'CTA', money: false },
-  { label: 'Partial', money: false },
-  { label: 'Qualified', money: false },
-  { label: 'Call 1 booked', money: false },
-  { label: 'Held', money: false },
-  { label: 'Accepted', money: false },
-];
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -59,7 +46,7 @@ export async function GET(request: Request) {
     const sheets = GoogleSheetsService.fromEnv();
 
     await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
-      buildDailyMetricsFormatRequests(gid, METRICS)
+      buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT)
     );
 
     logger.info('Formatted Daily Metrics tab');

@@ -23,6 +23,7 @@ import {
 } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import { computeDailyMetrics } from '@/lib/daily-metrics';
+import { DAILY_METRICS_FORMAT, buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
 import { DEFINITIONS_HEADERS, toDefinitionsValues } from '@/lib/definitions';
 import { computeOverview } from '@/lib/overview';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
@@ -234,6 +235,17 @@ export async function GET(request: Request) {
       dailyMetrics[0].map(String),
       dailyMetrics.slice(1)
     );
+
+    // Formatting is orthogonal to values (merges, freeze, number formats, heat-map), so
+    // re-applying it each run is idempotent and keeps the layout in sync with the columns.
+    // Wrapped so a formatting hiccup can never fail the data refresh.
+    try {
+      await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
+        buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT)
+      );
+    } catch (formatError) {
+      logger.error('Daily Metrics formatting failed (values still written)', formatError);
+    }
 
     const staleReason = checkStaleness(merged, today);
 

@@ -20,6 +20,7 @@ import {
   computeCall1Summary,
   toCall1DealsValues,
 } from '@/lib/call1-deals';
+import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
   joinMarketingDaily,
@@ -41,6 +42,9 @@ const logger = createLogger('MarketingDailyCron');
 const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
 const RAW_TAB_NAME = 'wonderly_daily';
+
+/** Daily Funnel tab: per-step count, conversion rate, and cost, one row per day. */
+const DAILY_FUNNEL_TAB = 'daily_funnel';
 
 /** Freshness/health tab. Other tabs reference it, and it never gets cleared with the data. */
 const META_TAB = 'meta';
@@ -121,6 +125,15 @@ export async function GET(request: Request) {
     const merged = mergeRows(existing, fresh);
 
     await sheets.replaceRows(sheetId, RAW_TAB_NAME, [...RAW_TAB_HEADERS], toSheetValues(merged));
+
+    // Daily Funnel: per-step count / conversion / cost, derived from the same rows.
+    await sheets.ensureTab(sheetId, DAILY_FUNNEL_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      DAILY_FUNNEL_TAB,
+      [...DAILY_FUNNEL_HEADERS],
+      toDailyFunnelValues(merged)
+    );
 
     // Customer P&L: a self-contained daily aggregate from the customer-value view.
     // Full-window rewrite each run, so no read-back/merge needed.

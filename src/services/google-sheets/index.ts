@@ -183,6 +183,48 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Apply formatting to a tab via `batchUpdate`, idempotently.
+   *
+   * Looks up the tab's numeric gid, deletes any conditional-format rules already on it
+   * (so re-running does not stack duplicate heat-maps), then applies the caller's
+   * requests. Formatting is orthogonal to values, so it persists across `replaceRows`.
+   *
+   * @param spreadsheetId - Sheet ID from its URL
+   * @param tabName - Exact tab name to format
+   * @param buildRequests - Given the tab's gid, returns the `batchUpdate` requests to apply
+   * @throws When the tab does not exist
+   */
+  async formatTab(
+    spreadsheetId: string,
+    tabName: string,
+    buildRequests: (sheetId: number) => Record<string, unknown>[]
+  ): Promise<void> {
+    const meta = await this.request<{
+      sheets?: {
+        properties?: { sheetId?: number; title?: string };
+        conditionalFormats?: unknown[];
+      }[];
+    }>(`/${spreadsheetId}?fields=sheets(properties(sheetId,title),conditionalFormats)`);
+
+    const sheet = (meta.sheets ?? []).find((s) => s.properties?.title === tabName);
+    const sheetId = sheet?.properties?.sheetId;
+
+    if (sheetId === undefined) {
+      throw new GoogleSheetsApiError(`Tab "${tabName}" not found to format`, 404);
+    }
+
+    // Deleting index 0 repeatedly clears every existing rule (indices shift down).
+    const clears = (sheet?.conditionalFormats ?? []).map(() => ({
+      deleteConditionalFormatRule: { index: 0, sheetId },
+    }));
+
+    await this.request(`/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests: [...clears, ...buildRequests(sheetId)] }),
+    });
+  }
+
+  /**
    * Read the values of a tab, including the header row.
    *
    * @param spreadsheetId - Sheet ID from its URL

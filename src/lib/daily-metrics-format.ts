@@ -53,7 +53,11 @@ const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 }; // positive w/w → green
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
 const COUNT = { type: 'NUMBER', pattern: '#,##0' };
+const COUNT_DECIMAL = { type: 'NUMBER', pattern: '#,##0.0' };
 const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
+
+/** Sheet row index (0-based) of the 7d-average summary row — its counts are fractional. */
+const SEVEN_DAY_ROW = 2;
 
 /** A column range on the sheet, open-ended downward so new daily rows inherit the format. */
 function column(sheetId: number, col: number, startRow = FIRST_VALUE_ROW): SheetsRequest {
@@ -148,6 +152,25 @@ export function buildDailyMetricsFormatRequests(
           fields: 'userEnteredFormat.numberFormat',
         },
       });
+
+      // The 7d-average of a count is fractional (e.g. 0.6 held) — show one decimal on
+      // that one cell so it (and its FB/Organic split) doesn't round away to 0. Money
+      // metrics already show cents via their currency format.
+      if (!m.money) {
+        requests.push({
+          repeatCell: {
+            range: {
+              sheetId,
+              startRowIndex: SEVEN_DAY_ROW,
+              endRowIndex: SEVEN_DAY_ROW + 1,
+              startColumnIndex: col,
+              endColumnIndex: col + 1,
+            },
+            cell: { userEnteredFormat: { numberFormat: COUNT_DECIMAL } },
+            fields: 'userEnteredFormat.numberFormat',
+          },
+        });
+      }
     }
 
     requests.push({

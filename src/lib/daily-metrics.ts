@@ -1,8 +1,8 @@
 /**
  * Daily Metrics — the Motion-style grid: one row per day, each funnel metric shown as
  * ALL, a week-over-week % (that day vs the same weekday last week, i.e. 7 rows back),
- * then the FB and Organic channel split, with a 7d-total / MTD / Prev-Month summary
- * block on top.
+ * then the FB and Organic channel split, with a 7d-average / MTD / Prev-Month summary
+ * block on top written as live sheet formulas.
  *
  * Every marketing event carries the session's utm_source / fbclid, so the funnel steps
  * (page views → CTA → partial → qualified → Call 1 booked) split into FB vs Organic
@@ -87,51 +87,34 @@ function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
-function sum(rows: MarketingDailyRow[], f: (r: MarketingDailyRow) => number): number {
-  return rows.reduce((s, r) => s + f(r), 0);
-}
-
 /** Percent change, blank when there's no base to compare against. */
 function pct(now: number, base: number): number | '' {
   return base > 0 ? round4((now - base) / base) : '';
 }
 
-/**
- * Window aggregate for a given accessor: ratios use Σnumer/Σdenom; additive metrics use
- * mean or sum.
- */
-function agg(
-  m: Metric,
-  accessor: (r: MarketingDailyRow) => number,
-  rows: MarketingDailyRow[],
-  mode: 'mean' | 'sum'
-): number {
-  if (m.numer && m.denom) {
-    const d = sum(rows, m.denom);
+/** 0-based column index to an A1 column letter (0 → A, 26 → AA). */
+function colLetter(index: number): string {
+  let s = '';
+  let i = index + 1;
 
-    return d > 0 ? round2(sum(rows, m.numer) / d) : 0;
+  while (i > 0) {
+    s = String.fromCharCode(65 + ((i - 1) % 26)) + s;
+    i = Math.floor((i - 1) / 26);
   }
 
-  const total = sum(rows, accessor);
-
-  return round2(mode === 'mean' && rows.length > 0 ? total / rows.length : total);
-}
-
-/** `YYYY-MM` of the month before the given `YYYY-MM-DD`. */
-function prevMonthKey(today: string): string {
-  const [y, m] = today.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
-
-  d.setUTCMonth(d.getUTCMonth() - 1);
-
-  return d.toISOString().slice(0, 7);
+  return s;
 }
 
 /**
  * Build the Daily Metrics matrix.
  *
  * Layout: a group-header row (metric names), a sub-header row (Date + ALL/w-w/FB/Organic
- * per metric), the 7d-total / MTD / Prev-Month summary rows, then daily rows newest-first.
+ * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first.
+ *
+ * The three summary rows are written as live Google Sheets FORMULAS (=AVERAGE / =SUMIFS /
+ * =AVERAGEIFS) rather than pre-computed values, so the math stays visible and editable in
+ * the sheet. The cron re-writes them verbatim each run, so they persist. Daily rows below
+ * are plain values. Data starts at sheet row 6 (rows 1-2 headers, rows 3-5 summaries).
  *
  * @param rows - Daily rows, newest first
  * @param today - Pacific `YYYY-MM-DD`, for the MTD / Prev-Month windows
@@ -140,17 +123,12 @@ export function computeDailyMetrics(
   rows: MarketingDailyRow[],
   today: string
 ): (string | number)[][] {
-  const currentMonth = today.slice(0, 7);
-  const prevMonth = prevMonthKey(today);
-  const dayOfMonth = today.slice(8, 10);
-
-  const last7 = rows.slice(0, 7);
-  const prev7 = rows.slice(7, 14);
-  const mtd = rows.filter((r) => r.date.slice(0, 7) === currentMonth && r.date <= today);
-  const prevMtd = rows.filter(
-    (r) => r.date.slice(0, 7) === prevMonth && r.date.slice(8, 10) <= dayOfMonth
-  );
-  const prevMonthAll = rows.filter((r) => r.date.slice(0, 7) === prevMonth);
+  const [ty, tm, td] = today.split('-').map(Number);
+  const pm = tm === 1 ? 12 : tm - 1;
+  const py = tm === 1 ? ty - 1 : ty;
+  const prevMonthLastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+  const prevSpanEndDay = Math.min(td, prevMonthLastDay);
+  const dataEnd = 5 + rows.length; // last daily row (data starts at sheet row 6)
 
   // Row 1: metric names above each ALL/w-w/FB/Organic group. Row 2: sub-headers.
   const groupHeader: (string | number)[] = [''];
@@ -161,37 +139,55 @@ export function computeDailyMetrics(
     subHeader.push('ALL', 'w/w', 'FB', 'Organic');
   }
 
-  const summaryRow = (
-    label: string,
-    windowRows: MarketingDailyRow[],
-    baseRows: MarketingDailyRow[] | null,
-    mode: 'mean' | 'sum'
-  ): (string | number)[] => {
-    const out: (string | number)[] = [label];
+  // Summary-row formulas reference the daily block, sheet rows 6..dataEnd.
+  const dateRange = `$A$6:$A$${dataEnd}`;
+  const sumifs = (L: string, y: number, mo: number, d1: number, d2: number) =>
+    `SUMIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&DATE(${y},${mo},${d1}),${dateRange},"<="&DATE(${y},${mo},${d2}))`;
+  const avgifs = (L: string, y: number, mo: number, d1: number, d2: number) =>
+    `AVERAGEIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&DATE(${y},${mo},${d1}),${dateRange},"<="&DATE(${y},${mo},${d2}))`;
 
-    for (const m of METRICS) {
-      const now = agg(m, m.daily, windowRows, mode);
+  /** 7d-average / MTD / Prev-Month value formulas for one column (blank if not present). */
+  const valueCells = (colIndex: number, present: boolean, ratio: boolean) => {
+    if (!present) return { d7: '', mtd: '', prev: '' };
 
-      out.push(
-        now,
-        baseRows ? pct(now, agg(m, m.daily, baseRows, mode)) : '',
-        m.fb ? agg(m, m.fb, windowRows, mode) : '',
-        m.organic ? agg(m, m.organic, windowRows, mode) : ''
-      );
-    }
+    const L = colLetter(colIndex);
 
-    return out;
+    return {
+      d7: `=IFERROR(AVERAGE(${L}6:${L}12),0)`,
+      mtd: ratio ? `=IFERROR(${avgifs(L, ty, tm, 1, td)},0)` : `=${sumifs(L, ty, tm, 1, td)}`,
+      prev: ratio
+        ? `=IFERROR(${avgifs(L, py, pm, 1, prevMonthLastDay)},0)`
+        : `=${sumifs(L, py, pm, 1, prevMonthLastDay)}`,
+    };
   };
 
-  const matrix: (string | number)[][] = [
-    groupHeader,
-    subHeader,
-    // 7-day TOTAL (not a daily mean): consistent with MTD/Prev Month, and it keeps the
-    // FB/Organic split as whole numbers instead of fractional means that round to 0.
-    summaryRow('7d total', last7, prev7, 'sum'),
-    summaryRow('MTD', mtd, prevMtd, 'sum'),
-    summaryRow('Prev Month', prevMonthAll, null, 'sum'),
-  ];
+  const d7Row: (string | number)[] = ['7d avg'];
+  const mtdRow: (string | number)[] = ['MTD'];
+  const prevRow: (string | number)[] = ['Prev Month'];
+
+  METRICS.forEach((m, g) => {
+    const allC = 1 + g * 4;
+    const La = colLetter(allC);
+    const ratio = Boolean(m.numer && m.denom);
+
+    const all = valueCells(allC, true, ratio);
+    const fb = valueCells(allC + 2, Boolean(m.fb), ratio);
+    const organic = valueCells(allC + 3, Boolean(m.organic), ratio);
+
+    // 7d w/w: this-week average vs the previous 7 days (rows 13-19).
+    const wow7 = `=IFERROR((${La}3-AVERAGE(${La}13:${La}19))/AVERAGE(${La}13:${La}19),"")`;
+    // MTD w/w: month-to-date vs the same day-span of the previous month.
+    const prevSpan = ratio
+      ? avgifs(La, py, pm, 1, prevSpanEndDay)
+      : sumifs(La, py, pm, 1, prevSpanEndDay);
+    const wowMtd = `=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`;
+
+    d7Row.push(all.d7, wow7, fb.d7, organic.d7);
+    mtdRow.push(all.mtd, wowMtd, fb.mtd, organic.mtd);
+    prevRow.push(all.prev, '', fb.prev, organic.prev);
+  });
+
+  const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
 
   rows.forEach((r, i) => {
     const weekAgo = rows[i + 7];

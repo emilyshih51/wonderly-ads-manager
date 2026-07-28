@@ -56,9 +56,23 @@ describe('computeDailyMetrics', () => {
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
     expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
-    expect(m[2][0]).toBe('7d total');
+    expect(m[2][0]).toBe('7d avg');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
+  });
+
+  it('writes the summary rows as live sheet formulas', () => {
+    const m = computeDailyMetrics(
+      days(() => ({ bookedAll: 10 })),
+      '2026-07-28'
+    );
+
+    // Spend ALL is column B. 7d avg = AVERAGE of the daily block; MTD = SUMIFS by date.
+    expect(m[2][1]).toBe('=IFERROR(AVERAGE(B6:B12),0)');
+    expect(String(m[3][1])).toContain('SUMIFS(B$6:B$21');
+    expect(String(m[3][1])).toContain('DATE(2026,7,1)');
+    // Prev Month reaches into June (30 days).
+    expect(String(m[4][1])).toContain('DATE(2026,6,30)');
   });
 
   it('shows daily w/w as the day vs the same weekday last week', () => {
@@ -79,13 +93,14 @@ describe('computeDailyMetrics', () => {
     expect(lastDaily[2]).toBe('');
   });
 
-  it('aggregates CPC as total spend / total clicks over the window', () => {
+  it('averages CPC in the 7d summary and blanks its Organic column', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // 4 cols per metric (ALL/w-w/FB/Organic): CPC is the 2nd metric → ALL at index 5.
-    // 7d avg row is m[2]. 1400/700 = 2.
-    expect(m[2][5]).toBe(2);
+    // CPC is the 2nd metric: ALL at column index 5 (F), FB at 7 (H), Organic at 8 (I).
+    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F6:F12),0)'); // ALL 7d avg
+    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H6:H12),0)'); // FB mirrors ALL
+    expect(m[2][8]).toBe(''); // no organic ad spend → blank
   });
 
   it('splits the funnel steps into FB and Organic from page view on', () => {

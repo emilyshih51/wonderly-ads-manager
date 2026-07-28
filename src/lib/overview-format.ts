@@ -23,7 +23,9 @@ const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 };
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
 const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
-const NUMBER = { type: 'NUMBER', pattern: '#,##0.##' };
+// Plain integer with thousands separators — no decimal point, so counts don't show a
+// stray trailing dot. (Spend cents are kept via a currency override on the FB_SPEND row.)
+const NUMBER = { type: 'NUMBER', pattern: '#,##0' };
 
 /** Section-band rows, matched on their exact label in column A. */
 const SECTION_LABELS = new Set([
@@ -172,8 +174,24 @@ export function buildOverviewFormatRequests(
       },
     });
 
-    // THIS_7D / PREV_7D / CHANGE are a mix of dollars and counts → plain numbers.
+    // THIS_7D / PREV_7D / CHANGE are counts → plain integers, no trailing dot.
     requests.push(numberFmt(1, NUMBER), numberFmt(2, NUMBER), numberFmt(3, NUMBER));
+
+    // The FB_SPEND row is dollars — keep cents on its THIS_7D / PREV_7D / CHANGE cells.
+    const spendRow = matrix.findIndex((r) => String(r[0]) === 'FB_SPEND');
+
+    if (spendRow >= 0) {
+      for (const col of [1, 2, 3]) {
+        requests.push({
+          repeatCell: {
+            range: cellRange(sheetId, spendRow, col),
+            cell: { userEnteredFormat: { numberFormat: CURRENCY } },
+            fields: 'userEnteredFormat.numberFormat',
+          },
+        });
+      }
+    }
+
     // Rates as percent, cost per result as currency.
     requests.push(numberFmt(WOW.pctChange, PERCENT));
     requests.push(numberFmt(WOW.conversion, PERCENT));

@@ -15,6 +15,7 @@ import snowflake, { type Connection } from 'snowflake-sdk';
 
 import type { Call1DealRow } from '@/lib/call1-deals';
 import type { CustomerPnlRow } from '@/lib/customer-pnl';
+import type { SucceedingContractors } from '@/lib/succeeding';
 import type { DailyMarketingRow } from '@/lib/marketing-daily';
 
 /** wonderly-prod events table. The name embeds the Amplitude project id. */
@@ -32,6 +33,9 @@ const REPORT_TZ = 'America/Los_Angeles';
 /** Data-team-owned view: one row per customer per day of funnel value + P&L. */
 const CUSTOMER_VALUE_DAILY =
   'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY';
+
+/** Prod teams dimension — 1:1 with the value view's teams, carries the ad go-live date. */
+const BASE_TEAMS = 'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.BASE__TEAMS';
 
 interface SnowflakeConfig {
   account: string;
@@ -324,6 +328,53 @@ export class SnowflakeService {
       adSpend: num(r.AD_SPEND),
       pnl: num(r.PNL),
     }));
+  }
+
+  /**
+   * Succeeding-contractor cohort counts, for the cost-per-succeeding-contractor KPI.
+   *
+   * A contractor's clock starts at their ad go-live (`BASE__TEAMS.AD_START_DATE`), which
+   * is 1:1 with the prod value view. "Succeeding" = cumulative `PNL_USD` over the value
+   * view turns positive within 60 / 90 days of that start. Only teams whose window has
+   * fully elapsed count toward `matured*`, so recent cohorts don't drag the number down.
+   *
+   * All prod — no dev-CRM bridge — so the deal→customer link the old approach lacked is
+   * simply the team dimension joining the value view on TEAM_ID.
+   *
+   * @returns Matured and succeeding counts for the 60- and 90-day windows
+   */
+  async getSucceedingContractors(): Promise<SucceedingContractors> {
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH t AS (
+         SELECT WONDERLY__TEAM__ID AS team_id, WONDERLY__TEAM__AD_START_DATE AS ad_start
+         FROM ${BASE_TEAMS}
+         WHERE WONDERLY__TEAM__AD_START_DATE IS NOT NULL
+       ),
+       p AS (
+         SELECT t.team_id, t.ad_start,
+           SUM(CASE WHEN v.METRIC_DATE BETWEEN t.ad_start AND DATEADD('day',60,t.ad_start) THEN v.PNL_USD ELSE 0 END) AS pnl60,
+           SUM(CASE WHEN v.METRIC_DATE BETWEEN t.ad_start AND DATEADD('day',90,t.ad_start) THEN v.PNL_USD ELSE 0 END) AS pnl90
+         FROM t
+         JOIN ${CUSTOMER_VALUE_DAILY} v ON v.TEAM_ID = t.team_id
+         GROUP BY 1, 2
+       )
+       SELECT
+         SUM(CASE WHEN ad_start <= DATEADD('day',-60,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured60,
+         SUM(CASE WHEN ad_start <= DATEADD('day',-60,CURRENT_DATE) AND pnl60 > 0 THEN 1 ELSE 0 END) AS succeeding60,
+         SUM(CASE WHEN ad_start <= DATEADD('day',-90,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured90,
+         SUM(CASE WHEN ad_start <= DATEADD('day',-90,CURRENT_DATE) AND pnl90 > 0 THEN 1 ELSE 0 END) AS succeeding90
+       FROM p`,
+      []
+    );
+
+    const r = rows[0] ?? {};
+
+    return {
+      matured60: num(r.MATURED60),
+      succeeding60: num(r.SUCCEEDING60),
+      matured90: num(r.MATURED90),
+      succeeding90: num(r.SUCCEEDING90),
+    };
   }
 
   /**

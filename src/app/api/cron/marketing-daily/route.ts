@@ -201,10 +201,13 @@ export async function GET(request: Request) {
     );
 
     // Overview KPI dashboard: freshness, cost-per, warnings, and week-over-week.
+    // Succeeding-contractor cohorts come straight from prod (team dim ↔ value view).
+    const succeeding = await snow.getSucceedingContractors();
     const ptToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
     const overview = computeOverview({
       rows: merged,
       call1Deals,
+      succeeding,
       lastRefreshedPt: refreshedPt,
       today: ptToday,
     });

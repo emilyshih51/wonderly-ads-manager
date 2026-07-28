@@ -69,6 +69,7 @@ function line(matrix: (string | number)[][], label: string): (string | number)[]
 describe('computeOverview', () => {
   const base = {
     call1Deals: [deal()],
+    succeeding: { matured60: 0, succeeding60: 0, matured90: 0, succeeding90: 0 },
     lastRefreshedPt: 'Jul 28, 2026, 2:30 PM',
     today: '2026-07-28',
   };
@@ -95,11 +96,34 @@ describe('computeOverview', () => {
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
   });
 
-  it('keeps the two succeeding rows pending', () => {
-    const m = computeOverview({ ...base, rows: [row()] });
+  it('shows the succeeding rows as maturing when the cohort is small', () => {
+    const m = computeOverview({
+      ...base,
+      rows: [row()],
+      succeeding: { matured60: 3, succeeding60: 1, matured90: 2, succeeding90: 0 },
+    });
 
-    expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe('pending deal→customer link');
-    expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe('pending deal→customer link');
+    expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe(
+      'maturing — 1/3 cohort succeeding'
+    );
+    expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe(
+      'maturing — 0/2 cohort succeeding'
+    );
+  });
+
+  it('computes cost per succeeding contractor once the cohort is large enough', () => {
+    const rows = Array(3)
+      .fill(0)
+      .map(() => row({ fbSpend: 1000 }));
+    const m = computeOverview({
+      ...base,
+      rows,
+      succeeding: { matured60: 20, succeeding60: 6, matured90: 15, succeeding90: 5 },
+    });
+
+    // 3000 cumulative spend / 6 succeeding (60d) = 500; / 5 (90d) = 600.
+    expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe(500);
+    expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe(600);
   });
 
   it('warns when Call 1 bookings drop more than 15% week-over-week', () => {

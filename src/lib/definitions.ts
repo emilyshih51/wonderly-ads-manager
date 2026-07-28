@@ -246,9 +246,9 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'Cost per succeeding contractor (60/90d)',
     'Overview',
-    'Spend per contractor whose customer ROI clears the bar after 60/90 days.',
-    'Pending',
-    'Blocked until an accepted deal can be linked to its customer team_id in the value view.',
+    'Facebook acquisition spend per contractor who succeeds within 60/90 days of go-live.',
+    'Meta + Snowflake (prod value view)',
+    'Succeeding = cumulative PNL_USD > 0 within 60/90d of a team’s AD_START_DATE. Cost = total FB spend ÷ succeeding contractors; shows “maturing” until ≥5 have matured (data began 2026, so cohorts are still aging).',
   ],
 
   // --- call1_deals (deal-level audit trail) ------------------------------

@@ -17,6 +17,7 @@
 
 import type { Call1DealRow } from '@/lib/call1-deals';
 import type { MarketingDailyRow } from '@/lib/marketing-daily';
+import { type SucceedingContractors, succeedingCostCell } from '@/lib/succeeding';
 import { WEEK_OVER_WEEK_HEADERS, computeWeekOverWeek } from '@/lib/week-over-week';
 
 /** Below this source-attribution rate, warn (spec: >5% of Call 1s unconnected). */
@@ -52,10 +53,11 @@ function pctStr(fraction: number): string {
 export function computeOverview(opts: {
   rows: MarketingDailyRow[];
   call1Deals: Call1DealRow[];
+  succeeding: SucceedingContractors;
   lastRefreshedPt: string;
   today: string;
 }): (string | number)[][] {
-  const { rows, call1Deals, lastRefreshedPt, today } = opts;
+  const { rows, call1Deals, succeeding, lastRefreshedPt, today } = opts;
 
   const wk = rows.slice(0, 7);
   const spend7 = sum(wk, (r) => r.fbSpend);
@@ -64,6 +66,21 @@ export function computeOverview(opts: {
 
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
   const costPerAccepted = accepted7 > 0 ? money(spend7 / accepted7) : 0;
+
+  // Cost per succeeding contractor uses *cumulative* Facebook acquisition spend over
+  // the succeeding contractors, not the 7-day window — success takes 60/90 days to
+  // show, so a weekly numerator would never line up with the matured cohort.
+  const cumulativeFbSpend = money(sum(rows, (r) => r.fbSpend));
+  const succeeding60 = succeedingCostCell(
+    cumulativeFbSpend,
+    succeeding.succeeding60,
+    succeeding.matured60
+  );
+  const succeeding90 = succeedingCostCell(
+    cumulativeFbSpend,
+    succeeding.succeeding90,
+    succeeding.matured90
+  );
 
   const newest = rows[0]?.date ?? '';
   const dataStale = newest !== '' && newest < today;
@@ -85,8 +102,12 @@ export function computeOverview(opts: {
     ['HEADLINE COST — last 7 days'],
     ['Cost per confirmed Call 1', costPerCall1],
     ['Cost per accepted contractor', costPerAccepted],
-    ['Cost per succeeding contractor (60d)', 'pending deal→customer link'],
-    ['Cost per succeeding contractor (90d)', 'pending deal→customer link'],
+    ['Cost per succeeding contractor (60d)', succeeding60],
+    ['Cost per succeeding contractor (90d)', succeeding90],
+    [
+      '',
+      'Succeeding = cumulative PNL > 0 within the window of ad go-live. Cost = total FB spend ÷ succeeding contractors; "maturing" until the cohort is large enough.',
+    ],
     [],
     ['WARNINGS'],
     [dataStale ? `⚠️ Data is stale — newest is ${newest}` : `✓ Data current through ${newest}`],

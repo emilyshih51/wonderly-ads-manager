@@ -22,6 +22,7 @@ import {
   toCall1DealsValues,
 } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
+import { computeDailyMetrics } from '@/lib/daily-metrics';
 import { DEFINITIONS_HEADERS, toDefinitionsValues } from '@/lib/definitions';
 import { computeOverview } from '@/lib/overview';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
@@ -48,6 +49,9 @@ const RAW_TAB_NAME = 'wonderly_daily';
 
 /** Daily Funnel tab: per-step count, conversion rate, and cost, one row per day. */
 const DAILY_FUNNEL_TAB = 'Daily Funnel';
+
+/** Daily Metrics tab: Motion-style grid — per-metric ALL + week-over-week, with summary. */
+const DAILY_METRICS_TAB = 'Daily Metrics';
 
 /** Overview: the KPI dashboard — freshness, cost-per, warnings, and week-over-week. */
 const OVERVIEW_TAB = 'Overview';
@@ -215,6 +219,17 @@ export async function GET(request: Request) {
       DEFINITIONS_TAB,
       [...DEFINITIONS_HEADERS],
       toDefinitionsValues()
+    );
+
+    // Daily Metrics: Motion-style per-metric grid with week-over-week and a summary block.
+    const dailyMetrics = computeDailyMetrics(merged, ptToday);
+
+    await sheets.ensureTab(sheetId, DAILY_METRICS_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      DAILY_METRICS_TAB,
+      dailyMetrics[0].map(String),
+      dailyMetrics.slice(1)
     );
 
     const staleReason = checkStaleness(merged, today);

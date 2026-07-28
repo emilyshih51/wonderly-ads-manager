@@ -22,6 +22,7 @@ import {
   toCall1DealsValues,
 } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
+import { DEFINITIONS_HEADERS, toDefinitionsValues } from '@/lib/definitions';
 import { computeOverview } from '@/lib/overview';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
@@ -50,6 +51,9 @@ const DAILY_FUNNEL_TAB = 'Daily Funnel';
 
 /** Overview: the KPI dashboard — freshness, cost-per, warnings, and week-over-week. */
 const OVERVIEW_TAB = 'Overview';
+
+/** Definitions: glossary of every field (meaning, source, counting rule). */
+const DEFINITIONS_TAB = 'Definitions';
 
 /** Freshness/health tab. Other tabs reference it, and it never gets cleared with the data. */
 const META_TAB = 'meta';
@@ -203,6 +207,15 @@ export async function GET(request: Request) {
 
     await sheets.ensureTab(sheetId, OVERVIEW_TAB);
     await sheets.replaceRows(sheetId, OVERVIEW_TAB, overview[0].map(String), overview.slice(1));
+
+    // Definitions: static glossary of every field (meaning, source, rule).
+    await sheets.ensureTab(sheetId, DEFINITIONS_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      DEFINITIONS_TAB,
+      [...DEFINITIONS_HEADERS],
+      toDefinitionsValues()
+    );
 
     const staleReason = checkStaleness(merged, today);
 

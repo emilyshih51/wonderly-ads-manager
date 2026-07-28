@@ -30,6 +30,7 @@ import {
 } from '@/lib/daily-metrics-format';
 import { DEFINITIONS_HEADERS, toDefinitionsValues } from '@/lib/definitions';
 import { computeOverview } from '@/lib/overview';
+import { buildOverviewFormatRequests } from '@/lib/overview-format';
 import { CUSTOMER_PNL_HEADERS, toCustomerPnlValues } from '@/lib/customer-pnl';
 import {
   joinMarketingDaily,
@@ -219,6 +220,15 @@ export async function GET(request: Request) {
 
     await sheets.ensureTab(sheetId, OVERVIEW_TAB);
     await sheets.replaceRows(sheetId, OVERVIEW_TAB, overview[0].map(String), overview.slice(1));
+
+    // Format the Overview (idempotent, wrapped so it can't fail the data refresh).
+    try {
+      await sheets.formatTab(sheetId, OVERVIEW_TAB, (gid) =>
+        buildOverviewFormatRequests(gid, overview)
+      );
+    } catch (formatError) {
+      logger.error('Overview formatting failed (values still written)', formatError);
+    }
 
     // Definitions: static glossary of every field (meaning, source, rule).
     await sheets.ensureTab(sheetId, DEFINITIONS_TAB);

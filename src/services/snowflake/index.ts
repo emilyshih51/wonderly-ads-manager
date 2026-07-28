@@ -166,7 +166,6 @@ export class SnowflakeService {
        ),
        s AS (
          SELECT d.booked_day AS day,
-           COUNT(*) AS confirmed_call1,
            SUM(CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END) AS held,
            SUM(d.ever_accepted) AS accepted,
            SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show,
@@ -187,7 +186,10 @@ export class SnowflakeService {
          COALESCE(s.no_show,0) AS no_show,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
-         COALESCE(s.confirmed_call1,0) AS confirmed_call1
+         -- Confirmed Call 1 = the BOOKING_COMPLETE count (matches Amplitude), per the
+         -- decision to keep one booking number everywhere. Held/accepted still come
+         -- from the CRM cohort (s) and convert against this.
+         f.booked_all AS confirmed_call1
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days]

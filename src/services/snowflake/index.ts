@@ -183,17 +183,65 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
-       s AS (
-         SELECT d.booked_day AS day,
-           SUM(CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END) AS held,
-           SUM(d.ever_accepted) AS accepted,
-           SUM(CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END) AS no_show,
-           SUM(CASE WHEN st.NAME = 'Disqualified or Lost' THEN 1 ELSE 0 END) AS disqualified_lost
+       -- Primary email per contact, to bridge a CRM deal back to its marketing source.
+       em AS (
+         SELECT CONTACT_ID,
+           LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
+         FROM AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS
+         WHERE DELETED_AT IS NULL
+         GROUP BY CONTACT_ID
+       ),
+       -- Marketing source per email, from the form-submit events (same fallback chain
+       -- as the call1_deals SOURCE column): event utm -> user utm -> initial utm ->
+       -- referrer domain -> fbclid. Lets us attribute each deal's Call 1 to a channel.
+       src_raw AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, EVENT_TIME,
+           COALESCE(
+             NULLIF(EVENT_PROPERTIES:utm_source::string,''),
+             NULLIF(USER_PROPERTIES:utm_source::string,''),
+             NULLIF(USER_PROPERTIES:initial_utm_source::string,''),
+             CASE
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%facebook%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%facebook%'
+                 OR EVENT_PROPERTIES:fbclid IS NOT NULL THEN 'facebook'
+             END
+           ) AS source
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+       ),
+       src AS (
+         SELECT email, MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
+         FROM src_raw GROUP BY 1
+       ),
+       -- One row per deal with its stage-derived outcomes and a channel flag, so held
+       -- and accepted can be split FB vs organic (organic = ALL − FB, i.e. every deal
+       -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
+       ds AS (
+         SELECT d.booked_day AS day, d.ever_accepted,
+           CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END AS held,
+           CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
+           CASE WHEN st.NAME = 'Disqualified or Lost' THEN 1 ELSE 0 END AS disqualified_lost,
+           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
          FROM deal d
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
+         LEFT JOIN src ON src.email = em.join_email
          WHERE d.booked_day IS NOT NULL
-         GROUP BY 1
+       ),
+       s AS (
+         SELECT day,
+           SUM(held) AS held,
+           SUM(held * is_fb) AS held_fb,
+           SUM(held * (1 - is_fb)) AS held_organic,
+           SUM(ever_accepted) AS accepted,
+           SUM(ever_accepted * is_fb) AS accepted_fb,
+           SUM(ever_accepted * (1 - is_fb)) AS accepted_organic,
+           SUM(no_show) AS no_show,
+           SUM(disqualified_lost) AS disqualified_lost
+         FROM ds GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -205,12 +253,16 @@ export class SnowflakeService {
          -- ACCEPTED / NO_SHOW stay sourced from the sales pipeline cohort, so they can
          -- exceed CALL1_BOOKED on a given day (sales books Call 1s the form never sees).
          COALESCE(s.accepted,0) AS accepted,
+         COALESCE(s.accepted_fb,0) AS accepted_fb,
+         COALESCE(s.accepted_organic,0) AS accepted_organic,
          COALESCE(s.no_show,0) AS no_show,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
-         COALESCE(s.held,0) AS held
+         COALESCE(s.held,0) AS held,
+         COALESCE(s.held_fb,0) AS held_fb,
+         COALESCE(s.held_organic,0) AS held_organic
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
-      [-days, -days]
+      [-days, -days, -days]
     );
 
     return rows.map((r) => ({
@@ -231,9 +283,13 @@ export class SnowflakeService {
       bookedFb: num(r.BOOKED_FB),
       bookedOrganic: num(r.BOOKED_ORGANIC),
       accepted: num(r.ACCEPTED),
+      acceptedFb: num(r.ACCEPTED_FB),
+      acceptedOrganic: num(r.ACCEPTED_ORGANIC),
       noShow: num(r.NO_SHOW),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
       held: num(r.HELD),
+      heldFb: num(r.HELD_FB),
+      heldOrganic: num(r.HELD_ORGANIC),
     }));
   }
 

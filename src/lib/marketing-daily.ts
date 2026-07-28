@@ -45,12 +45,20 @@ export interface DailyMarketingRow {
   bookedOrganic: number;
   /** Sales-pipeline cohort: of that day's booked deals, how many ever reached "Accepted". */
   accepted: number;
+  /** Accepted deals attributed to Facebook (via the deal's Call 1 source). */
+  acceptedFb: number;
+  /** Accepted deals not attributed to Facebook (= accepted − acceptedFb). */
+  acceptedOrganic: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently a no-show. */
   noShow: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently "Disqualified or Lost". */
   disqualifiedLost: number;
   /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
   held: number;
+  /** Held deals attributed to Facebook (via the deal's Call 1 source). */
+  heldFb: number;
+  /** Held deals not attributed to Facebook (= held − heldFb). */
+  heldOrganic: number;
 }
 
 /**
@@ -78,9 +86,13 @@ export const RAW_TAB_HEADERS = [
   'BOOKED_FB',
   'BOOKED_ORGANIC',
   'ACCEPTED',
+  'ACCEPTED_FB',
+  'ACCEPTED_ORGANIC',
   'NO_SHOW',
   'DISQUALIFIED_LOST',
   'HELD',
+  'HELD_FB',
+  'HELD_ORGANIC',
 ] as const;
 
 /** One fully joined day, ready to write to the Blended tab. */
@@ -136,9 +148,13 @@ export function joinMarketingDaily(
         bookedFb: m?.bookedFb ?? 0,
         bookedOrganic: m?.bookedOrganic ?? 0,
         accepted: m?.accepted ?? 0,
+        acceptedFb: m?.acceptedFb ?? 0,
+        acceptedOrganic: m?.acceptedOrganic ?? 0,
         noShow: m?.noShow ?? 0,
         disqualifiedLost: m?.disqualifiedLost ?? 0,
         held: m?.held ?? 0,
+        heldFb: m?.heldFb ?? 0,
+        heldOrganic: m?.heldOrganic ?? 0,
       };
     });
 }
@@ -170,9 +186,13 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.bookedFb,
     r.bookedOrganic,
     r.accepted,
+    r.acceptedFb,
+    r.acceptedOrganic,
     r.noShow,
     r.disqualifiedLost,
     r.held,
+    r.heldFb,
+    r.heldOrganic,
   ]);
 }
 

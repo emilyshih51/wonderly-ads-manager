@@ -34,9 +34,13 @@ function mkt(date: string, o: Partial<DailyMarketingRow> = {}): DailyMarketingRo
     bookedFb: 0,
     bookedOrganic: 0,
     accepted: 0,
+    acceptedFb: 0,
+    acceptedOrganic: 0,
     noShow: 0,
     disqualifiedLost: 0,
     held: 0,
+    heldFb: 0,
+    heldOrganic: 0,
     ...o,
   };
 }
@@ -130,9 +134,13 @@ describe('toSheetValues', () => {
       16, // BOOKED_FB
       0, // BOOKED_ORGANIC
       6, // ACCEPTED
+      0, // ACCEPTED_FB
+      0, // ACCEPTED_ORGANIC
       2, // NO_SHOW
       3, // DISQUALIFIED_LOST
       14, // HELD
+      0, // HELD_FB
+      0, // HELD_ORGANIC
     ]);
     expect(values[0]).toHaveLength(RAW_TAB_HEADERS.length);
   });

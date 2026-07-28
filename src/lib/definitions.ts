@@ -136,6 +136,13 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'CRM',
     'Current stage = “Disqualified or Lost”.',
   ],
+  [
+    'HELD_FB / HELD_ORGANIC, ACCEPTED_FB / ACCEPTED_ORGANIC',
+    'wonderly_daily, Daily Metrics',
+    'Held and accepted deals split by the channel that produced the Call 1.',
+    'CRM + Amplitude',
+    'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE). FB = facebook/ig; Organic = ALL − FB (includes unattributed deals).',
+  ],
 
   // --- Daily Funnel derived ----------------------------------------------
   [

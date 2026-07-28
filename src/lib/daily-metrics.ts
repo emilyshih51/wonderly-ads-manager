@@ -6,9 +6,9 @@
  *
  * Every marketing event carries the session's utm_source / fbclid, so the funnel steps
  * (page views → CTA → partial → qualified → Call 1 booked) split into FB vs Organic
- * from page view on. Spend is 100% Facebook (FB = ALL, Organic = 0). CPC, Held and
- * Accepted have no channel split, so their FB/Organic cells stay blank. The column
- * shape mirrors Motion's so it's ready when more channels come online.
+ * from page view on. Held and Accepted split too, by the deal's Call 1 source. Spend is
+ * 100% Facebook (FB = ALL, Organic = 0). Only CPC has no split, so its FB/Organic cells
+ * stay blank. The column shape mirrors Motion's so it's ready for more channels.
  *
  * The heat-map on the w/w columns is applied once in the sheet (conditional formatting
  * persists across the cron's value-only rewrites).
@@ -66,9 +66,14 @@ const METRICS: Metric[] = [
     fb: (r) => r.bookedFb,
     organic: (r) => r.bookedOrganic,
   },
-  // Held / Accepted are CRM sales outcomes with no channel attribution yet — ALL only.
-  { label: 'Held', daily: (r) => r.held },
-  { label: 'Accepted', daily: (r) => r.accepted },
+  // Held / Accepted split by the deal's Call 1 source (organic = ALL − FB).
+  { label: 'Held', daily: (r) => r.held, fb: (r) => r.heldFb, organic: (r) => r.heldOrganic },
+  {
+    label: 'Accepted',
+    daily: (r) => r.accepted,
+    fb: (r) => r.acceptedFb,
+    organic: (r) => r.acceptedOrganic,
+  },
 ];
 
 function round2(n: number): number {

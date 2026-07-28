@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildDailyMetricsFormatRequests, type MetricFormat } from '@/lib/daily-metrics-format';
+import {
+  buildDailyMetricsFormatRequests,
+  weekBreakRows,
+  type MetricFormat,
+} from '@/lib/daily-metrics-format';
 
 const METRICS: MetricFormat[] = [
   { label: 'Spend', money: true },
@@ -44,6 +48,25 @@ describe('buildDailyMetricsFormatRequests', () => {
       2, 6, 10,
     ]);
     expect(rules[0].addConditionalFormatRule.rule.gradientRule.midpoint.value).toBe('0');
+  });
+
+  it('draws a border under the last row of each week', () => {
+    // Newest-first: Wed 07-22, Tue 07-21, Mon 07-20 share an ISO week (Mon 07-20);
+    // Sun 07-19 is the prior week. firstRowIndex 5 → sheet rows 5,6,7,8. The week
+    // changes between 07-20 (row 7) and 07-19 (row 8), so the border goes under row 7.
+    const dates = ['2026-07-22', '2026-07-21', '2026-07-20', '2026-07-19'];
+
+    expect(weekBreakRows(dates, 5)).toEqual([7]);
+  });
+
+  it('emits a border request per week break', () => {
+    const withBreaks = buildDailyMetricsFormatRequests(123, METRICS, [8, 15]);
+    const borders = withBreaks.filter(
+      (r) => 'updateBorders' in r && (r as any).updateBorders.bottom
+    );
+
+    expect(borders).toHaveLength(2);
+    expect((borders[0] as any).updateBorders.range.startRowIndex).toBe(8);
   });
 
   it('formats money metrics as currency and counts as plain numbers', () => {

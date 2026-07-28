@@ -50,6 +50,37 @@ const HEADER_BG = { red: 0.92, green: 0.92, blue: 0.94 };
 const HEAT_MIN = { red: 0.96, green: 0.6, blue: 0.6 }; // negative w/w → red
 const HEAT_MID = { red: 1, green: 1, blue: 1 }; // flat → white
 const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 }; // positive w/w → green
+const WEEK_LINE = { red: 0.45, green: 0.45, blue: 0.45 }; // week-separator border
+
+/** Rows cleared of stale inner borders before redrawing (well past any real data). */
+const BORDER_CLEAR_ROWS = 500;
+
+/** Monday (UTC) of a date's week, as a stable weekly key. */
+function weekKey(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7;
+
+  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
+
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 0-based sheet row indices that end a week — the last (oldest) row before the week
+ * changes — so the daily grid can be grouped with a border under each week.
+ *
+ * @param dates - Daily row dates, newest first (the sheet's order)
+ * @param firstRowIndex - 0-based sheet row of the first daily row (data starts at row 6 → 5)
+ */
+export function weekBreakRows(dates: string[], firstRowIndex: number): number[] {
+  const breaks: number[] = [];
+
+  for (let i = 0; i < dates.length - 1; i++) {
+    if (weekKey(dates[i]) !== weekKey(dates[i + 1])) breaks.push(firstRowIndex + i);
+  }
+
+  return breaks;
+}
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
 const COUNT = { type: 'NUMBER', pattern: '#,##0' };
@@ -69,12 +100,14 @@ function column(sheetId: number, col: number, startRow = FIRST_VALUE_ROW): Sheet
  *
  * @param sheetId - The tab's numeric gid
  * @param metrics - Metric groups in column order (their `money` flag drives value formatting)
+ * @param weekBreaks - 0-based sheet rows to get a bottom border (from `weekBreakRows`)
  * @returns Ordered `batchUpdate` requests: freeze, header styling, then per-metric merge,
- *   number formats, and the week-over-week heat-map rule
+ *   number formats, the week-over-week heat-map rule, and week-separator borders
  */
 export function buildDailyMetricsFormatRequests(
   sheetId: number,
-  metrics: MetricFormat[]
+  metrics: MetricFormat[],
+  weekBreaks: number[] = []
 ): SheetsRequest[] {
   const requests: SheetsRequest[] = [
     // Unmerge the group-header row first so re-running (e.g. every cron) can't fail on
@@ -196,6 +229,38 @@ export function buildDailyMetricsFormatRequests(
       },
     });
   });
+
+  // Week-separator borders. Rows shift down as new days arrive, so clear the daily
+  // block's inner borders first, then draw a line under the last row of each week.
+  const lastColumn = 1 + metrics.length * COLS_PER_METRIC;
+
+  requests.push({
+    updateBorders: {
+      range: {
+        sheetId,
+        startRowIndex: FROZEN_ROWS,
+        endRowIndex: FROZEN_ROWS + BORDER_CLEAR_ROWS,
+        startColumnIndex: 0,
+        endColumnIndex: lastColumn,
+      },
+      innerHorizontal: { style: 'NONE' },
+    },
+  });
+
+  for (const rowIndex of weekBreaks) {
+    requests.push({
+      updateBorders: {
+        range: {
+          sheetId,
+          startRowIndex: rowIndex,
+          endRowIndex: rowIndex + 1,
+          startColumnIndex: 0,
+          endColumnIndex: lastColumn,
+        },
+        bottom: { style: 'SOLID_MEDIUM', color: WEEK_LINE },
+      },
+    });
+  }
 
   return requests;
 }

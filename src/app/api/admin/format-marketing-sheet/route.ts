@@ -15,7 +15,11 @@
 
 import { NextResponse } from 'next/server';
 
-import { DAILY_METRICS_FORMAT, buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
+import {
+  DAILY_METRICS_FORMAT,
+  buildDailyMetricsFormatRequests,
+  weekBreakRows,
+} from '@/lib/daily-metrics-format';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 
@@ -45,8 +49,13 @@ export async function GET(request: Request) {
   try {
     const sheets = GoogleSheetsService.fromEnv();
 
+    // Read the Date column so week-separator borders land on the right rows.
+    const rows = await sheets.readRows(sheetId, DAILY_METRICS_TAB);
+    const dates = rows.map((r) => String(r[0] ?? '')).filter((v) => /^\d{4}-\d{2}-\d{2}$/.test(v));
+    const weekBreaks = weekBreakRows(dates, 5);
+
     await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
-      buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT)
+      buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks)
     );
 
     logger.info('Formatted Daily Metrics tab');

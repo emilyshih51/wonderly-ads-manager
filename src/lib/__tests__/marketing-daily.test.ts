@@ -19,9 +19,17 @@ function mkt(date: string, o: Partial<DailyMarketingRow> = {}): DailyMarketingRo
   return {
     date,
     pageView: 0,
+    pageViewFb: 0,
+    pageViewOrganic: 0,
     ctaClicked: 0,
+    ctaFb: 0,
+    ctaOrganic: 0,
     submitPartial: 0,
+    submitPartialFb: 0,
+    submitPartialOrganic: 0,
     submitQualified: 0,
+    submitQualifiedFb: 0,
+    submitQualifiedOrganic: 0,
     bookedAll: 0,
     bookedFb: 0,
     bookedOrganic: 0,
@@ -106,17 +114,25 @@ describe('toSheetValues', () => {
       4937.12,
       57000,
       1044,
-      972,
-      129,
-      73,
-      18,
-      16,
-      16,
-      0,
-      6,
-      2,
-      3,
-      14,
+      972, // PAGE_VIEW
+      0, // PAGE_VIEW_FB
+      0, // PAGE_VIEW_ORGANIC
+      129, // CTA_CLICKED
+      0, // CTA_FB
+      0, // CTA_ORGANIC
+      73, // SUBMIT_PARTIAL
+      0, // PARTIAL_FB
+      0, // PARTIAL_ORGANIC
+      18, // SUBMIT_QUALIFIED
+      0, // QUALIFIED_FB
+      0, // QUALIFIED_ORGANIC
+      16, // BOOKED_ALL
+      16, // BOOKED_FB
+      0, // BOOKED_ORGANIC
+      6, // ACCEPTED
+      2, // NO_SHOW
+      3, // DISQUALIFIED_LOST
+      14, // HELD
     ]);
     expect(values[0]).toHaveLength(RAW_TAB_HEADERS.length);
   });

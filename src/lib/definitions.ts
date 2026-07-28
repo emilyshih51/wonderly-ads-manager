@@ -99,6 +99,13 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Amplitude',
     'BOOKING_COMPLETE without a Facebook signal.',
   ],
+  [
+    '<STEP>_FB / <STEP>_ORGANIC',
+    'wonderly_daily, Daily Metrics',
+    'Each funnel step split by channel — page views, CTA, partial, qualified, and bookings.',
+    'Amplitude',
+    'Every marketing event carries the session utm_source/fbclid, so FB = facebook/ig utm OR an fbclid; Organic = everything else. The split is visible from page view on.',
+  ],
 
   // --- Sales outcomes (CRM cohort, keyed to booking day) ------------------
   [
@@ -307,6 +314,22 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Set every run in Pacific time.',
   ],
   ['NEWEST_DATE', 'meta', 'The most recent day of data.', 'Derived', 'Max DATE in wonderly_daily.'],
+
+  // --- Daily Metrics grid -------------------------------------------------
+  [
+    'ALL / w/w / FB / Organic',
+    'Daily Metrics',
+    'Per-metric columns: the total, its week-over-week change, and the FB vs Organic split.',
+    'Derived',
+    'w/w compares each day to the same weekday last week (7 rows back). FB/Organic populated for spend and the funnel steps; blank for CPC, Held, Accepted (no channel split yet).',
+  ],
+  [
+    '7d avg / MTD / Prev Month',
+    'Daily Metrics',
+    'Summary rows above the daily grid.',
+    'Derived',
+    '7d avg = mean of the last 7 days (w/w vs the 7 before); MTD = month-to-date sum (w/w vs the same span last month); Prev Month = last month’s total.',
+  ],
 ];
 
 /**

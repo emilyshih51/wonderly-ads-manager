@@ -7,9 +7,17 @@ function row(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRo
   return {
     date,
     pageView: 0,
+    pageViewFb: 0,
+    pageViewOrganic: 0,
     ctaClicked: 0,
+    ctaFb: 0,
+    ctaOrganic: 0,
     submitPartial: 0,
+    submitPartialFb: 0,
+    submitPartialOrganic: 0,
     submitQualified: 0,
+    submitQualifiedFb: 0,
+    submitQualifiedOrganic: 0,
     bookedAll: 0,
     bookedFb: 0,
     bookedOrganic: 0,
@@ -43,7 +51,7 @@ describe('computeDailyMetrics', () => {
     expect(m[0][0]).toBe(''); // group-header corner
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
-    expect(m[1].slice(0, 3)).toEqual(['Date', 'ALL', 'w/w']);
+    expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
     expect(m[2][0]).toBe('7d avg');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
@@ -71,7 +79,27 @@ describe('computeDailyMetrics', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // CPC is the 2nd metric → ALL at index 3. 7d avg row is m[2]. 1400/700 = 2.
-    expect(m[2][3]).toBe(2);
+    // 4 cols per metric (ALL/w-w/FB/Organic): CPC is the 2nd metric → ALL at index 5.
+    // 7d avg row is m[2]. 1400/700 = 2.
+    expect(m[2][5]).toBe(2);
+  });
+
+  it('splits the funnel steps into FB and Organic from page view on', () => {
+    const rows = days(() => ({
+      pageView: 10,
+      pageViewFb: 7,
+      pageViewOrganic: 3,
+      bookedAll: 4,
+      bookedFb: 3,
+      bookedOrganic: 1,
+    }));
+    const m = computeDailyMetrics(rows, '2026-07-28');
+
+    // Page views is the 3rd metric → group starts at index 9 (ALL/w-w/FB/Organic).
+    const firstDaily = m[5];
+
+    expect(firstDaily[9]).toBe(10); // ALL
+    expect(firstDaily[11]).toBe(7); // FB
+    expect(firstDaily[12]).toBe(3); // Organic
   });
 });

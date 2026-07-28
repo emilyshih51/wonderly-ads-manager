@@ -27,9 +27,18 @@ export interface MetaDailySpend {
 export interface DailyMarketingRow {
   date: string;
   pageView: number;
+  /** Page views whose session carried a Facebook signal (utm facebook/ig or fbclid). */
+  pageViewFb: number;
+  pageViewOrganic: number;
   ctaClicked: number;
+  ctaFb: number;
+  ctaOrganic: number;
   submitPartial: number;
+  submitPartialFb: number;
+  submitPartialOrganic: number;
   submitQualified: number;
+  submitQualifiedFb: number;
+  submitQualifiedOrganic: number;
   /** BOOKING_COMPLETE count. The single booking number; rates divide by this. */
   bookedAll: number;
   bookedFb: number;
@@ -54,9 +63,17 @@ export const RAW_TAB_HEADERS = [
   'FB_IMPRESSIONS',
   'FB_CLICKS',
   'PAGE_VIEW',
+  'PAGE_VIEW_FB',
+  'PAGE_VIEW_ORGANIC',
   'CTA_CLICKED',
+  'CTA_FB',
+  'CTA_ORGANIC',
   'SUBMIT_PARTIAL',
+  'PARTIAL_FB',
+  'PARTIAL_ORGANIC',
   'SUBMIT_QUALIFIED',
+  'QUALIFIED_FB',
+  'QUALIFIED_ORGANIC',
   'BOOKED_ALL',
   'BOOKED_FB',
   'BOOKED_ORGANIC',
@@ -104,9 +121,17 @@ export function joinMarketingDaily(
         fbImpressions: s?.impressions ?? 0,
         fbClicks: s?.clicks ?? 0,
         pageView: m?.pageView ?? 0,
+        pageViewFb: m?.pageViewFb ?? 0,
+        pageViewOrganic: m?.pageViewOrganic ?? 0,
         ctaClicked: m?.ctaClicked ?? 0,
+        ctaFb: m?.ctaFb ?? 0,
+        ctaOrganic: m?.ctaOrganic ?? 0,
         submitPartial: m?.submitPartial ?? 0,
+        submitPartialFb: m?.submitPartialFb ?? 0,
+        submitPartialOrganic: m?.submitPartialOrganic ?? 0,
         submitQualified: m?.submitQualified ?? 0,
+        submitQualifiedFb: m?.submitQualifiedFb ?? 0,
+        submitQualifiedOrganic: m?.submitQualifiedOrganic ?? 0,
         bookedAll: m?.bookedAll ?? 0,
         bookedFb: m?.bookedFb ?? 0,
         bookedOrganic: m?.bookedOrganic ?? 0,
@@ -130,9 +155,17 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.fbImpressions,
     r.fbClicks,
     r.pageView,
+    r.pageViewFb,
+    r.pageViewOrganic,
     r.ctaClicked,
+    r.ctaFb,
+    r.ctaOrganic,
     r.submitPartial,
+    r.submitPartialFb,
+    r.submitPartialOrganic,
     r.submitQualified,
+    r.submitQualifiedFb,
+    r.submitQualifiedOrganic,
     r.bookedAll,
     r.bookedFb,
     r.bookedOrganic,

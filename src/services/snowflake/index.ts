@@ -135,12 +135,31 @@ export class SnowflakeService {
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
        ),
+       -- Every marketing event carries the session's utm_source / fbclid, so each
+       -- funnel step splits into FB (facebook/ig utm OR an fbclid) vs organic the
+       -- same way bookings do — the channel signal is visible from page view on.
        f AS (
          SELECT day,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS page_view,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW'
+                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS page_view_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW'
+                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS page_view_organic,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' THEN AMPLITUDE_ID END) AS cta_clicked,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED'
+                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS cta_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED'
+                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS cta_organic,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN AMPLITUDE_ID END) AS submit_partial,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL'
+                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS partial_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL'
+                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS partial_organic,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN AMPLITUDE_ID END) AS submit_qualified,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' THEN AMPLITUDE_ID END) AS booked_all,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
                 AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_fb,
@@ -177,7 +196,10 @@ export class SnowflakeService {
          GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
-         f.page_view, f.cta_clicked, f.submit_partial, f.submit_qualified,
+         f.page_view, f.page_view_fb, f.page_view_organic,
+         f.cta_clicked, f.cta_fb, f.cta_organic,
+         f.submit_partial, f.partial_fb, f.partial_organic,
+         f.submit_qualified, f.qualified_fb, f.qualified_organic,
          f.booked_all, f.booked_fb, f.booked_organic,
          -- CALL1_BOOKED mirrors the marketing BOOKING_COMPLETE event (matches Amplitude).
          -- ACCEPTED / NO_SHOW stay sourced from the sales pipeline cohort, so they can
@@ -194,9 +216,17 @@ export class SnowflakeService {
     return rows.map((r) => ({
       date: String(r.DATE),
       pageView: num(r.PAGE_VIEW),
+      pageViewFb: num(r.PAGE_VIEW_FB),
+      pageViewOrganic: num(r.PAGE_VIEW_ORGANIC),
       ctaClicked: num(r.CTA_CLICKED),
+      ctaFb: num(r.CTA_FB),
+      ctaOrganic: num(r.CTA_ORGANIC),
       submitPartial: num(r.SUBMIT_PARTIAL),
+      submitPartialFb: num(r.PARTIAL_FB),
+      submitPartialOrganic: num(r.PARTIAL_ORGANIC),
       submitQualified: num(r.SUBMIT_QUALIFIED),
+      submitQualifiedFb: num(r.QUALIFIED_FB),
+      submitQualifiedOrganic: num(r.QUALIFIED_ORGANIC),
       bookedAll: num(r.BOOKED_ALL),
       bookedFb: num(r.BOOKED_FB),
       bookedOrganic: num(r.BOOKED_ORGANIC),

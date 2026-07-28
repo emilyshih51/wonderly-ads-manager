@@ -17,6 +17,17 @@ import { JWT } from 'google-auth-library';
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 
+/**
+ * Wrap a sheet/tab name for A1 notation. Names with spaces or punctuation (e.g.
+ * "Daily Funnel") must be single-quoted in a range, and literal single quotes are
+ * escaped by doubling. Safe to apply to simple names too.
+ *
+ * @param tabName - The tab title
+ */
+function quoteTab(tabName: string): string {
+  return `'${tabName.replace(/'/g, "''")}'`;
+}
+
 export class GoogleSheetsApiError extends Error {
   constructor(
     message: string,
@@ -127,7 +138,7 @@ export class GoogleSheetsService {
     headers: string[],
     rows: (string | number)[][]
   ): Promise<void> {
-    await this.request(`/${spreadsheetId}/values/${encodeURIComponent(tabName)}:clear`, {
+    await this.request(`/${spreadsheetId}/values/${encodeURIComponent(quoteTab(tabName))}:clear`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
@@ -136,7 +147,7 @@ export class GoogleSheetsService {
     // numbers into real numbers — exactly as if typed. RAW stores dates as text,
     // which silently breaks MAX() and date-range formulas in the Summary tab.
     await this.request(
-      `/${spreadsheetId}/values/${encodeURIComponent(`${tabName}!A1`)}?valueInputOption=USER_ENTERED`,
+      `/${spreadsheetId}/values/${encodeURIComponent(`${quoteTab(tabName)}!A1`)}?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
         body: JSON.stringify({ values: [headers, ...rows] }),
@@ -184,7 +195,7 @@ export class GoogleSheetsService {
     // Number() can't parse, silently becoming 0 and wiping preserved rows).
     // FORMATTED_STRING keeps date cells as "2026-07-20" strings for the date regex.
     const data = await this.request<{ values?: (string | number)[][] }>(
-      `/${spreadsheetId}/values/${encodeURIComponent(tabName)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`
+      `/${spreadsheetId}/values/${encodeURIComponent(quoteTab(tabName))}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`
     );
 
     return data.values ?? [];

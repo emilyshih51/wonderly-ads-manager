@@ -44,7 +44,7 @@ const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 const RAW_TAB_NAME = 'wonderly_daily';
 
 /** Daily Funnel tab: per-step count, conversion rate, and cost, one row per day. */
-const DAILY_FUNNEL_TAB = 'daily_funnel';
+const DAILY_FUNNEL_TAB = 'Daily Funnel';
 
 /** Freshness/health tab. Other tabs reference it, and it never gets cleared with the data. */
 const META_TAB = 'meta';
@@ -271,7 +271,6 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       noShow: num(row[12]),
       disqualifiedLost: num(row[13]),
       held: num(row[14]),
-      confirmedCall1: num(row[15]),
     }));
 }
 

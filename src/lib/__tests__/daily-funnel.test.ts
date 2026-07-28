@@ -17,7 +17,6 @@ function row(o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
     noShow: 0,
     disqualifiedLost: 0,
     held: 0,
-    confirmedCall1: 0,
     fbSpend: 0,
     fbImpressions: 0,
     fbClicks: 0,
@@ -47,7 +46,6 @@ describe('toDailyFunnelValues', () => {
           submitPartial: 50,
           submitQualified: 25,
           bookedAll: 10,
-          confirmedCall1: 8,
           held: 6,
           accepted: 2,
         }),
@@ -57,20 +55,16 @@ describe('toDailyFunnelValues', () => {
     expect(m.CTA_RATE).toBe(0.1); // 100 / 1000
     expect(m.PARTIAL_RATE).toBe(0.5); // 50 / 100
     expect(m.QUAL_RATE).toBe(0.5); // 25 / 50
-    expect(m.BOOKING_RATE).toBe(0.4); // 10 / 25
-    expect(m.CONFIRM_RATE).toBe(0.8); // 8 / 10
-    expect(m.HELD_RATE).toBe(0.75); // 6 / 8 (vs confirmed)
-    expect(m.ACCEPT_RATE).toBe(0.25); // 2 / 8 (vs confirmed)
+    expect(m.CALL1_RATE).toBe(0.4); // 10 / 25
+    expect(m.HELD_RATE).toBe(0.6); // 6 / 10 (vs Call 1 booked)
+    expect(m.ACCEPT_RATE).toBe(0.2); // 2 / 10 (vs Call 1 booked)
   });
 
   it('computes cost per result from FB spend', () => {
-    const m = asMap(
-      toDailyFunnelValues([row({ fbSpend: 800, bookedAll: 4, confirmedCall1: 4, accepted: 2 })])[0]
-    );
+    const m = asMap(toDailyFunnelValues([row({ fbSpend: 800, bookedAll: 4, accepted: 2 })])[0]);
 
     expect(m.FB_SPEND).toBe(800);
-    expect(m.COST_PER_BOOKING).toBe(200); // 800 / 4
-    expect(m.COST_PER_CONFIRMED_CALL1).toBe(200); // 800 / 4
+    expect(m.COST_PER_CALL1).toBe(200); // 800 / 4
     expect(m.COST_PER_ACCEPTED).toBe(400); // 800 / 2
   });
 

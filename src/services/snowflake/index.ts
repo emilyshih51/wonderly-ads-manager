@@ -185,11 +185,7 @@ export class SnowflakeService {
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.no_show,0) AS no_show,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
-         COALESCE(s.held,0) AS held,
-         -- Confirmed Call 1 = the BOOKING_COMPLETE count (matches Amplitude), per the
-         -- decision to keep one booking number everywhere. Held/accepted still come
-         -- from the CRM cohort (s) and convert against this.
-         f.booked_all AS confirmed_call1
+         COALESCE(s.held,0) AS held
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days]
@@ -208,7 +204,6 @@ export class SnowflakeService {
       noShow: num(r.NO_SHOW),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
       held: num(r.HELD),
-      confirmedCall1: num(r.CONFIRMED_CALL1),
     }));
   }
 

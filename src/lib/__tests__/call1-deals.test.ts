@@ -41,7 +41,6 @@ function mkt(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRo
     noShow: 0,
     disqualifiedLost: 0,
     held: 0,
-    confirmedCall1: 0,
     fbSpend: 0,
     fbImpressions: 0,
     fbClicks: 0,

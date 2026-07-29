@@ -16,12 +16,14 @@
 export type SheetsRequest = Record<string, unknown>;
 
 /**
- * One metric column-group. `money` picks currency vs plain-number formatting; `hasCost`
- * prepends a Cost column (funnel stages); `hideOrganic` hides the empty Organic column.
+ * One metric column-group. `money` picks currency vs plain-number formatting;
+ * `wholeDollars` drops the cents on a money metric (Spend); `hasCost` prepends a Cost
+ * column (funnel stages); `hideOrganic` hides the empty Organic column.
  */
 export interface MetricFormat {
   label: string;
   money: boolean;
+  wholeDollars?: boolean;
   hasCost?: boolean;
   hideOrganic?: boolean;
 }
@@ -32,7 +34,7 @@ export interface MetricFormat {
  * the admin formatter share one source.
  */
 export const DAILY_METRICS_FORMAT: MetricFormat[] = [
-  { label: 'Spend', money: true },
+  { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
   { label: 'CPC', money: true, hideOrganic: true },
   { label: 'Page views', money: false, hasCost: true },
   { label: 'CTA', money: false, hasCost: true },
@@ -86,6 +88,7 @@ export function weekBreakRows(dates: string[], firstRowIndex: number): number[] 
 }
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
+const CURRENCY_WHOLE = { type: 'CURRENCY', pattern: '"$"#,##0' };
 const COUNT = { type: 'NUMBER', pattern: '#,##0' };
 const COUNT_DECIMAL = { type: 'NUMBER', pattern: '#,##0.0' };
 const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
@@ -169,7 +172,7 @@ export function buildDailyMetricsFormatRequests(
     const wow = colIdx++;
     const fb = colIdx++;
     const organic = colIdx++;
-    const valueFormat = m.money ? CURRENCY : COUNT;
+    const valueFormat = m.money ? (m.wholeDollars ? CURRENCY_WHOLE : CURRENCY) : COUNT;
 
     // Merge the metric name across its whole group in the group-header row.
     requests.push({

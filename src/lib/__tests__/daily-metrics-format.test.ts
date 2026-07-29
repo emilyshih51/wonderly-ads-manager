@@ -7,7 +7,7 @@ import {
 } from '@/lib/daily-metrics-format';
 
 const METRICS: MetricFormat[] = [
-  { label: 'Spend', money: true },
+  { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
   { label: 'CPC', money: true, hideOrganic: true },
   { label: 'Page views', money: false, hasCost: true },
 ];
@@ -45,15 +45,18 @@ describe('buildDailyMetricsFormatRequests', () => {
     expect(rules[0].addConditionalFormatRule.rule.gradientRule.midpoint.value).toBe('0');
   });
 
-  it('hides CPC’s Organic column and formats the Cost column as currency', () => {
+  it('hides Spend’s + CPC’s Organic columns and formats the Cost column as currency', () => {
     const hidden = reqs.filter(
       (r) =>
         'updateDimensionProperties' in r &&
         (r as any).updateDimensionProperties.properties?.hiddenByUser
     ) as any[];
 
-    // CPC Organic is column 8.
-    expect(hidden.some((r) => r.updateDimensionProperties.range.startIndex === 8)).toBe(true);
+    // Spend Organic is column 4; CPC Organic is column 8.
+    const hiddenCols = hidden.map((r) => r.updateDimensionProperties.range.startIndex);
+
+    expect(hiddenCols).toContain(4);
+    expect(hiddenCols).toContain(8);
 
     // Page views' Cost column (9) is currency.
     const currencyAt9 = reqs.some(

@@ -8,8 +8,8 @@ import {
 
 const METRICS: MetricFormat[] = [
   { label: 'Spend', money: true },
-  { label: 'CPC', money: true },
-  { label: 'Page views', money: false },
+  { label: 'CPC', money: true, hideOrganic: true },
+  { label: 'Page views', money: false, hasCost: true },
 ];
 
 describe('buildDailyMetricsFormatRequests', () => {
@@ -24,30 +24,46 @@ describe('buildDailyMetricsFormatRequests', () => {
     });
   });
 
-  it('merges one group header per metric across its five columns', () => {
+  it('merges each group across its variable width (Spend/CPC 4 cols, stages 5 with Cost)', () => {
     const merges = reqs.filter((r) => 'mergeCells' in r) as any[];
 
     expect(merges).toHaveLength(METRICS.length);
-    // First metric (Spend) merges cols 1..6 (ALL, w/w, FB, Organic, Cost).
-    expect(merges[0].mergeCells.range).toMatchObject({
-      startColumnIndex: 1,
-      endColumnIndex: 6,
-      startRowIndex: 0,
-      endRowIndex: 1,
-    });
-    // Third metric (Page views) starts at col 11 (1 + 2*5).
-    expect(merges[2].mergeCells.range.startColumnIndex).toBe(11);
+    // Spend: cols 1..5 (ALL, w/w, FB, Organic). CPC: 5..9. Page views (Cost first): 9..14.
+    expect(merges[0].mergeCells.range).toMatchObject({ startColumnIndex: 1, endColumnIndex: 5 });
+    expect(merges[1].mergeCells.range).toMatchObject({ startColumnIndex: 5, endColumnIndex: 9 });
+    expect(merges[2].mergeCells.range).toMatchObject({ startColumnIndex: 9, endColumnIndex: 14 });
   });
 
   it('adds a heat-map on every w/w column', () => {
     const rules = reqs.filter((r) => 'addConditionalFormatRule' in r) as any[];
 
     expect(rules).toHaveLength(METRICS.length);
-    // w/w columns are 2, 7, 12 (1 + g*5 + 1).
+    // w/w cols: Spend 2, CPC 6, Page views 11 (Cost=9, ALL=10, w/w=11).
     expect(rules.map((r) => r.addConditionalFormatRule.rule.ranges[0].startColumnIndex)).toEqual([
-      2, 7, 12,
+      2, 6, 11,
     ]);
     expect(rules[0].addConditionalFormatRule.rule.gradientRule.midpoint.value).toBe('0');
+  });
+
+  it('hides CPC’s Organic column and formats the Cost column as currency', () => {
+    const hidden = reqs.filter(
+      (r) =>
+        'updateDimensionProperties' in r &&
+        (r as any).updateDimensionProperties.properties?.hiddenByUser
+    ) as any[];
+
+    // CPC Organic is column 8.
+    expect(hidden.some((r) => r.updateDimensionProperties.range.startIndex === 8)).toBe(true);
+
+    // Page views' Cost column (9) is currency.
+    const currencyAt9 = reqs.some(
+      (r) =>
+        'repeatCell' in r &&
+        (r as any).repeatCell.range.startColumnIndex === 9 &&
+        (r as any).repeatCell.cell.userEnteredFormat.numberFormat?.type === 'CURRENCY'
+    );
+
+    expect(currencyAt9).toBe(true);
   });
 
   it('draws a border under the last row of each week', () => {

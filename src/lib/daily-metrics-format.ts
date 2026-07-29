@@ -15,30 +15,33 @@
 /** A Sheets API `batchUpdate` request. Loosely typed — the shapes are the API's, not ours. */
 export type SheetsRequest = Record<string, unknown>;
 
-/** One metric column-group. `money` picks currency vs plain-number formatting for its values. */
+/**
+ * One metric column-group. `money` picks currency vs plain-number formatting; `hasCost`
+ * prepends a Cost column (funnel stages); `hideOrganic` hides the empty Organic column.
+ */
 export interface MetricFormat {
   label: string;
   money: boolean;
+  hasCost?: boolean;
+  hideOrganic?: boolean;
 }
 
 /**
- * Metric groups in the exact order `computeDailyMetrics` writes them. Spend and CPC are
- * money; the rest are counts. Kept here so the cron and the admin formatter share one source.
+ * Metric groups in the exact order `computeDailyMetrics` writes them. Spend/CPC are money
+ * inputs (no Cost column); the funnel stages carry a Cost column. Kept here so the cron and
+ * the admin formatter share one source.
  */
 export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Spend', money: true },
-  { label: 'CPC', money: true },
-  { label: 'Page views', money: false },
-  { label: 'CTA', money: false },
-  { label: 'Partial', money: false },
-  { label: 'Qualified', money: false },
-  { label: 'Call 1 booked', money: false },
-  { label: 'Held', money: false },
-  { label: 'Accepted', money: false },
+  { label: 'CPC', money: true, hideOrganic: true },
+  { label: 'Page views', money: false, hasCost: true },
+  { label: 'CTA', money: false, hasCost: true },
+  { label: 'Partial', money: false, hasCost: true },
+  { label: 'Qualified', money: false, hasCost: true },
+  { label: 'Call 1 booked', money: false, hasCost: true },
+  { label: 'Held', money: false, hasCost: true },
+  { label: 'Accepted', money: false, hasCost: true },
 ];
-
-/** Columns per metric group in the grid: ALL, w/w, FB, Organic, Cost. */
-const COLS_PER_METRIC = 5;
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
 const FROZEN_ROWS = 5;
@@ -155,36 +158,43 @@ export function buildDailyMetricsFormatRequests(
     },
   ];
 
-  metrics.forEach((m, g) => {
-    const all = 1 + g * COLS_PER_METRIC;
-    const wow = all + 1;
-    const fb = all + 2;
-    const organic = all + 3;
-    const costCol = all + 4;
+  // Variable-width groups: funnel stages prepend a Cost column (Cost · ALL · w/w · FB ·
+  // Organic); Spend/CPC have no Cost (ALL · w/w · FB · Organic).
+  let colIdx = 1;
+
+  metrics.forEach((m) => {
+    const groupStart = colIdx;
+    const cost = m.hasCost ? colIdx++ : undefined;
+    const all = colIdx++;
+    const wow = colIdx++;
+    const fb = colIdx++;
+    const organic = colIdx++;
     const valueFormat = m.money ? CURRENCY : COUNT;
 
-    // Merge the metric name across its five columns in the group-header row.
+    // Merge the metric name across its whole group in the group-header row.
     requests.push({
       mergeCells: {
         range: {
           sheetId,
           startRowIndex: 0,
           endRowIndex: 1,
-          startColumnIndex: all,
-          endColumnIndex: all + COLS_PER_METRIC,
+          startColumnIndex: groupStart,
+          endColumnIndex: colIdx,
         },
         mergeType: 'MERGE_ALL',
       },
     });
 
     // Cost (per action) is always dollars, whatever the stage's own format is.
-    requests.push({
-      repeatCell: {
-        range: column(sheetId, costCol),
-        cell: { userEnteredFormat: { numberFormat: CURRENCY } },
-        fields: 'userEnteredFormat.numberFormat',
-      },
-    });
+    if (cost !== undefined) {
+      requests.push({
+        repeatCell: {
+          range: column(sheetId, cost),
+          cell: { userEnteredFormat: { numberFormat: CURRENCY } },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      });
+    }
 
     // ALL / FB / Organic take the value format; w/w is a percent.
     for (const col of [all, fb, organic]) {
@@ -197,8 +207,7 @@ export function buildDailyMetricsFormatRequests(
       });
 
       // The 7d-average of a count is fractional (e.g. 0.6 held) — show one decimal on
-      // that one cell so it (and its FB/Organic split) doesn't round away to 0. Money
-      // metrics already show cents via their currency format.
+      // that one cell so it (and its FB/Organic split) doesn't round away to 0.
       if (!m.money) {
         requests.push({
           repeatCell: {
@@ -238,11 +247,22 @@ export function buildDailyMetricsFormatRequests(
         },
       },
     });
+
+    // Hide the Organic column when it carries no data (CPC — no organic ad spend).
+    if (m.hideOrganic) {
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: organic, endIndex: organic + 1 },
+          properties: { hiddenByUser: true },
+          fields: 'hiddenByUser',
+        },
+      });
+    }
   });
 
   // Week-separator borders. Rows shift down as new days arrive, so clear the daily
   // block's inner borders first, then draw a line under the last row of each week.
-  const lastColumn = 1 + metrics.length * COLS_PER_METRIC;
+  const lastColumn = colIdx;
 
   requests.push({
     updateBorders: {

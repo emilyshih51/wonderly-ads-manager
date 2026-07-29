@@ -1,9 +1,9 @@
 /**
  * Daily Metrics — the Motion-style grid: one row per day, each funnel metric shown as
  * ALL, a week-over-week % (that day vs the same weekday last week, i.e. 7 rows back),
- * then the FB and Organic channel split and a Cost column (FB spend ÷ that stage's
- * count) for each funnel stage, with a 7d-average / MTD / Prev-Month summary block on
- * top written as live sheet formulas.
+ * with the FB and Organic channel split, and a leading Cost column (FB spend ÷ that
+ * stage's count) on each funnel stage. Spend/CPC have no Cost column. Summary rows
+ * (7d-avg / MTD / Prev-Month) are live sheet formulas; Cost uses ratio-of-totals.
  *
  * Every marketing event carries the session's utm_source / fbclid, so the funnel steps
  * (page views → CTA → partial → qualified → Call 1 booked) split into FB vs Organic
@@ -31,12 +31,9 @@ interface Metric {
   organic?: (r: MarketingDailyRow) => number;
   numer?: (r: MarketingDailyRow) => number;
   denom?: (r: MarketingDailyRow) => number;
-  /** Add a "Cost" column = FB spend ÷ this stage's ALL count (cost per action). */
+  /** Add a "Cost" column = FB spend ÷ this stage's count (cost per action), before ALL. */
   hasCost?: boolean;
 }
-
-/** Columns per metric group: ALL, w/w, FB, Organic, Cost. */
-const COLS_PER_METRIC = 5;
 
 const METRICS: Metric[] = [
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
@@ -102,15 +99,6 @@ const METRICS: Metric[] = [
   },
 ];
 
-/** Cost per action for a stage: FB spend ÷ the stage's ALL count (0 when no actions). */
-function costAccessor(m: Metric): (r: MarketingDailyRow) => number {
-  return (r) => {
-    const count = m.daily(r);
-
-    return count > 0 ? r.fbSpend / count : 0;
-  };
-}
-
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -170,13 +158,31 @@ export function computeDailyMetrics(
   const p7Start = firstComplete + 7;
   const p7End = firstComplete + 13;
 
-  // Row 1: metric names above each ALL/w-w/FB/Organic group. Row 2: sub-headers.
+  // Per-metric column layout. Funnel stages prepend a Cost column, so groups are variable
+  // width: Spend/CPC are [ALL, w/w, FB, Organic]; stages are [Cost, ALL, w/w, FB, Organic].
+  let colIdx = 1;
+  const layout = METRICS.map((m) => {
+    const cost = m.hasCost ? colIdx++ : undefined;
+    const all = colIdx++;
+    const wow = colIdx++;
+    const fb = colIdx++;
+    const organic = colIdx++;
+
+    return { cost, all, wow, fb, organic };
+  });
+  // Spend is the first metric (no Cost column), so its ALL column is the spend column.
+  const spendAll = colLetter(layout[0].all);
+
   const groupHeader: (string | number)[] = [''];
   const subHeader: (string | number)[] = ['Date'];
 
   for (const m of METRICS) {
-    groupHeader.push(m.label, ...Array(COLS_PER_METRIC - 1).fill(''));
-    subHeader.push('ALL', 'w/w', 'FB', 'Organic', 'Cost');
+    const cols = m.hasCost
+      ? ['Cost', 'ALL', 'w/w', 'FB', 'Organic']
+      : ['ALL', 'w/w', 'FB', 'Organic'];
+
+    groupHeader.push(m.label, ...Array(cols.length - 1).fill(''));
+    subHeader.push(...cols);
   }
 
   // Summary-row formulas reference the daily block, sheet rows 6..dataEnd.
@@ -201,20 +207,25 @@ export function computeDailyMetrics(
     };
   };
 
+  /** Cost per action = ratio of totals: Σ FB spend ÷ Σ stage count over the window. */
+  const costCells = (stageAll: string) => ({
+    d7: `=IFERROR(SUM(${spendAll}${s7Start}:${spendAll}${s7End})/SUM(${stageAll}${s7Start}:${stageAll}${s7End}),0)`,
+    mtd: `=IFERROR(${sumifs(spendAll, ty, tm, 1, td)}/${sumifs(stageAll, ty, tm, 1, td)},0)`,
+    prev: `=IFERROR(${sumifs(spendAll, py, pm, 1, prevMonthLastDay)}/${sumifs(stageAll, py, pm, 1, prevMonthLastDay)},0)`,
+  });
+
   const d7Row: (string | number)[] = ['7d avg'];
   const mtdRow: (string | number)[] = ['MTD'];
   const prevRow: (string | number)[] = ['Prev Month'];
 
   METRICS.forEach((m, g) => {
-    const allC = 1 + g * COLS_PER_METRIC;
-    const La = colLetter(allC);
+    const L = layout[g];
+    const La = colLetter(L.all);
     const ratio = Boolean(m.numer && m.denom);
 
-    const all = valueCells(allC, true, ratio);
-    const fb = valueCells(allC + 2, Boolean(m.fb), ratio);
-    const organic = valueCells(allC + 3, Boolean(m.organic), ratio);
-    // Cost is a ratio (avg of the daily cost), present only for stages with a cost.
-    const cost = valueCells(allC + 4, Boolean(m.hasCost), true);
+    const all = valueCells(L.all, true, ratio);
+    const fb = valueCells(L.fb, Boolean(m.fb), ratio);
+    const organic = valueCells(L.organic, Boolean(m.organic), ratio);
 
     // 7d w/w: this-week average vs the previous 7 completed days.
     const wow7 = `=IFERROR((${La}3-AVERAGE(${La}${p7Start}:${La}${p7End}))/AVERAGE(${La}${p7Start}:${La}${p7End}),"")`;
@@ -224,9 +235,17 @@ export function computeDailyMetrics(
       : sumifs(La, py, pm, 1, prevSpanEndDay);
     const wowMtd = `=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`;
 
-    d7Row.push(all.d7, wow7, fb.d7, organic.d7, cost.d7);
-    mtdRow.push(all.mtd, wowMtd, fb.mtd, organic.mtd, cost.mtd);
-    prevRow.push(all.prev, '', fb.prev, organic.prev, cost.prev);
+    if (m.hasCost) {
+      const cost = costCells(La);
+
+      d7Row.push(cost.d7, all.d7, wow7, fb.d7, organic.d7);
+      mtdRow.push(cost.mtd, all.mtd, wowMtd, fb.mtd, organic.mtd);
+      prevRow.push(cost.prev, all.prev, '', fb.prev, organic.prev);
+    } else {
+      d7Row.push(all.d7, wow7, fb.d7, organic.d7);
+      mtdRow.push(all.mtd, wowMtd, fb.mtd, organic.mtd);
+      prevRow.push(all.prev, '', fb.prev, organic.prev);
+    }
   });
 
   const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
@@ -236,13 +255,20 @@ export function computeDailyMetrics(
     const out: (string | number)[] = [r.date];
 
     for (const m of METRICS) {
-      out.push(
-        round2(m.daily(r)),
-        weekAgo ? pct(m.daily(r), m.daily(weekAgo)) : '',
-        m.fb ? round2(m.fb(r)) : '',
-        m.organic ? round2(m.organic(r)) : '',
-        m.hasCost ? round2(costAccessor(m)(r)) : ''
-      );
+      const count = m.daily(r);
+      const allV = round2(count);
+      const wowV = weekAgo ? pct(count, m.daily(weekAgo)) : '';
+      const fbV = m.fb ? round2(m.fb(r)) : '';
+      const orgV = m.organic ? round2(m.organic(r)) : '';
+
+      if (m.hasCost) {
+        // Daily cost = that day's FB spend ÷ that day's count (blank on zero-action days).
+        const costV = count > 0 ? round2(r.fbSpend / count) : '';
+
+        out.push(costV, allV, wowV, fbV, orgV);
+      } else {
+        out.push(allV, wowV, fbV, orgV);
+      }
     }
 
     matrix.push(out);

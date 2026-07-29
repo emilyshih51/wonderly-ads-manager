@@ -75,13 +75,29 @@ export interface DailyMarketingRow {
   acceptedBing: number;
   acceptedNa: number;
 
-  /** Booked deals whose Call 1 happened (milestone). */
+  /** Booked deals whose Call 1 happened (milestone), keyed to the booking day (cohort). */
   held: number;
   heldFb: number;
   heldGoogle: number;
   heldYahoo: number;
   heldBing: number;
   heldNa: number;
+
+  /** Acceptances that HAPPENED this day (flow — keyed to the accepted date, for trends). */
+  acceptedFlow: number;
+  acceptedFlowFb: number;
+  acceptedFlowGoogle: number;
+  acceptedFlowYahoo: number;
+  acceptedFlowBing: number;
+  acceptedFlowNa: number;
+
+  /** Call 1s HELD this day (flow — keyed to the first post-call event date, for trends). */
+  heldFlow: number;
+  heldFlowFb: number;
+  heldFlowGoogle: number;
+  heldFlowYahoo: number;
+  heldFlowBing: number;
+  heldFlowNa: number;
 
   /** Booked deals currently a no-show. */
   noShow: number;
@@ -134,6 +150,18 @@ const SPLIT_METRICS: {
   { allKey: 'bookedAll', allHeader: 'BOOKED_ALL', fieldPrefix: 'booked', headerPrefix: 'BOOKED' },
   { allKey: 'accepted', allHeader: 'ACCEPTED', fieldPrefix: 'accepted', headerPrefix: 'ACCEPTED' },
   { allKey: 'held', allHeader: 'HELD', fieldPrefix: 'held', headerPrefix: 'HELD' },
+  {
+    allKey: 'acceptedFlow',
+    allHeader: 'ACCEPTED_FLOW',
+    fieldPrefix: 'acceptedFlow',
+    headerPrefix: 'ACCEPTED_FLOW',
+  },
+  {
+    allKey: 'heldFlow',
+    allHeader: 'HELD_FLOW',
+    fieldPrefix: 'heldFlow',
+    headerPrefix: 'HELD_FLOW',
+  },
 ];
 
 interface RawColumn {

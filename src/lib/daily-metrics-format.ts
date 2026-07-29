@@ -35,6 +35,13 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Call 1 booked', money: false },
   { label: 'Held', money: false },
   { label: 'Accepted', money: false },
+  { label: 'Cost/visit', money: true },
+  { label: 'Cost/CTA', money: true },
+  { label: 'Cost/partial', money: true },
+  { label: 'Cost/qualified', money: true },
+  { label: 'Cost/Call 1', money: true },
+  { label: 'Cost/held', money: true },
+  { label: 'Cost/accepted', money: true },
 ];
 
 /** Columns per metric group in the grid: ALL, w/w, FB, Organic. */

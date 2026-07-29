@@ -210,7 +210,12 @@ export class SnowflakeService {
            -- stays true even if the deal is later disqualified.
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
                 IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN 1 ELSE 0 END) AS ever_held
+                THEN 1 ELSE 0 END) AS ever_held,
+           -- Flow dates: the day the acceptance / first held happened (for daily trends).
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
+                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
+                THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS held_day
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -258,7 +263,7 @@ export class SnowflakeService {
        -- One row per deal with its stage-derived outcomes and a source bucket (1 FB,
        -- 2 Google, 3 Yahoo, 4 Bing, 5 N/A), so held and accepted split five ways.
        ds AS (
-         SELECT d.booked_day AS day, d.ever_accepted,
+         SELECT d.booked_day AS day, d.ever_accepted, d.accepted_day, d.held_day,
            -- Held = the call happened: reached a post-call stage by event OR is currently
            -- in one. Independent of the current stage, so a held-then-disqualified deal
            -- stays held (and is also counted as disqualified).
@@ -298,6 +303,28 @@ export class SnowflakeService {
            SUM(no_show) AS no_show,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
+       ),
+       -- Flow: acceptances keyed to the day they HAPPENED (accepted_day), for trends.
+       sacc AS (
+         SELECT accepted_day AS day,
+           COUNT(*) AS accepted_flow,
+           SUM(CASE WHEN bucket=1 THEN 1 ELSE 0 END) AS accepted_flow_fb,
+           SUM(CASE WHEN bucket=2 THEN 1 ELSE 0 END) AS accepted_flow_google,
+           SUM(CASE WHEN bucket=3 THEN 1 ELSE 0 END) AS accepted_flow_yahoo,
+           SUM(CASE WHEN bucket=4 THEN 1 ELSE 0 END) AS accepted_flow_bing,
+           SUM(CASE WHEN bucket=5 THEN 1 ELSE 0 END) AS accepted_flow_na
+         FROM ds WHERE accepted_day IS NOT NULL GROUP BY 1
+       ),
+       -- Flow: Call 1s keyed to the day they were first HELD (held_day), for trends.
+       sheld AS (
+         SELECT held_day AS day,
+           COUNT(*) AS held_flow,
+           SUM(CASE WHEN bucket=1 THEN 1 ELSE 0 END) AS held_flow_fb,
+           SUM(CASE WHEN bucket=2 THEN 1 ELSE 0 END) AS held_flow_google,
+           SUM(CASE WHEN bucket=3 THEN 1 ELSE 0 END) AS held_flow_yahoo,
+           SUM(CASE WHEN bucket=4 THEN 1 ELSE 0 END) AS held_flow_bing,
+           SUM(CASE WHEN bucket=5 THEN 1 ELSE 0 END) AS held_flow_na
+         FROM ds WHERE held_day IS NOT NULL GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_google, f.page_view_yahoo, f.page_view_bing, f.page_view_na,
@@ -312,8 +339,17 @@ export class SnowflakeService {
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
          COALESCE(s.held_fb,0) AS held_fb, COALESCE(s.held_google,0) AS held_google,
-         COALESCE(s.held_yahoo,0) AS held_yahoo, COALESCE(s.held_bing,0) AS held_bing, COALESCE(s.held_na,0) AS held_na
-       FROM f LEFT JOIN s ON f.day = s.day
+         COALESCE(s.held_yahoo,0) AS held_yahoo, COALESCE(s.held_bing,0) AS held_bing, COALESCE(s.held_na,0) AS held_na,
+         COALESCE(sacc.accepted_flow,0) AS accepted_flow,
+         COALESCE(sacc.accepted_flow_fb,0) AS accepted_flow_fb, COALESCE(sacc.accepted_flow_google,0) AS accepted_flow_google,
+         COALESCE(sacc.accepted_flow_yahoo,0) AS accepted_flow_yahoo, COALESCE(sacc.accepted_flow_bing,0) AS accepted_flow_bing, COALESCE(sacc.accepted_flow_na,0) AS accepted_flow_na,
+         COALESCE(sheld.held_flow,0) AS held_flow,
+         COALESCE(sheld.held_flow_fb,0) AS held_flow_fb, COALESCE(sheld.held_flow_google,0) AS held_flow_google,
+         COALESCE(sheld.held_flow_yahoo,0) AS held_flow_yahoo, COALESCE(sheld.held_flow_bing,0) AS held_flow_bing, COALESCE(sheld.held_flow_na,0) AS held_flow_na
+       FROM f
+       LEFT JOIN s ON f.day = s.day
+       LEFT JOIN sacc ON f.day = sacc.day
+       LEFT JOIN sheld ON f.day = sheld.day
        ORDER BY f.day DESC`,
       [-days, -days, -days]
     );
@@ -362,6 +398,18 @@ export class SnowflakeService {
       heldYahoo: num(r.HELD_YAHOO),
       heldBing: num(r.HELD_BING),
       heldNa: num(r.HELD_NA),
+      acceptedFlow: num(r.ACCEPTED_FLOW),
+      acceptedFlowFb: num(r.ACCEPTED_FLOW_FB),
+      acceptedFlowGoogle: num(r.ACCEPTED_FLOW_GOOGLE),
+      acceptedFlowYahoo: num(r.ACCEPTED_FLOW_YAHOO),
+      acceptedFlowBing: num(r.ACCEPTED_FLOW_BING),
+      acceptedFlowNa: num(r.ACCEPTED_FLOW_NA),
+      heldFlow: num(r.HELD_FLOW),
+      heldFlowFb: num(r.HELD_FLOW_FB),
+      heldFlowGoogle: num(r.HELD_FLOW_GOOGLE),
+      heldFlowYahoo: num(r.HELD_FLOW_YAHOO),
+      heldFlowBing: num(r.HELD_FLOW_BING),
+      heldFlowNa: num(r.HELD_FLOW_NA),
       noShow: num(r.NO_SHOW),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
     }));

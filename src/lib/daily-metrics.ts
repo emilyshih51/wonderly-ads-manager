@@ -32,6 +32,13 @@ interface Metric {
 
 const cpc = (r: MarketingDailyRow): number => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0);
 
+/** A cost-per-action metric: FB spend ÷ a stage count. Facebook-only (spend is FB). */
+function cpaMetric(label: string, count: Accessor): Metric {
+  const perAction: Accessor = (r) => (count(r) > 0 ? r.fbSpend / count(r) : 0);
+
+  return { label, daily: perAction, fb: perAction, numer: (r) => r.fbSpend, denom: count };
+}
+
 const METRICS: Metric[] = [
   // Spend and CPC are 100% Facebook — FB mirrors ALL, the other channels stay blank.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend },
@@ -81,24 +88,35 @@ const METRICS: Metric[] = [
     bing: (r) => r.bookedBing,
     na: (r) => r.bookedNa,
   },
+  // Held / Accepted are keyed to the day the event happened (flow), so they read as a
+  // real daily trend — the cohort (booking-day) versions live in the Daily Funnel.
   {
     label: 'Held',
-    daily: (r) => r.held,
-    fb: (r) => r.heldFb,
-    google: (r) => r.heldGoogle,
-    yahoo: (r) => r.heldYahoo,
-    bing: (r) => r.heldBing,
-    na: (r) => r.heldNa,
+    daily: (r) => r.heldFlow,
+    fb: (r) => r.heldFlowFb,
+    google: (r) => r.heldFlowGoogle,
+    yahoo: (r) => r.heldFlowYahoo,
+    bing: (r) => r.heldFlowBing,
+    na: (r) => r.heldFlowNa,
   },
   {
     label: 'Accepted',
-    daily: (r) => r.accepted,
-    fb: (r) => r.acceptedFb,
-    google: (r) => r.acceptedGoogle,
-    yahoo: (r) => r.acceptedYahoo,
-    bing: (r) => r.acceptedBing,
-    na: (r) => r.acceptedNa,
+    daily: (r) => r.acceptedFlow,
+    fb: (r) => r.acceptedFlowFb,
+    google: (r) => r.acceptedFlowGoogle,
+    yahoo: (r) => r.acceptedFlowYahoo,
+    bing: (r) => r.acceptedFlowBing,
+    na: (r) => r.acceptedFlowNa,
   },
+  // Cost per action for each funnel stage: FB spend ÷ that stage's count (FB-only, since
+  // spend is Facebook). The other channels stay blank and are hidden in the sheet.
+  cpaMetric('Cost/visit', (r) => r.pageView),
+  cpaMetric('Cost/CTA', (r) => r.ctaClicked),
+  cpaMetric('Cost/partial', (r) => r.submitPartial),
+  cpaMetric('Cost/qualified', (r) => r.submitQualified),
+  cpaMetric('Cost/Call 1', (r) => r.bookedAll),
+  cpaMetric('Cost/held', (r) => r.heldFlow),
+  cpaMetric('Cost/accepted', (r) => r.acceptedFlow),
 ];
 
 /** Per-source columns in order (after ALL and w/w). */

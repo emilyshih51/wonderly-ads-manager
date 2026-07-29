@@ -137,6 +137,20 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Current stage in “Disqualified or Lost” / “Disqualified Lead” / “DQ - Drip”. No event, so not dated.',
   ],
   [
+    'ACCEPTED / HELD (Daily Metrics) vs cohort',
+    'wonderly_daily, Daily Metrics, Daily Funnel',
+    'Two keyings on purpose. Daily Metrics shows Accepted/Held keyed to the day the event HAPPENED (flow — a real daily trend). The Daily Funnel keeps the cohort version (keyed to the booking day) for booked→accepted / booked→held conversion rates.',
+    'CRM',
+    'Flow: ACCEPTED_FLOW/HELD_FLOW = deals whose accepted/first-held event fell on that day. Cohort: ACCEPTED/HELD = of that day’s bookings, how many ever accepted/held.',
+  ],
+  [
+    'Cost/<stage>',
+    'Daily Metrics',
+    'Cost per action for each funnel stage — visit, CTA, partial, qualified, Call 1, held, accepted.',
+    'Derived',
+    'FB_SPEND ÷ that stage’s count. Facebook-only (spend is FB), so the non-FB channel columns are hidden.',
+  ],
+  [
     'HELD / ACCEPTED _FB / _GOOGLE / _YAHOO / _BING / _NA',
     'wonderly_daily, Daily Metrics',
     'Held and accepted deals split five ways by the source that produced the Call 1.',

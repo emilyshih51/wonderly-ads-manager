@@ -308,8 +308,8 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'EV_TAKE / AD_SPEND / PNL',
     'customer_pnl',
     'Wonderly’s cut of customer value, the ad spend it runs for customers, and the P&L.',
-    'Snowflake (customer-value view)',
-    'Summed per day over paying customers only (subscription active/past_due, with activity that day) so it ties out to the Customer Funnel tool. EV is expected value (forward-looking), so daily PnL is lumpy.',
+    'Snowflake (customer-value view + Meta spend)',
+    'Paying customers only (subscription active/past_due). EV take = EV_OWED; AD_SPEND = actual delivered Meta spend (not the value view budget); PNL = EV − actual spend. Matches the Customer Funnel tool. EV is forward-looking, so daily PnL is lumpy and won’t tie to the dollar.',
   ],
 
   // --- meta ---------------------------------------------------------------

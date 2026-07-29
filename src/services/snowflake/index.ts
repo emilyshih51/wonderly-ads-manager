@@ -37,6 +37,10 @@ const CUSTOMER_VALUE_DAILY =
 /** Prod teams dimension — 1:1 with the value view's teams, carries the ad go-live date. */
 const BASE_TEAMS = 'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.BASE__TEAMS';
 
+/** Actual delivered Meta spend per customer per day (the value view's AD_SPEND is budget). */
+const CUSTOMER_META_SPEND_DAILY =
+  'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.FCT__CUSTOMER_META_SPEND_DAILY';
+
 interface SnowflakeConfig {
   account: string;
   username: string;
@@ -300,33 +304,55 @@ export class SnowflakeService {
   /**
    * Daily aggregate customer P&L over the *paying* customer base.
    *
-   * Uses the `_OWED` (take) columns — Wonderly's cut — not gross EV, and restricts to
-   * teams whose subscription is `active` or `past_due`, with activity that day. This is
-   * what makes it tie out to the internal Customer Funnel tool (PnL = EV take − ad spend):
-   * the raw value view carries a dense row for every team (trials, canceled, and idle
-   * non-customers), whose ad spend without owed-EV would otherwise drag daily PnL down.
+   * Ties out to the internal Customer Funnel tool by matching its three choices:
+   *   - EV take = `EV_OWED_USD` (Wonderly's cut, not gross EV);
+   *   - Ad spend = *actual delivered* Meta spend (`TOTAL_META_SPEND_USD`), NOT the value
+   *     view's `AD_SPEND_USD`, which is the daily budget (higher than what actually ran);
+   *   - scope = teams whose subscription is `active` or `past_due` — the raw value view
+   *     carries a dense row for every team (trials, canceled, idle non-customers) whose
+   *     spend without owed-EV would otherwise drag PnL down.
+   * PnL is then EV take − actual spend. It won't tie to the dollar (the tool's PnL is a
+   * modeled expected value with a large uncertainty band and re-syncs daily), but the
+   * scope and spend source now match.
    *
-   * Note: subscription status is the team's *current* status (BASE__TEAMS has no
-   * point-in-time status), so a recently-churned team drops out of its historical days.
-   * `AD_SPEND` here is what Wonderly manages for customers, not acquisition spend.
+   * Note: subscription status is the team's *current* status (no point-in-time status),
+   * so a recently-churned team drops out of its historical days. `AD_SPEND` here is what
+   * Wonderly manages for customers, not acquisition spend.
    *
    * @param days - Trailing window to pull, e.g. 90
    * @returns One row per day, newest first
    */
   async getDailyCustomerPnl(days: number): Promise<CustomerPnlRow[]> {
     const rows = await this.query<Record<string, unknown>>(
-      `SELECT TO_CHAR(v.METRIC_DATE,'YYYY-MM-DD') AS DATE,
-         COUNT(DISTINCT v.TEAM_ID) AS customers,
-         ROUND(SUM(v.EV_OWED_USD)) AS ev_take,
-         ROUND(SUM(v.AD_SPEND_USD)) AS ad_spend,
-         ROUND(SUM(v.PNL_USD)) AS pnl
-       FROM ${CUSTOMER_VALUE_DAILY} v
-       JOIN ${BASE_TEAMS} t ON t.WONDERLY__TEAM__ID = v.TEAM_ID
-       WHERE v.METRIC_DATE >= DATEADD('day', ?, CURRENT_DATE)
-         AND t.WONDERLY__TEAM__SUBSCRIPTION_STATUS IN ('active','past_due')
-         AND (v.AD_SPEND_USD <> 0 OR v.EV_OWED_USD <> 0)
+      `WITH ms AS (
+         SELECT TEAM_ID, EVENT_DATE AS d, SUM(TOTAL_META_SPEND_USD) AS spend
+         FROM ${CUSTOMER_META_SPEND_DAILY}
+         WHERE EVENT_DATE >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1, 2
+       ),
+       v AS (
+         SELECT TEAM_ID, METRIC_DATE AS d, SUM(EV_OWED_USD) AS ev
+         FROM ${CUSTOMER_VALUE_DAILY}
+         WHERE METRIC_DATE >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1, 2
+       ),
+       j AS (
+         SELECT COALESCE(ms.TEAM_ID, v.TEAM_ID) AS team_id,
+           COALESCE(ms.d, v.d) AS d,
+           COALESCE(ms.spend, 0) AS spend,
+           COALESCE(v.ev, 0) AS ev
+         FROM ms FULL OUTER JOIN v ON ms.TEAM_ID = v.TEAM_ID AND ms.d = v.d
+       )
+       SELECT TO_CHAR(j.d,'YYYY-MM-DD') AS DATE,
+         COUNT(DISTINCT CASE WHEN j.spend <> 0 OR j.ev <> 0 THEN j.team_id END) AS customers,
+         ROUND(SUM(j.ev)) AS ev_take,
+         ROUND(SUM(j.spend)) AS ad_spend,
+         ROUND(SUM(j.ev) - SUM(j.spend)) AS pnl
+       FROM j
+       JOIN ${BASE_TEAMS} t ON t.WONDERLY__TEAM__ID = j.team_id
+       WHERE t.WONDERLY__TEAM__SUBSCRIPTION_STATUS IN ('active','past_due')
        GROUP BY 1 ORDER BY 1 DESC`,
-      [-days]
+      [-days, -days]
     );
 
     return rows.map((r) => ({

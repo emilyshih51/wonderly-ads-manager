@@ -239,14 +239,16 @@ export class SnowflakeService {
        -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
        ds AS (
          SELECT d.booked_day, d.accepted_day, d.ever_accepted,
-           -- Held = the call happened: reached a post-call stage by event OR is currently
-           -- in one. Independent of the current stage, so a held-then-disqualified deal
-           -- stays held (and is also counted as disqualified).
+           -- Held = the deal moved PAST "Call 1 Scheduled" to any real disposition (so the
+           -- call happened), whether that's positive or a disqualification. It is NOT held
+           -- if it's still sitting in "Call 1 Scheduled" (call not yet held / not updated)
+           -- or a no-show ("Call Missed Several Times"). Counted via a positive stage-change
+           -- event OR a current CRM stage that is past the scheduled call.
            CASE WHEN d.ever_held_event = 1
-                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
                 THEN 1 ELSE 0 END AS held,
-           -- Held date = first post-call event; the rare current-stage-only held deals
-           -- (no event) fall back to their booking day.
+           -- Held date = first post-call event when there is one; disqualified / churned
+           -- deals have no positive event, so they fall back to their booking day.
            COALESCE(d.held_day, d.booked_day) AS held_date,
            CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
            CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
@@ -553,7 +555,7 @@ export class SnowflakeService {
          TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          CASE WHEN de.ever_held = 1
-              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
               THEN 1 ELSE 0 END AS HELD,
          de.ever_accepted AS ACCEPTED,
          CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,

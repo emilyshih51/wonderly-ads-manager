@@ -2,7 +2,7 @@
  * Daily Metrics — the Motion-style grid: one row per day, each funnel metric shown as
  * ALL, a week-over-week % (that day vs the same weekday last week, i.e. 7 rows back),
  * with the FB and Organic channel split, and a leading Cost column (FB spend ÷ that
- * stage's count) on each funnel stage. Spend/CPC have no Cost column. Summary rows
+ * stage's FB count) on each funnel stage. Spend/CPC have no Cost column. Summary rows
  * (7d-avg / MTD / Prev-Month) are live sheet formulas; Cost uses ratio-of-totals.
  *
  * Every marketing event carries the session's utm_source / fbclid, so the funnel steps
@@ -207,11 +207,15 @@ export function computeDailyMetrics(
     };
   };
 
-  /** Cost per action = ratio of totals: Σ FB spend ÷ Σ stage count over the window. */
-  const costCells = (stageAll: string) => ({
-    d7: `=IFERROR(SUM(${spendAll}${s7Start}:${spendAll}${s7End})/SUM(${stageAll}${s7Start}:${stageAll}${s7End}),0)`,
-    mtd: `=IFERROR(${sumifs(spendAll, ty, tm, 1, td)}/${sumifs(stageAll, ty, tm, 1, td)},0)`,
-    prev: `=IFERROR(${sumifs(spendAll, py, pm, 1, prevMonthLastDay)}/${sumifs(stageAll, py, pm, 1, prevMonthLastDay)},0)`,
+  /**
+   * Cost per action = ratio of totals: Σ FB spend ÷ Σ FB stage count over the window.
+   * All spend is Facebook, so the denominator is the stage's FB count (not ALL) to give a
+   * true FB cost per action.
+   */
+  const costCells = (stageFb: string) => ({
+    d7: `=IFERROR(SUM(${spendAll}${s7Start}:${spendAll}${s7End})/SUM(${stageFb}${s7Start}:${stageFb}${s7End}),0)`,
+    mtd: `=IFERROR(${sumifs(spendAll, ty, tm, 1, td)}/${sumifs(stageFb, ty, tm, 1, td)},0)`,
+    prev: `=IFERROR(${sumifs(spendAll, py, pm, 1, prevMonthLastDay)}/${sumifs(stageFb, py, pm, 1, prevMonthLastDay)},0)`,
   });
 
   const d7Row: (string | number)[] = ['7d avg'];
@@ -236,7 +240,7 @@ export function computeDailyMetrics(
     const wowMtd = `=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`;
 
     if (m.hasCost) {
-      const cost = costCells(La);
+      const cost = costCells(colLetter(L.fb));
 
       d7Row.push(cost.d7, all.d7, wow7, fb.d7, organic.d7);
       mtdRow.push(cost.mtd, all.mtd, wowMtd, fb.mtd, organic.mtd);
@@ -262,8 +266,10 @@ export function computeDailyMetrics(
       const orgV = m.organic ? round2(m.organic(r)) : '';
 
       if (m.hasCost) {
-        // Daily cost = that day's FB spend ÷ that day's count (blank on zero-action days).
-        const costV = count > 0 ? round2(r.fbSpend / count) : '';
+        // Daily cost = that day's FB spend ÷ that day's FB count (blank on zero-FB days).
+        // All spend is Facebook, so divide by the FB count for a true FB cost per action.
+        const fbCount = m.fb ? m.fb(r) : 0;
+        const costV = fbCount > 0 ? round2(r.fbSpend / fbCount) : '';
 
         out.push(costV, allV, wowV, fbV, orgV);
       } else {

@@ -55,7 +55,10 @@ describe('computeDailyMetrics', () => {
     expect(m[0][0]).toBe(''); // group-header corner
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
-    expect(m[1].slice(0, 6)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic', 'Cost']);
+    // Spend has no Cost column (ALL · w/w · FB · Organic).
+    expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
+    // Page views (3rd metric) leads with Cost: Cost · ALL · w/w · FB · Organic.
+    expect(m[1].slice(9, 14)).toEqual(['Cost', 'ALL', 'w/w', 'FB', 'Organic']);
     expect(m[2][0]).toBe('7d avg');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
@@ -94,18 +97,17 @@ describe('computeDailyMetrics', () => {
     expect(lastDaily[2]).toBe('');
   });
 
-  it('averages CPC in the 7d summary and blanks its Organic + Cost columns', () => {
+  it('averages CPC in the 7d summary and blanks its Organic column', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // 5 cols/metric: CPC is the 2nd metric → ALL at index 6 (G), FB at 8 (I), Organic 9, Cost 10.
-    expect(m[2][6]).toBe('=IFERROR(AVERAGE(G7:G13),0)'); // ALL 7d avg (today skipped)
-    expect(m[2][8]).toBe('=IFERROR(AVERAGE(I7:I13),0)'); // FB mirrors ALL
-    expect(m[2][9]).toBe(''); // no organic ad spend → blank
-    expect(m[2][10]).toBe(''); // CPC has no Cost column
+    // Spend (4 cols) then CPC (no Cost): ALL at index 5 (F), w/w 6, FB at 7 (H), Organic 8.
+    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F7:F13),0)'); // ALL 7d avg (today skipped)
+    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H7:H13),0)'); // FB mirrors ALL
+    expect(m[2][8]).toBe(''); // no organic ad spend → blank
   });
 
-  it('splits the funnel steps into FB/Organic and adds a cost per action', () => {
+  it('splits the funnel steps into FB/Organic and costs per FB action', () => {
     const rows = days(() => ({
       pageView: 10,
       pageViewFb: 7,
@@ -114,12 +116,20 @@ describe('computeDailyMetrics', () => {
     }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Page views is the 3rd metric → group starts at col 11 (1 + 2*5).
+    // Page views is the 3rd metric: Spend (1-4) + CPC (5-8), so Cost=9, ALL=10, FB=12, Org=13.
     const firstDaily = m[5];
 
-    expect(firstDaily[11]).toBe(10); // ALL
-    expect(firstDaily[13]).toBe(7); // FB
-    expect(firstDaily[14]).toBe(3); // Organic
-    expect(firstDaily[15]).toBe(100); // Cost = 1000 spend / 10 views
+    expect(firstDaily[9]).toBe(142.86); // Cost = 1000 FB spend / 7 FB views (not ALL 10)
+    expect(firstDaily[10]).toBe(10); // ALL
+    expect(firstDaily[12]).toBe(7); // FB
+    expect(firstDaily[13]).toBe(3); // Organic
+  });
+
+  it('costs the 7d Cost column as Σ FB spend ÷ Σ FB actions', () => {
+    const rows = days(() => ({ pageView: 10, pageViewFb: 7, fbSpend: 1000 }));
+    const m = computeDailyMetrics(rows, '2026-07-28');
+
+    // Page views Cost (col 9): Σ Spend ALL (B, all FB) ÷ Σ Page views FB (M).
+    expect(m[2][9]).toBe('=IFERROR(SUM(B7:B13)/SUM(M7:M13),0)');
   });
 });

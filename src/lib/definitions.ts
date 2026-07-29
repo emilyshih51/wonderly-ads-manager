@@ -324,11 +324,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
 
   // --- Daily Metrics grid -------------------------------------------------
   [
-    'ALL / w/w / FB / Organic',
+    'ALL / w/w / FB / Organic / Cost',
     'Daily Metrics',
-    'Per-metric columns: the total, its week-over-week change, and the FB vs Organic split.',
+    'Per-metric columns: the total, its week-over-week change, the FB vs Organic split, and (for funnel stages) a cost per action.',
     'Derived',
-    'w/w compares each day to the same weekday last week (7 rows back). FB/Organic populated for spend and the funnel steps; blank for CPC, Held, Accepted (no channel split yet).',
+    'w/w compares to the previous 7 completed days. FB/Organic populated for the funnel steps and held/accepted. Cost = FB_SPEND ÷ that stage’s ALL count (blank for Spend/CPC, which are inputs, not actions).',
   ],
   [
     '7d avg / MTD / Prev Month',

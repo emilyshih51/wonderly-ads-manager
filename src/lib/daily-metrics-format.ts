@@ -37,8 +37,8 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Accepted', money: false },
 ];
 
-/** Columns per metric group in the grid: ALL, w/w, FB, Organic. */
-const COLS_PER_METRIC = 4;
+/** Columns per metric group in the grid: ALL, w/w, FB, Organic, Cost. */
+const COLS_PER_METRIC = 5;
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
 const FROZEN_ROWS = 5;
@@ -160,9 +160,10 @@ export function buildDailyMetricsFormatRequests(
     const wow = all + 1;
     const fb = all + 2;
     const organic = all + 3;
+    const costCol = all + 4;
     const valueFormat = m.money ? CURRENCY : COUNT;
 
-    // Merge the metric name across its four columns in the group-header row.
+    // Merge the metric name across its five columns in the group-header row.
     requests.push({
       mergeCells: {
         range: {
@@ -173,6 +174,15 @@ export function buildDailyMetricsFormatRequests(
           endColumnIndex: all + COLS_PER_METRIC,
         },
         mergeType: 'MERGE_ALL',
+      },
+    });
+
+    // Cost (per action) is always dollars, whatever the stage's own format is.
+    requests.push({
+      repeatCell: {
+        range: column(sheetId, costCol),
+        cell: { userEnteredFormat: { numberFormat: CURRENCY } },
+        fields: 'userEnteredFormat.numberFormat',
       },
     });
 

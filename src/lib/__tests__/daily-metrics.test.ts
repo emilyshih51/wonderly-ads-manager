@@ -55,7 +55,7 @@ describe('computeDailyMetrics', () => {
     expect(m[0][0]).toBe(''); // group-header corner
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
-    expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
+    expect(m[1].slice(0, 6)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic', 'Cost']);
     expect(m[2][0]).toBe('7d avg');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
@@ -94,32 +94,32 @@ describe('computeDailyMetrics', () => {
     expect(lastDaily[2]).toBe('');
   });
 
-  it('averages CPC in the 7d summary and blanks its Organic column', () => {
+  it('averages CPC in the 7d summary and blanks its Organic + Cost columns', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // CPC is the 2nd metric: ALL at column index 5 (F), FB at 7 (H), Organic at 8 (I).
-    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F7:F13),0)'); // ALL 7d avg (today skipped)
-    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H7:H13),0)'); // FB mirrors ALL
-    expect(m[2][8]).toBe(''); // no organic ad spend → blank
+    // 5 cols/metric: CPC is the 2nd metric → ALL at index 6 (G), FB at 8 (I), Organic 9, Cost 10.
+    expect(m[2][6]).toBe('=IFERROR(AVERAGE(G7:G13),0)'); // ALL 7d avg (today skipped)
+    expect(m[2][8]).toBe('=IFERROR(AVERAGE(I7:I13),0)'); // FB mirrors ALL
+    expect(m[2][9]).toBe(''); // no organic ad spend → blank
+    expect(m[2][10]).toBe(''); // CPC has no Cost column
   });
 
-  it('splits the funnel steps into FB and Organic from page view on', () => {
+  it('splits the funnel steps into FB/Organic and adds a cost per action', () => {
     const rows = days(() => ({
       pageView: 10,
       pageViewFb: 7,
       pageViewOrganic: 3,
-      bookedAll: 4,
-      bookedFb: 3,
-      bookedOrganic: 1,
+      fbSpend: 1000,
     }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Page views is the 3rd metric → group starts at index 9 (ALL/w-w/FB/Organic).
+    // Page views is the 3rd metric → group starts at col 11 (1 + 2*5).
     const firstDaily = m[5];
 
-    expect(firstDaily[9]).toBe(10); // ALL
-    expect(firstDaily[11]).toBe(7); // FB
-    expect(firstDaily[12]).toBe(3); // Organic
+    expect(firstDaily[11]).toBe(10); // ALL
+    expect(firstDaily[13]).toBe(7); // FB
+    expect(firstDaily[14]).toBe(3); // Organic
+    expect(firstDaily[15]).toBe(100); // Cost = 1000 spend / 10 views
   });
 });

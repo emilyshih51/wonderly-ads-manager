@@ -24,28 +24,28 @@ describe('buildDailyMetricsFormatRequests', () => {
     });
   });
 
-  it('merges one group header per metric across its four columns', () => {
+  it('merges one group header per metric across its five columns', () => {
     const merges = reqs.filter((r) => 'mergeCells' in r) as any[];
 
     expect(merges).toHaveLength(METRICS.length);
-    // First metric (Spend) merges cols 1..5 (ALL, w/w, FB, Organic).
+    // First metric (Spend) merges cols 1..6 (ALL, w/w, FB, Organic, Cost).
     expect(merges[0].mergeCells.range).toMatchObject({
       startColumnIndex: 1,
-      endColumnIndex: 5,
+      endColumnIndex: 6,
       startRowIndex: 0,
       endRowIndex: 1,
     });
-    // Third metric (Page views) starts at col 9.
-    expect(merges[2].mergeCells.range.startColumnIndex).toBe(9);
+    // Third metric (Page views) starts at col 11 (1 + 2*5).
+    expect(merges[2].mergeCells.range.startColumnIndex).toBe(11);
   });
 
   it('adds a heat-map on every w/w column', () => {
     const rules = reqs.filter((r) => 'addConditionalFormatRule' in r) as any[];
 
     expect(rules).toHaveLength(METRICS.length);
-    // w/w columns are 2, 6, 10.
+    // w/w columns are 2, 7, 12 (1 + g*5 + 1).
     expect(rules.map((r) => r.addConditionalFormatRule.rule.ranges[0].startColumnIndex)).toEqual([
-      2, 6, 10,
+      2, 7, 12,
     ]);
     expect(rules[0].addConditionalFormatRule.rule.gradientRule.midpoint.value).toBe('0');
   });

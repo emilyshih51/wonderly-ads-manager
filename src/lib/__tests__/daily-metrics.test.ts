@@ -67,8 +67,9 @@ describe('computeDailyMetrics', () => {
       '2026-07-28'
     );
 
-    // Spend ALL is column B. 7d avg = AVERAGE of the daily block; MTD = SUMIFS by date.
-    expect(m[2][1]).toBe('=IFERROR(AVERAGE(B6:B12),0)');
+    // Spend ALL is column B. 7d avg = AVERAGE of the last 7 *completed* days; since the
+    // newest row is today (2026-07-28), it's skipped, so the range starts at row 7.
+    expect(m[2][1]).toBe('=IFERROR(AVERAGE(B7:B13),0)');
     expect(String(m[3][1])).toContain('SUMIFS(B$6:B$21');
     expect(String(m[3][1])).toContain('DATE(2026,7,1)');
     // Prev Month reaches into June (30 days).
@@ -98,8 +99,8 @@ describe('computeDailyMetrics', () => {
     const m = computeDailyMetrics(rows, '2026-07-28');
 
     // CPC is the 2nd metric: ALL at column index 5 (F), FB at 7 (H), Organic at 8 (I).
-    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F6:F12),0)'); // ALL 7d avg
-    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H6:H12),0)'); // FB mirrors ALL
+    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F7:F13),0)'); // ALL 7d avg (today skipped)
+    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H7:H13),0)'); // FB mirrors ALL
     expect(m[2][8]).toBe(''); // no organic ad spend → blank
   });
 

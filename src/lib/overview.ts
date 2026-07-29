@@ -59,7 +59,11 @@ export function computeOverview(opts: {
 }): (string | number)[][] {
   const { rows, call1Deals, succeeding, lastRefreshedPt, today } = opts;
 
-  const wk = rows.slice(0, 7);
+  // Compare the last 7 *completed* days — exclude today's partial row, which otherwise
+  // gets weighed against full days and reads artificially low.
+  const complete = rows.filter((r) => r.date < today);
+
+  const wk = complete.slice(0, 7);
   const spend7 = sum(wk, (r) => r.fbSpend);
   const call1_7 = sum(wk, (r) => r.bookedAll);
   const accepted7 = sum(wk, (r) => r.accepted);
@@ -85,7 +89,7 @@ export function computeOverview(opts: {
   const newest = rows[0]?.date ?? '';
   const dataStale = newest !== '' && newest < today;
 
-  const wow = computeWeekOverWeek(rows);
+  const wow = computeWeekOverWeek(complete);
   const call1Wow = wow.find((r) => r[0] === 'CALL1_BOOKED');
   const call1Pct = call1Wow ? Number(call1Wow[4]) : 0;
   const call1Drop = call1Pct < CALL1_DROP_THRESHOLD;
@@ -100,7 +104,7 @@ export function computeOverview(opts: {
     ['Data through', newest],
     [],
     ['HEADLINE COST — last 7 days'],
-    ['Cost per confirmed Call 1', costPerCall1],
+    ['Cost per Call 1 booked', costPerCall1],
     ['Cost per accepted contractor', costPerAccepted],
     ['Cost per succeeding contractor (60d)', succeeding60],
     ['Cost per succeeding contractor (90d)', succeeding90],

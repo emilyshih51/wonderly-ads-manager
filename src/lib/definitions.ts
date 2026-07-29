@@ -118,23 +118,23 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'HELD',
     'wonderly_daily, call1_deals',
-    'Booked deals whose Call 1 actually happened.',
+    'Booked deals whose Call 1 actually happened (a milestone — stays true even if later disqualified).',
     'CRM',
-    'Current stage is past “Call 1 Scheduled” and not the no-show stage.',
+    'Ever reached a post-call stage (Accepted / Quote Sent / On-site Scheduled / Quote Signed) by event, or currently in one (incl. Reviewing Contract / Won). HELD_DATE = first such event.',
   ],
   [
     'NO_SHOW',
     'wonderly_daily, call1_deals',
-    'Booked deals that no-showed the Call 1.',
+    'Booked deals currently a no-show on the Call 1.',
     'CRM',
-    'Current stage = “Call Missed Several Times”.',
+    'Current stage = “Call Missed Several Times”. (This transition fires no event, so it can’t be dated and flips if rescheduled.)',
   ],
   [
-    'DISQUALIFIED_LOST',
+    'DISQUALIFIED',
     'wonderly_daily, call1_deals',
-    'Booked deals currently disqualified or lost.',
+    'Booked deals currently disqualified or lost (independent of HELD — a deal can be both).',
     'CRM',
-    'Current stage = “Disqualified or Lost”.',
+    'Current stage in “Disqualified or Lost” / “Disqualified Lead” / “DQ - Drip”. No event, so not dated.',
   ],
   [
     'HELD_FB / HELD_ORGANIC, ACCEPTED_FB / ACCEPTED_ORGANIC',
@@ -230,11 +230,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
 
   // --- Overview headline KPIs --------------------------------------------
   [
-    'Cost per confirmed Call 1',
+    'Cost per Call 1 booked',
     'Overview',
-    'What a booking costs, last 7 days.',
+    'What a booking costs, over the last 7 completed days.',
     'Derived',
-    '7-day FB_SPEND ÷ 7-day Call 1s booked.',
+    '7-day FB_SPEND ÷ 7-day Call 1s booked (BOOKING_COMPLETE). Excludes today’s partial day.',
   ],
   [
     'Cost per accepted contractor',

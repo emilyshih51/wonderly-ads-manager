@@ -46,11 +46,13 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     held: 0,
     accepted: 0,
     noShow: 0,
+    disqualified: 0,
     estAmount: 0,
     contactName: '',
     phone: '',
     email: '',
     source: 'facebook',
+    heldDate: '',
     acceptedDate: '',
     ...o,
   };
@@ -85,14 +87,15 @@ describe('computeOverview', () => {
     expect(flat(stale)).toContain('⚠️ Data is stale');
   });
 
-  it('computes cost per confirmed Call 1 and accepted over 7 days', () => {
+  it('computes cost per Call 1 booked and accepted over the last 7 completed days', () => {
+    // Dated 07-27 (< today 07-28) so they count as completed days.
     const rows = Array(7)
       .fill(0)
-      .map(() => row({ date: '2026-07-28', fbSpend: 100, bookedAll: 2, accepted: 1 }));
+      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 2, accepted: 1 }));
     const m = computeOverview({ ...base, rows });
 
     // 700 spend / 14 booked = 50; 700 / 7 accepted = 100
-    expect(line(m, 'Cost per confirmed Call 1')[1]).toBe(50);
+    expect(line(m, 'Cost per Call 1 booked')[1]).toBe(50);
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
   });
 

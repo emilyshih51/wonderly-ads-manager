@@ -17,11 +17,13 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     held: 0,
     accepted: 0,
     noShow: 0,
+    disqualified: 0,
     estAmount: 0,
     contactName: 'Jane Doe',
     phone: '+15551234567',
     email: 'jane@example.com',
     source: 'facebook',
+    heldDate: '',
     acceptedDate: '',
     ...o,
   };
@@ -90,15 +92,17 @@ describe('toCall1DealsValues', () => {
       'Harrison Wermuth (Dewittbuilding)',
       '2026-07-22',
       'Accepted',
-      1,
-      1,
-      0,
+      1, // HELD
+      1, // ACCEPTED
+      0, // NO_SHOW
+      0, // DISQUALIFIED
       12000,
       'Harrison Wermuth',
       '+15550001111',
       'harrison@dewittbuilding.com',
       'google',
-      '2026-07-24',
+      '', // HELD_DATE
+      '2026-07-24', // ACCEPTED_DATE
     ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
   });
@@ -115,7 +119,7 @@ describe('computeCall1Summary', () => {
 
     const map = asMap(computeCall1Summary(deals, [], 30, today));
 
-    expect(map['SALES_CALL1 (pipeline)']).toBe(1);
+    expect(map['CALL1_SCHEDULED (CRM deals)']).toBe(1);
   });
 
   it('takes CALL1_BOOKED from the marketing BOOKING_COMPLETE count', () => {
@@ -127,7 +131,7 @@ describe('computeCall1Summary', () => {
 
     const map = asMap(computeCall1Summary([], marketing, 30, today));
 
-    expect(map['CALL1_BOOKED (marketing)']).toBe(5);
+    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(5);
   });
 
   it('rates held, accepted, and no-show against the sales denominator', () => {
@@ -159,8 +163,8 @@ describe('computeCall1Summary', () => {
     const map = asMap(computeCall1Summary(deals, marketing, 30, today));
 
     expect(map.FB_SPEND).toBe(800);
-    expect(map['CALL1_BOOKED (marketing)']).toBe(2);
-    expect(map.COST_PER_CALL1).toBe(400); // 800 / 2 marketing bookings
+    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(2);
+    expect(map.COST_PER_CALL1_BOOKED).toBe(400); // 800 / 2 marketing bookings
     expect(map.ACCEPTED_CUSTOMER_CAC).toBe(400); // 800 / 2 accepted
   });
 
@@ -173,8 +177,8 @@ describe('computeCall1Summary', () => {
     const map = asMap(computeCall1Summary([], marketing, 30, today));
 
     expect(map.FB_SPEND).toBe(100);
-    expect(map['CALL1_BOOKED (marketing)']).toBe(0);
-    expect(map.COST_PER_CALL1).toBe(0);
+    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(0);
+    expect(map.COST_PER_CALL1_BOOKED).toBe(0);
     expect(map.ACCEPTED_CUSTOMER_CAC).toBe(0);
   });
 
@@ -195,7 +199,7 @@ describe('computeCall1Summary', () => {
 
     const map = asMap(computeCall1Summary(deals, marketing, 30, today));
 
-    expect(map['CALL1_BOOKED (marketing)']).toBe(1);
+    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(1);
     expect(map['ACCEPTED (maturing)']).toBe(3);
   });
 });

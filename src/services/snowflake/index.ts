@@ -184,7 +184,13 @@ export class SnowflakeService {
        deal AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
            MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
+           -- "Held" as a milestone: the stage-change event only fires for positive stages,
+           -- so ever reaching one of these means the Call 1 actually happened — and it
+           -- stays true even if the deal is later disqualified.
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
+                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
+                THEN 1 ELSE 0 END) AS ever_held
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -228,9 +234,14 @@ export class SnowflakeService {
        -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
        ds AS (
          SELECT d.booked_day AS day, d.ever_accepted,
-           CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END AS held,
+           -- Held = the call happened: reached a post-call stage by event OR is currently
+           -- in one. Independent of the current stage, so a held-then-disqualified deal
+           -- stays held (and is also counted as disqualified).
+           CASE WHEN d.ever_held = 1
+                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+                THEN 1 ELSE 0 END AS held,
            CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
-           CASE WHEN st.NAME = 'Disqualified or Lost' THEN 1 ELSE 0 END AS disqualified_lost,
+           CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
          FROM deal d
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
@@ -414,9 +425,10 @@ export class SnowflakeService {
   /**
    * Deal-level Call 1 fact table — one row per deal booked in the last N days.
    *
-   * Held = advanced past "Call 1 Scheduled" and not a no-show. Accepted = ever
-   * reached the "Accepted" stage (from the event, so later movement doesn't undo
-   * it). Current stage + amount come from the CRM snapshot.
+   * Held and Accepted are milestones from the stage-change events (they only fire for
+   * positive stages), so both stay true even after later movement — a held deal that's
+   * later disqualified is `HELD=1` and `DISQUALIFIED=1`. No-show and disqualified come
+   * from the current CRM stage (those transitions emit no event, so they can't be dated).
    *
    * @param days - Trailing window, e.g. 90 (keeps cohorts open ~3 months)
    * @returns One row per deal, newest booking first
@@ -427,7 +439,13 @@ export class SnowflakeService {
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
            MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day,
+           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
+                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
+                THEN 1 ELSE 0 END) AS ever_held,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
+                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
+                THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS held_day
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -482,14 +500,18 @@ export class SnowflakeService {
          COALESCE(cd.NAME,'') AS DEAL_NAME,
          TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
-         CASE WHEN st.NAME NOT IN ('Call 1 Scheduled','Call Missed Several Times') THEN 1 ELSE 0 END AS HELD,
+         CASE WHEN de.ever_held = 1
+              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+              THEN 1 ELSE 0 END AS HELD,
          de.ever_accepted AS ACCEPTED,
          CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
+         CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS DISQUALIFIED,
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
          COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
          COALESCE(em.primary_email, em.any_email, '') AS EMAIL,
          COALESCE(src.utm_source,'') AS SOURCE,
+         COALESCE(TO_CHAR(de.held_day,'YYYY-MM-DD'),'') AS HELD_DATE,
          COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
        FROM de
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
@@ -510,11 +532,13 @@ export class SnowflakeService {
       held: num(r.HELD),
       accepted: num(r.ACCEPTED),
       noShow: num(r.NO_SHOW),
+      disqualified: num(r.DISQUALIFIED),
       estAmount: num(r.EST_AMOUNT),
       contactName: String(r.CONTACT_NAME ?? ''),
       phone: String(r.PHONE ?? ''),
       email: String(r.EMAIL ?? ''),
       source: String(r.SOURCE ?? ''),
+      heldDate: String(r.HELD_DATE ?? ''),
       acceptedDate: String(r.ACCEPTED_DATE ?? ''),
     }));
   }

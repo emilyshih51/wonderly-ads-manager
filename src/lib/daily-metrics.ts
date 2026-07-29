@@ -130,6 +130,14 @@ export function computeDailyMetrics(
   const prevSpanEndDay = Math.min(td, prevMonthLastDay);
   const dataEnd = 5 + rows.length; // last daily row (data starts at sheet row 6)
 
+  // The 7d average uses the last 7 *completed* days. If today's partial row is at the
+  // top (sheet row 6), skip it so it isn't averaged against full days.
+  const firstComplete = 6 + (rows[0]?.date === today ? 1 : 0);
+  const s7Start = firstComplete;
+  const s7End = firstComplete + 6;
+  const p7Start = firstComplete + 7;
+  const p7End = firstComplete + 13;
+
   // Row 1: metric names above each ALL/w-w/FB/Organic group. Row 2: sub-headers.
   const groupHeader: (string | number)[] = [''];
   const subHeader: (string | number)[] = ['Date'];
@@ -153,7 +161,7 @@ export function computeDailyMetrics(
     const L = colLetter(colIndex);
 
     return {
-      d7: `=IFERROR(AVERAGE(${L}6:${L}12),0)`,
+      d7: `=IFERROR(AVERAGE(${L}${s7Start}:${L}${s7End}),0)`,
       mtd: ratio ? `=IFERROR(${avgifs(L, ty, tm, 1, td)},0)` : `=${sumifs(L, ty, tm, 1, td)}`,
       prev: ratio
         ? `=IFERROR(${avgifs(L, py, pm, 1, prevMonthLastDay)},0)`
@@ -174,8 +182,8 @@ export function computeDailyMetrics(
     const fb = valueCells(allC + 2, Boolean(m.fb), ratio);
     const organic = valueCells(allC + 3, Boolean(m.organic), ratio);
 
-    // 7d w/w: this-week average vs the previous 7 days (rows 13-19).
-    const wow7 = `=IFERROR((${La}3-AVERAGE(${La}13:${La}19))/AVERAGE(${La}13:${La}19),"")`;
+    // 7d w/w: this-week average vs the previous 7 completed days.
+    const wow7 = `=IFERROR((${La}3-AVERAGE(${La}${p7Start}:${La}${p7End}))/AVERAGE(${La}${p7Start}:${La}${p7End}),"")`;
     // MTD w/w: month-to-date vs the same day-span of the previous month.
     const prevSpan = ratio
       ? avgifs(La, py, pm, 1, prevSpanEndDay)

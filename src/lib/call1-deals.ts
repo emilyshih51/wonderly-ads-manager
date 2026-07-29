@@ -7,8 +7,9 @@
  * over time as it progresses — a recent cohort stays "unfinished" and keeps filling
  * in for ~90 days. This tab is the audit trail behind the aggregate rates.
  *
- * Held = the call happened: any stage past "Call 1 Scheduled" except the no-show
- * stage. Accepted = the deal EVER reached "Accepted" (milestone, from the event).
+ * Held and Accepted are milestones (ever-reached) from the stage-change events, so they
+ * stay true even after the deal moves on — a held deal later disqualified is both. No-show
+ * and disqualified reflect the current CRM stage (those transitions emit no event).
  */
 
 import type { MarketingDailyRow } from '@/lib/marketing-daily';
@@ -21,12 +22,14 @@ export interface Call1DealRow {
   /** `YYYY-MM-DD` — day it entered "Call 1 Scheduled". */
   bookedDay: string;
   currentStage: string;
-  /** 1 if the call was held (advanced past scheduling, not a no-show). */
+  /** 1 if the Call 1 ever happened — reached a post-call stage (milestone, stays true even if later disqualified). */
   held: number;
   /** 1 if the deal ever reached "Accepted". */
   accepted: number;
   /** 1 if the deal is currently a no-show ("Call Missed Several Times"). */
   noShow: number;
+  /** 1 if the deal is currently disqualified/lost (current stage; these don't fire stage events). */
+  disqualified: number;
   /** Estimated deal value in USD, 0 when not entered. */
   estAmount: number;
   /** Primary contact's full name, for tracking down the person. */
@@ -37,6 +40,8 @@ export interface Call1DealRow {
   email: string;
   /** Marketing source (e.g. facebook), from the form-submit event's utm_source, joined by email. Blank when unattributed. */
   source: string;
+  /** `YYYY-MM-DD` the Call 1 was first held (first post-call event). Blank if held only via current stage or never. */
+  heldDate: string;
   /** `YYYY-MM-DD` the deal first reached "Accepted" (the 60/90-day clock start). Blank if never accepted. */
   acceptedDate: string;
 }
@@ -50,11 +55,13 @@ export const CALL1_DEALS_HEADERS = [
   'HELD',
   'ACCEPTED',
   'NO_SHOW',
+  'DISQUALIFIED',
   'EST_AMOUNT',
   'CONTACT_NAME',
   'PHONE',
   'EMAIL',
   'SOURCE',
+  'HELD_DATE',
   'ACCEPTED_DATE',
 ] as const;
 
@@ -72,11 +79,13 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.held,
     r.accepted,
     r.noShow,
+    r.disqualified,
     r.estAmount,
     r.contactName,
     r.phone,
     r.email,
     r.source,
+    r.heldDate,
     r.acceptedDate,
   ]);
 }
@@ -140,10 +149,10 @@ export function computeCall1Summary(
 
   return [
     ['WINDOW', `Last ${windowDays} days (${cutoff} → ${today})`],
-    ['CALL1_BOOKED (marketing)', marketingBookings],
+    ['CALL1_BOOKED (BOOKING_COMPLETE)', marketingBookings],
     ['FB_SPEND', money(fbSpend)],
-    ['COST_PER_CALL1', money(marketingBookings > 0 ? fbSpend / marketingBookings : 0)],
-    ['SALES_CALL1 (pipeline)', salesCall1],
+    ['COST_PER_CALL1_BOOKED', money(marketingBookings > 0 ? fbSpend / marketingBookings : 0)],
+    ['CALL1_SCHEDULED (CRM deals)', salesCall1],
     ['HELD', held],
     ['HELD_RATE', rate(held, salesCall1)],
     ['ACCEPTED (maturing)', accepted],

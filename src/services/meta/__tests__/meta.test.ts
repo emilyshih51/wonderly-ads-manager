@@ -82,6 +82,21 @@ describe('MetaService', () => {
     });
   });
 
+  describe('updateName()', () => {
+    it('POSTs the new name to the object endpoint', async () => {
+      const fetchFn = makeFetch({ success: true });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await svc.updateName('ad-id-777', '+ Winning Ad');
+
+      const [url, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toContain('/ad-id-777');
+      expect((options as RequestInit).method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({ name: '+ Winning Ad' });
+    });
+  });
+
   describe('duplicateAd()', () => {
     it('throws when source ad has no creative', async () => {
       const fetchFn = makeFetch({ id: 'ad-1', name: 'My Ad' });

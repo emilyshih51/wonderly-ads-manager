@@ -105,3 +105,48 @@ export const INSIGHT_DETAIL_FIELDS: Record<string, string> = {
   ad: 'ad_id,ad_name,adset_id,campaign_id',
   account: '',
 };
+
+// ─── Promoted-Ad Marker ──────────────────────────────────────────────────────
+
+/**
+ * Character prefixed to a winning ad's name once it has been promoted, so it is
+ * visible in Meta Ads Manager and can be skipped on future automation runs.
+ *
+ * The automation engine renames the original ad to `"+ <original name>"` after a
+ * successful promotion, then bypasses any candidate whose name already starts
+ * with this marker. This prevents an ad that stays running (when
+ * `pause_original` is off) from being promoted again on every evaluation tick.
+ */
+export const PROMOTED_AD_MARKER = '+';
+
+/** Full prefix (marker + trailing space) prepended to a promoted ad's name. */
+export const PROMOTED_AD_PREFIX = `${PROMOTED_AD_MARKER} `;
+
+/**
+ * Whether an ad name has already been marked as promoted.
+ * Ignores leading whitespace so `" + Winner"` is still detected.
+ */
+export function isPromotedName(name: string | undefined | null): boolean {
+  return (name ?? '').trimStart().startsWith(PROMOTED_AD_MARKER);
+}
+
+/**
+ * Prepend the promoted marker to an ad name. Idempotent — if the name is already
+ * marked it is returned unchanged (so an ad can never accumulate `"+ + + …"`).
+ */
+export function addPromotedMarker(name: string): string {
+  return isPromotedName(name) ? name : `${PROMOTED_AD_PREFIX}${name}`;
+}
+
+/**
+ * Remove a leading promoted marker (and any following whitespace) from an ad
+ * name. Returns the original name unchanged when no marker is present.
+ */
+export function stripPromotedMarker(name: string): string {
+  if (!isPromotedName(name)) return name;
+
+  const leadingWhitespace = name.slice(0, name.length - name.trimStart().length);
+  const withoutMarker = name.trimStart().slice(PROMOTED_AD_MARKER.length).trimStart();
+
+  return `${leadingWhitespace}${withoutMarker}`;
+}

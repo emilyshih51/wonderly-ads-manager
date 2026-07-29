@@ -8,6 +8,7 @@ import {
   COST_PER_RESULT_NO_DATA,
 } from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
+import { addPromotedMarker, isPromotedName } from '@/services/meta/constants';
 import { createSlackService } from '@/services/slack';
 import { RulesStoreService } from '@/services/rules-store';
 import { createLogger } from '@/services/logger';
@@ -287,6 +288,7 @@ interface EvaluateResult {
   dry_run?: boolean;
   warning?: string;
   duplicated_ad_id?: string;
+  marked_promoted?: boolean;
   slack_sent?: boolean;
   slack_channel?: string;
   skipped?: string;
@@ -359,6 +361,7 @@ async function evaluateRule(
 
   const triggerConfig = (triggerNode.data?.config ?? {}) as NodeConfig;
   const actionConfig = (actionNode.data?.config ?? {}) as NodeConfig;
+  const isPromoteAction = (actionConfig.action_type ?? '') === 'promote';
   const entityType = triggerConfig.entity_type ?? 'ad';
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
   // Support comma-separated campaign IDs for multi-campaign rules
@@ -448,6 +451,21 @@ async function evaluateRule(
         entity_id: entityId,
         entity_name: entityName,
         skipped: 'stale_data_today',
+      });
+      continue;
+    }
+
+    // Skip ads that have already been promoted (name starts with the promoted
+    // marker). This stops a winner that stays running — because pause_original
+    // is off — from being re-promoted on every evaluation tick.
+    if (isPromoteAction && isPromotedName(entityName)) {
+      logger.info(`Skipping "${entityName}" (${entityId}) — already promoted`);
+      results.push({
+        rule: rule.name,
+        entity_type: entityType,
+        entity_id: entityId,
+        entity_name: entityName,
+        skipped: 'already_promoted',
       });
       continue;
     }
@@ -547,6 +565,20 @@ async function evaluateRule(
 
           actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
           actionResult.duplicated_ad_id = duplicated.id;
+
+          // Mark the original winner with the promoted prefix so it is visible
+          // in Ads Manager and skipped on future runs. A failure here must not
+          // fail the promotion itself, so it is logged and swallowed.
+          try {
+            await meta.updateName(entityId, addPromotedMarker(entityName));
+            actionResult.marked_promoted = true;
+          } catch (renameError) {
+            logger.warn('Failed to mark original ad as promoted', {
+              entityId,
+              entityName,
+              error: String(renameError),
+            });
+          }
         } else {
           actionResult.action = pauseOriginal
             ? 'paused (no target adset for duplication)'

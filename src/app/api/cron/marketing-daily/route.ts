@@ -95,11 +95,12 @@ const CALL1_SUMMARY_DAYS = 30;
 /**
  * How many trailing days to re-pull from source each run.
  *
- * Meta only needs ~2 days (it restates spend for 24–48h), but a wider window means
- * the whole visible sheet is always sourced fresh rather than relying on reading old
- * rows back — so a formatting/parse hiccup can't leave stale or zeroed rows.
+ * Meta only needs ~2 days (it restates spend for 24–48h), but a wider window means the
+ * whole visible sheet is always sourced fresh rather than relying on reading old rows
+ * back. Set to ~100 so history reaches back to early May 2026 (the first week the sales
+ * pipeline data exists) and stays continuously backfilled.
  */
-const REFETCH_DAYS = 35;
+const REFETCH_DAYS = 100;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;

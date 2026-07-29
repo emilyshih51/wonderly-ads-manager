@@ -485,6 +485,20 @@ export class MetaService {
   }
 
   /**
+   * Rename a campaign, ad set, or ad.
+   *
+   * Used by the automation engine to prefix a promoted winner with the
+   * promoted marker (see `addPromotedMarker`) so it is visible in Ads Manager
+   * and skipped on future promotion runs.
+   *
+   * @param objectId - Meta object ID (campaign, ad set, or ad)
+   * @param name - New name to set
+   */
+  async updateName(objectId: string, name: string): Promise<void> {
+    await this.request(`/${objectId}`, { method: 'POST', body: { name } });
+  }
+
+  /**
    * Update the daily budget for a campaign or ad set.
    *
    * Meta represents budgets in cents (integer, account currency subunit).

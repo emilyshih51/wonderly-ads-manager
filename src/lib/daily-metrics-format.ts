@@ -229,6 +229,18 @@ export function buildDailyMetricsFormatRequests(
         },
       },
     });
+
+    // Facebook-only metrics (Spend, CPC) have no Google/Yahoo/Bing/N-A data — hide those
+    // four columns so the grid isn't padded with empty channels.
+    if (m.money) {
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: all + 3, endIndex: all + 7 },
+          properties: { hiddenByUser: true },
+          fields: 'hiddenByUser',
+        },
+      });
+    }
   });
 
   // Week-separator borders. Rows shift down as new days arrive, so clear the daily

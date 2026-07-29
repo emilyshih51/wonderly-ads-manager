@@ -36,9 +36,9 @@ import {
   joinMarketingDaily,
   mergeRows,
   toSheetValues,
+  parseMarketingRows,
   checkStaleness,
   RAW_TAB_HEADERS,
-  type MarketingDailyRow,
 } from '@/lib/marketing-daily';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
@@ -140,7 +140,7 @@ export async function GET(request: Request) {
     ]);
 
     const fresh = joinMarketingDaily(spend, marketing);
-    const existing = parseExistingRows(await sheets.readRows(sheetId, RAW_TAB_NAME));
+    const existing = parseMarketingRows(await sheets.readRows(sheetId, RAW_TAB_NAME));
     const merged = mergeRows(existing, fresh);
 
     await sheets.replaceRows(sheetId, RAW_TAB_NAME, [...RAW_TAB_HEADERS], toSheetValues(merged));
@@ -322,54 +322,6 @@ async function notifySlack(message: string): Promise<void> {
   } catch (error) {
     logger.error('Failed to post marketing alert to Slack', error);
   }
-}
-
-/**
- * Parse the raw tab's existing cells back into typed rows, in RAW_TAB_HEADERS order.
- *
- * Older rows outside the refetch window are preserved this way rather than refetched.
- *
- * @param values - Raw cell matrix from the sheet, header row first
- */
-function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
-  return values
-    .slice(1)
-    .filter((row) => String(row[0] ?? '').match(/^\d{4}-\d{2}-\d{2}$/))
-    .map((row) => ({
-      date: String(row[0]),
-      fbSpend: num(row[1]),
-      fbImpressions: num(row[2]),
-      fbClicks: num(row[3]),
-      pageView: num(row[4]),
-      pageViewFb: num(row[5]),
-      pageViewOrganic: num(row[6]),
-      ctaClicked: num(row[7]),
-      ctaFb: num(row[8]),
-      ctaOrganic: num(row[9]),
-      submitPartial: num(row[10]),
-      submitPartialFb: num(row[11]),
-      submitPartialOrganic: num(row[12]),
-      submitQualified: num(row[13]),
-      submitQualifiedFb: num(row[14]),
-      submitQualifiedOrganic: num(row[15]),
-      bookedAll: num(row[16]),
-      bookedFb: num(row[17]),
-      bookedOrganic: num(row[18]),
-      accepted: num(row[19]),
-      acceptedFb: num(row[20]),
-      acceptedOrganic: num(row[21]),
-      noShow: num(row[22]),
-      disqualifiedLost: num(row[23]),
-      held: num(row[24]),
-      heldFb: num(row[25]),
-      heldOrganic: num(row[26]),
-    }));
-}
-
-function num(value: string | number | undefined): number {
-  const parsed = Number(value);
-
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function isoDate(date: Date): string {

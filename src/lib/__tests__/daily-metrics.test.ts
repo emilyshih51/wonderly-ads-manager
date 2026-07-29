@@ -1,37 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { computeDailyMetrics } from '@/lib/daily-metrics';
-import type { MarketingDailyRow } from '@/lib/marketing-daily';
+import { blankMarketingRow, type MarketingDailyRow } from '@/lib/marketing-daily';
 
 function row(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
   return {
-    date,
-    pageView: 0,
-    pageViewFb: 0,
-    pageViewOrganic: 0,
-    ctaClicked: 0,
-    ctaFb: 0,
-    ctaOrganic: 0,
-    submitPartial: 0,
-    submitPartialFb: 0,
-    submitPartialOrganic: 0,
-    submitQualified: 0,
-    submitQualifiedFb: 0,
-    submitQualifiedOrganic: 0,
-    bookedAll: 0,
-    bookedFb: 0,
-    bookedOrganic: 0,
-    accepted: 0,
-    acceptedFb: 0,
-    acceptedOrganic: 0,
-    noShow: 0,
-    disqualifiedLost: 0,
-    held: 0,
-    heldFb: 0,
-    heldOrganic: 0,
-    fbSpend: 0,
-    fbImpressions: 0,
-    fbClicks: 0,
+    ...blankMarketingRow(date),
     ...o,
   };
 }
@@ -55,7 +29,16 @@ describe('computeDailyMetrics', () => {
     expect(m[0][0]).toBe(''); // group-header corner
     expect(m[0]).toContain('Spend');
     expect(m[0]).toContain('Call 1 booked');
-    expect(m[1].slice(0, 5)).toEqual(['Date', 'ALL', 'w/w', 'FB', 'Organic']);
+    expect(m[1].slice(0, 8)).toEqual([
+      'Date',
+      'ALL',
+      'w/w',
+      'FB',
+      'Google',
+      'Yahoo',
+      'Bing',
+      'N/A',
+    ]);
     expect(m[2][0]).toBe('7d avg');
     expect(m[3][0]).toBe('MTD');
     expect(m[4][0]).toBe('Prev Month');
@@ -94,32 +77,35 @@ describe('computeDailyMetrics', () => {
     expect(lastDaily[2]).toBe('');
   });
 
-  it('averages CPC in the 7d summary and blanks its Organic column', () => {
+  it('averages CPC in the 7d summary and blanks its non-FB channels', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // CPC is the 2nd metric: ALL at column index 5 (F), FB at 7 (H), Organic at 8 (I).
-    expect(m[2][5]).toBe('=IFERROR(AVERAGE(F7:F13),0)'); // ALL 7d avg (today skipped)
-    expect(m[2][7]).toBe('=IFERROR(AVERAGE(H7:H13),0)'); // FB mirrors ALL
-    expect(m[2][8]).toBe(''); // no organic ad spend → blank
+    // 7 cols/metric: CPC is the 2nd metric → ALL at index 8 (I), FB at 10 (K), Google at 11.
+    expect(m[2][8]).toBe('=IFERROR(AVERAGE(I7:I13),0)'); // ALL 7d avg (today skipped)
+    expect(m[2][10]).toBe('=IFERROR(AVERAGE(K7:K13),0)'); // FB mirrors ALL
+    expect(m[2][11]).toBe(''); // Google — no ad spend there → blank
   });
 
-  it('splits the funnel steps into FB and Organic from page view on', () => {
+  it('splits the funnel steps five ways from page view on', () => {
     const rows = days(() => ({
-      pageView: 10,
+      pageView: 12,
       pageViewFb: 7,
-      pageViewOrganic: 3,
-      bookedAll: 4,
-      bookedFb: 3,
-      bookedOrganic: 1,
+      pageViewGoogle: 3,
+      pageViewYahoo: 1,
+      pageViewBing: 1,
+      pageViewNa: 0,
     }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Page views is the 3rd metric → group starts at index 9 (ALL/w-w/FB/Organic).
+    // Page views is the 3rd metric → group starts at col 15 (1 + 2*7).
     const firstDaily = m[5];
 
-    expect(firstDaily[9]).toBe(10); // ALL
-    expect(firstDaily[11]).toBe(7); // FB
-    expect(firstDaily[12]).toBe(3); // Organic
+    expect(firstDaily[15]).toBe(12); // ALL
+    expect(firstDaily[17]).toBe(7); // FB
+    expect(firstDaily[18]).toBe(3); // Google
+    expect(firstDaily[19]).toBe(1); // Yahoo
+    expect(firstDaily[20]).toBe(1); // Bing
+    expect(firstDaily[21]).toBe(0); // N/A
   });
 });

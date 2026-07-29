@@ -38,7 +38,8 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
 ];
 
 /** Columns per metric group in the grid: ALL, w/w, FB, Organic. */
-const COLS_PER_METRIC = 4;
+/** ALL, w/w, FB, Google, Yahoo, Bing, N/A. */
+const COLS_PER_METRIC = 7;
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
 const FROZEN_ROWS = 5;
@@ -158,11 +159,11 @@ export function buildDailyMetricsFormatRequests(
   metrics.forEach((m, g) => {
     const all = 1 + g * COLS_PER_METRIC;
     const wow = all + 1;
-    const fb = all + 2;
-    const organic = all + 3;
+    // Value columns: ALL plus the five source columns (FB, Google, Yahoo, Bing, N/A).
+    const valueCols = [all, all + 2, all + 3, all + 4, all + 5, all + 6];
     const valueFormat = m.money ? CURRENCY : COUNT;
 
-    // Merge the metric name across its four columns in the group-header row.
+    // Merge the metric name across its seven columns in the group-header row.
     requests.push({
       mergeCells: {
         range: {
@@ -176,8 +177,8 @@ export function buildDailyMetricsFormatRequests(
       },
     });
 
-    // ALL / FB / Organic take the value format; w/w is a percent.
-    for (const col of [all, fb, organic]) {
+    // ALL and each source column take the value format; w/w is a percent.
+    for (const col of valueCols) {
       requests.push({
         repeatCell: {
           range: column(sheetId, col),

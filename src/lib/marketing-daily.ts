@@ -1,15 +1,18 @@
 /**
- * Pure functions for building the marketing performance sheet's raw (Blended) tab.
+ * Pure functions for building the marketing performance sheet's raw (wonderly_daily) tab.
  *
  * Two sources, one join. Meta knows what we spent; Snowflake (Amplitude + the
- * WONDERLY_SALES pipeline) knows the funnel, the bookings by source, and the sales
- * stages. Neither knows the other — these functions put both in the same row
- * because they share a date.
+ * WONDERLY_SALES pipeline) knows the funnel, the counts by source, and the sales stages.
+ * Neither knows the other — these functions put both in the same row because they share
+ * a date.
  *
- * Deliberately free of I/O so the join can be unit tested without hitting Snowflake
- * or Meta. All ratios (CPC, conversion %, acceptance rate, w/w) are left to the
- * sheet's formulas — the cron writes only raw counts, so a wrong number is always
- * traceable to either the query or the formula, never both.
+ * Every funnel step and the held/accepted outcomes are split five ways by acquisition
+ * source: Facebook, Google, Yahoo, Bing, and N/A (unattributed). The column list is
+ * defined once in `RAW_COLUMNS`, which drives the header row, the cell matrix, and the
+ * read-back parser, so the 35 split columns can never fall out of alignment.
+ *
+ * Deliberately free of I/O so the join can be unit tested without hitting Snowflake or
+ * Meta.
  */
 
 /** Daily spend as reported by the Meta Marketing API, one entry per day. */
@@ -21,97 +24,170 @@ export interface MetaDailySpend {
 }
 
 /**
- * One aggregated day of funnel + booking-by-source + sales-stage counts from
- * Snowflake. Counts are unique people per stage (bookings) / events (sales stages).
+ * One aggregated day of funnel + source-split + sales-stage counts from Snowflake.
+ * Counts are unique people per stage (funnel) / deals (sales stages). Each split field
+ * is one of five acquisition-source buckets: `Fb`, `Google`, `Yahoo`, `Bing`, `Na`.
  */
 export interface DailyMarketingRow {
   date: string;
+
   pageView: number;
-  /** Page views whose session carried a Facebook signal (utm facebook/ig or fbclid). */
   pageViewFb: number;
-  pageViewOrganic: number;
+  pageViewGoogle: number;
+  pageViewYahoo: number;
+  pageViewBing: number;
+  pageViewNa: number;
+
   ctaClicked: number;
   ctaFb: number;
-  ctaOrganic: number;
+  ctaGoogle: number;
+  ctaYahoo: number;
+  ctaBing: number;
+  ctaNa: number;
+
   submitPartial: number;
   submitPartialFb: number;
-  submitPartialOrganic: number;
+  submitPartialGoogle: number;
+  submitPartialYahoo: number;
+  submitPartialBing: number;
+  submitPartialNa: number;
+
   submitQualified: number;
   submitQualifiedFb: number;
-  submitQualifiedOrganic: number;
+  submitQualifiedGoogle: number;
+  submitQualifiedYahoo: number;
+  submitQualifiedBing: number;
+  submitQualifiedNa: number;
+
   /** BOOKING_COMPLETE count. The single booking number; rates divide by this. */
   bookedAll: number;
   bookedFb: number;
-  bookedOrganic: number;
-  /** Sales-pipeline cohort: of that day's booked deals, how many ever reached "Accepted". */
+  bookedGoogle: number;
+  bookedYahoo: number;
+  bookedBing: number;
+  bookedNa: number;
+
+  /** Of that day's booked deals, how many ever reached "Accepted" (milestone). */
   accepted: number;
-  /** Accepted deals attributed to Facebook (via the deal's Call 1 source). */
   acceptedFb: number;
-  /** Accepted deals not attributed to Facebook (= accepted − acceptedFb). */
-  acceptedOrganic: number;
-  /** Sales-pipeline cohort: how many of that day's booked deals are currently a no-show. */
-  noShow: number;
-  /** Sales-pipeline cohort: how many of that day's booked deals are currently "Disqualified or Lost". */
-  disqualifiedLost: number;
-  /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
+  acceptedGoogle: number;
+  acceptedYahoo: number;
+  acceptedBing: number;
+  acceptedNa: number;
+
+  /** Booked deals whose Call 1 happened (milestone). */
   held: number;
-  /** Held deals attributed to Facebook (via the deal's Call 1 source). */
   heldFb: number;
-  /** Held deals not attributed to Facebook (= held − heldFb). */
-  heldOrganic: number;
+  heldGoogle: number;
+  heldYahoo: number;
+  heldBing: number;
+  heldNa: number;
+
+  /** Booked deals currently a no-show. */
+  noShow: number;
+  /** Booked deals currently disqualified/lost. */
+  disqualifiedLost: number;
 }
 
-/**
- * Header row for the Blended tab. Column order here is the contract the Overview
- * formulas reference by position, so do not reorder without updating the sheet.
- */
-export const RAW_TAB_HEADERS = [
-  'DATE',
-  'FB_SPEND',
-  'FB_IMPRESSIONS',
-  'FB_CLICKS',
-  'PAGE_VIEW',
-  'PAGE_VIEW_FB',
-  'PAGE_VIEW_ORGANIC',
-  'CTA_CLICKED',
-  'CTA_FB',
-  'CTA_ORGANIC',
-  'SUBMIT_PARTIAL',
-  'PARTIAL_FB',
-  'PARTIAL_ORGANIC',
-  'SUBMIT_QUALIFIED',
-  'QUALIFIED_FB',
-  'QUALIFIED_ORGANIC',
-  'BOOKED_ALL',
-  'BOOKED_FB',
-  'BOOKED_ORGANIC',
-  'ACCEPTED',
-  'ACCEPTED_FB',
-  'ACCEPTED_ORGANIC',
-  'NO_SHOW',
-  'DISQUALIFIED_LOST',
-  'HELD',
-  'HELD_FB',
-  'HELD_ORGANIC',
-] as const;
-
-/** One fully joined day, ready to write to the Blended tab. */
+/** One fully joined day, ready to write to the wonderly_daily tab. */
 export interface MarketingDailyRow extends DailyMarketingRow {
   fbSpend: number;
   fbImpressions: number;
   fbClicks: number;
 }
 
+/** Source buckets, in priority order, with their column-header suffix. */
+export const SOURCE_BUCKETS = [
+  { field: 'Fb', header: 'FB' },
+  { field: 'Google', header: 'GOOGLE' },
+  { field: 'Yahoo', header: 'YAHOO' },
+  { field: 'Bing', header: 'BING' },
+  { field: 'Na', header: 'NA' },
+] as const;
+
+/** A metric that splits by source: its ALL field/header, and the split field/header prefixes. */
+const SPLIT_METRICS: {
+  allKey: keyof MarketingDailyRow;
+  allHeader: string;
+  fieldPrefix: string;
+  headerPrefix: string;
+}[] = [
+  {
+    allKey: 'pageView',
+    allHeader: 'PAGE_VIEW',
+    fieldPrefix: 'pageView',
+    headerPrefix: 'PAGE_VIEW',
+  },
+  { allKey: 'ctaClicked', allHeader: 'CTA_CLICKED', fieldPrefix: 'cta', headerPrefix: 'CTA' },
+  {
+    allKey: 'submitPartial',
+    allHeader: 'SUBMIT_PARTIAL',
+    fieldPrefix: 'submitPartial',
+    headerPrefix: 'PARTIAL',
+  },
+  {
+    allKey: 'submitQualified',
+    allHeader: 'SUBMIT_QUALIFIED',
+    fieldPrefix: 'submitQualified',
+    headerPrefix: 'QUALIFIED',
+  },
+  { allKey: 'bookedAll', allHeader: 'BOOKED_ALL', fieldPrefix: 'booked', headerPrefix: 'BOOKED' },
+  { allKey: 'accepted', allHeader: 'ACCEPTED', fieldPrefix: 'accepted', headerPrefix: 'ACCEPTED' },
+  { allKey: 'held', allHeader: 'HELD', fieldPrefix: 'held', headerPrefix: 'HELD' },
+];
+
+interface RawColumn {
+  key: keyof MarketingDailyRow;
+  header: string;
+}
+
+/** The wonderly_daily column contract: order drives headers, values, and the parser. */
+const RAW_COLUMNS: RawColumn[] = [
+  { key: 'date', header: 'DATE' },
+  { key: 'fbSpend', header: 'FB_SPEND' },
+  { key: 'fbImpressions', header: 'FB_IMPRESSIONS' },
+  { key: 'fbClicks', header: 'FB_CLICKS' },
+  ...SPLIT_METRICS.flatMap((m): RawColumn[] => [
+    { key: m.allKey, header: m.allHeader },
+    ...SOURCE_BUCKETS.map(
+      (b): RawColumn => ({
+        key: `${m.fieldPrefix}${b.field}` as keyof MarketingDailyRow,
+        header: `${m.headerPrefix}_${b.header}`,
+      })
+    ),
+  ]),
+  { key: 'noShow', header: 'NO_SHOW' },
+  { key: 'disqualifiedLost', header: 'DISQUALIFIED_LOST' },
+];
+
+/** Header row for the wonderly_daily tab. */
+export const RAW_TAB_HEADERS = RAW_COLUMNS.map((c) => c.header);
+
+/** wonderly_daily columns that are not part of the Snowflake (DailyMarketingRow) side. */
+const SPEND_KEYS = new Set(['date', 'fbSpend', 'fbImpressions', 'fbClicks']);
+
+/** A fully-zeroed MarketingDailyRow for the given date. Handy for tests and defaults. */
+export function blankMarketingRow(date: string): MarketingDailyRow {
+  return { ...emptyMarketing(date), fbSpend: 0, fbImpressions: 0, fbClicks: 0 };
+}
+
+/** A zeroed DailyMarketingRow for a date with no Snowflake data. */
+function emptyMarketing(date: string): DailyMarketingRow {
+  const row = { date } as DailyMarketingRow;
+
+  for (const c of RAW_COLUMNS) {
+    if (!SPEND_KEYS.has(c.key)) (row as unknown as Record<string, number | string>)[c.key] = 0;
+  }
+
+  return row;
+}
+
 /**
  * Join Meta spend to the Snowflake funnel on date.
  *
- * A date appearing in either source produces a row — spend with no funnel is a real
- * (dead) day, and funnel with no spend is organic traffic. Dropping either would
- * quietly flatter the numbers.
- *
  * @param spend - Daily spend rows from the Meta API
- * @param marketing - Daily funnel/booking/sales rows from Snowflake
- * @returns Joined rows sorted newest first, matching the sheet's row order
+ * @param marketing - Daily funnel/source-split/sales rows from Snowflake
+ * @returns Joined rows sorted newest first
  */
 export function joinMarketingDaily(
   spend: MetaDailySpend[],
@@ -125,82 +201,51 @@ export function joinMarketingDaily(
     .sort((a, b) => b.localeCompare(a))
     .map((date) => {
       const s = spendByDate.get(date);
-      const m = marketingByDate.get(date);
+      const m = marketingByDate.get(date) ?? emptyMarketing(date);
 
       return {
+        ...m,
         date,
         fbSpend: round2(s?.spend ?? 0),
         fbImpressions: s?.impressions ?? 0,
         fbClicks: s?.clicks ?? 0,
-        pageView: m?.pageView ?? 0,
-        pageViewFb: m?.pageViewFb ?? 0,
-        pageViewOrganic: m?.pageViewOrganic ?? 0,
-        ctaClicked: m?.ctaClicked ?? 0,
-        ctaFb: m?.ctaFb ?? 0,
-        ctaOrganic: m?.ctaOrganic ?? 0,
-        submitPartial: m?.submitPartial ?? 0,
-        submitPartialFb: m?.submitPartialFb ?? 0,
-        submitPartialOrganic: m?.submitPartialOrganic ?? 0,
-        submitQualified: m?.submitQualified ?? 0,
-        submitQualifiedFb: m?.submitQualifiedFb ?? 0,
-        submitQualifiedOrganic: m?.submitQualifiedOrganic ?? 0,
-        bookedAll: m?.bookedAll ?? 0,
-        bookedFb: m?.bookedFb ?? 0,
-        bookedOrganic: m?.bookedOrganic ?? 0,
-        accepted: m?.accepted ?? 0,
-        acceptedFb: m?.acceptedFb ?? 0,
-        acceptedOrganic: m?.acceptedOrganic ?? 0,
-        noShow: m?.noShow ?? 0,
-        disqualifiedLost: m?.disqualifiedLost ?? 0,
-        held: m?.held ?? 0,
-        heldFb: m?.heldFb ?? 0,
-        heldOrganic: m?.heldOrganic ?? 0,
       };
     });
 }
 
 /**
- * Convert joined rows to the sheet's cell matrix, in RAW_TAB_HEADERS order.
+ * Convert joined rows to the sheet's cell matrix, in RAW_COLUMNS order.
  *
  * @param rows - Joined daily rows
  */
 export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] {
-  return rows.map((r) => [
-    r.date,
-    r.fbSpend,
-    r.fbImpressions,
-    r.fbClicks,
-    r.pageView,
-    r.pageViewFb,
-    r.pageViewOrganic,
-    r.ctaClicked,
-    r.ctaFb,
-    r.ctaOrganic,
-    r.submitPartial,
-    r.submitPartialFb,
-    r.submitPartialOrganic,
-    r.submitQualified,
-    r.submitQualifiedFb,
-    r.submitQualifiedOrganic,
-    r.bookedAll,
-    r.bookedFb,
-    r.bookedOrganic,
-    r.accepted,
-    r.acceptedFb,
-    r.acceptedOrganic,
-    r.noShow,
-    r.disqualifiedLost,
-    r.held,
-    r.heldFb,
-    r.heldOrganic,
-  ]);
+  return rows.map((r) => RAW_COLUMNS.map((c) => r[c.key]));
+}
+
+/**
+ * Parse the sheet's cell matrix (header row first) back into rows, using RAW_COLUMNS so
+ * the positions always match what `toSheetValues` wrote.
+ *
+ * @param values - Raw cell matrix read from wonderly_daily
+ */
+export function parseMarketingRows(values: (string | number)[][]): MarketingDailyRow[] {
+  return values
+    .slice(1)
+    .filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(String(row[0] ?? '')))
+    .map((row) => {
+      const r = {} as MarketingDailyRow;
+
+      RAW_COLUMNS.forEach((c, i) => {
+        if (c.key === 'date') r.date = String(row[i]);
+        else (r as unknown as Record<string, number | string>)[c.key] = num(row[i]);
+      });
+
+      return r;
+    });
 }
 
 /**
  * Merge freshly fetched rows over existing ones, keyed by date.
- *
- * The refetch window covers the whole visible sheet, so fresh rows always win and
- * older dates outside the window are preserved untouched.
  *
  * @param existing - Rows already in the sheet
  * @param fresh - Rows just fetched
@@ -219,9 +264,6 @@ export function mergeRows(
 
 /**
  * Check whether the newest row is older than expected, or whether spend has flatlined.
- *
- * This is the check Motion's sheet does not have. Their Facebook connector died and
- * every downstream layer kept reporting success while spend read $0 for months.
  *
  * @param rows - Rows about to be written, newest first
  * @param today - Current date as `YYYY-MM-DD`
@@ -259,4 +301,10 @@ export function checkStaleness(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function num(value: string | number | undefined): number {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : 0;
 }

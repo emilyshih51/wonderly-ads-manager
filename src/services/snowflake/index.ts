@@ -136,44 +136,64 @@ export class SnowflakeService {
   async getDailyMarketing(days: number): Promise<DailyMarketingRow[]> {
     const rows = await this.query<Record<string, unknown>>(
       `WITH mkt AS (
+         -- Classify every marketing event into one source bucket by priority:
+         -- 1 FB, 2 Google, 3 Yahoo, 4 Bing, 5 N/A (unattributed). Uses the session's
+         -- utm_source / fbclid and, as a fallback, the referrer domain.
          SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID,
-           LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) AS src,
-           EVENT_PROPERTIES:fbclid::string AS fbclid
+           CASE
+             WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) IN ('facebook','ig','fb','instagram')
+               OR EVENT_PROPERTIES:fbclid IS NOT NULL
+               OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string, USER_PROPERTIES:referrer::string,'')) LIKE '%facebook%' THEN 1
+             WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) LIKE '%google%'
+               OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string, USER_PROPERTIES:referrer::string,'')) LIKE '%google%' THEN 2
+             WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) LIKE '%yahoo%'
+               OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string, USER_PROPERTIES:referrer::string,'')) LIKE '%yahoo%' THEN 3
+             WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) LIKE '%bing%'
+               OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string, USER_PROPERTIES:referrer::string,'')) LIKE '%bing%' THEN 4
+             ELSE 5
+           END AS bucket
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
        ),
-       -- Every marketing event carries the session's utm_source / fbclid, so each
-       -- funnel step splits into FB (facebook/ig utm OR an fbclid) vs organic the
-       -- same way bookings do — the channel signal is visible from page view on.
+       -- One bucket per person per step (best-priority source), so the five buckets
+       -- partition the distinct users of each step and always sum back to ALL.
+       mkt2 AS (
+         SELECT day, EVENT_TYPE, AMPLITUDE_ID, MIN(bucket) AS bucket FROM mkt GROUP BY 1, 2, 3
+       ),
        f AS (
          SELECT day,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS page_view,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS page_view_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS page_view_organic,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND bucket=1 THEN AMPLITUDE_ID END) AS page_view_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND bucket=2 THEN AMPLITUDE_ID END) AS page_view_google,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND bucket=3 THEN AMPLITUDE_ID END) AS page_view_yahoo,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND bucket=4 THEN AMPLITUDE_ID END) AS page_view_bing,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND bucket=5 THEN AMPLITUDE_ID END) AS page_view_na,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' THEN AMPLITUDE_ID END) AS cta_clicked,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS cta_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS cta_organic,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' AND bucket=1 THEN AMPLITUDE_ID END) AS cta_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' AND bucket=2 THEN AMPLITUDE_ID END) AS cta_google,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' AND bucket=3 THEN AMPLITUDE_ID END) AS cta_yahoo,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' AND bucket=4 THEN AMPLITUDE_ID END) AS cta_bing,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' AND bucket=5 THEN AMPLITUDE_ID END) AS cta_na,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN AMPLITUDE_ID END) AS submit_partial,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS partial_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS partial_organic,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' AND bucket=1 THEN AMPLITUDE_ID END) AS partial_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' AND bucket=2 THEN AMPLITUDE_ID END) AS partial_google,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' AND bucket=3 THEN AMPLITUDE_ID END) AS partial_yahoo,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' AND bucket=4 THEN AMPLITUDE_ID END) AS partial_bing,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' AND bucket=5 THEN AMPLITUDE_ID END) AS partial_na,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN AMPLITUDE_ID END) AS submit_qualified,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' AND bucket=1 THEN AMPLITUDE_ID END) AS qualified_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' AND bucket=2 THEN AMPLITUDE_ID END) AS qualified_google,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' AND bucket=3 THEN AMPLITUDE_ID END) AS qualified_yahoo,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' AND bucket=4 THEN AMPLITUDE_ID END) AS qualified_bing,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' AND bucket=5 THEN AMPLITUDE_ID END) AS qualified_na,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' THEN AMPLITUDE_ID END) AS booked_all,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_organic
-         FROM mkt GROUP BY day
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' AND bucket=1 THEN AMPLITUDE_ID END) AS booked_fb,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' AND bucket=2 THEN AMPLITUDE_ID END) AS booked_google,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' AND bucket=3 THEN AMPLITUDE_ID END) AS booked_yahoo,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' AND bucket=4 THEN AMPLITUDE_ID END) AS booked_bing,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' AND bucket=5 THEN AMPLITUDE_ID END) AS booked_na
+         FROM mkt2 GROUP BY day
        ),
        -- Sales COHORT keyed by the day each deal entered "Call 1 Scheduled" (the
        -- booking). For that day's cohort: how many of those exact leads EVER
@@ -218,6 +238,12 @@ export class SnowflakeService {
                WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%facebook%'
                  OR USER_PROPERTIES:referrer::string ILIKE '%facebook%'
                  OR EVENT_PROPERTIES:fbclid IS NOT NULL THEN 'facebook'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%google%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%google%' THEN 'google'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%yahoo%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%yahoo%' THEN 'yahoo'
+               WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%bing%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%bing%' THEN 'bing'
              END
            ) AS source
          FROM ${EVENTS_TABLE}
@@ -229,9 +255,8 @@ export class SnowflakeService {
          SELECT email, MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
          FROM src_raw GROUP BY 1
        ),
-       -- One row per deal with its stage-derived outcomes and a channel flag, so held
-       -- and accepted can be split FB vs organic (organic = ALL − FB, i.e. every deal
-       -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
+       -- One row per deal with its stage-derived outcomes and a source bucket (1 FB,
+       -- 2 Google, 3 Yahoo, 4 Bing, 5 N/A), so held and accepted split five ways.
        ds AS (
          SELECT d.booked_day AS day, d.ever_accepted,
            -- Held = the call happened: reached a post-call stage by event OR is currently
@@ -242,7 +267,13 @@ export class SnowflakeService {
                 THEN 1 ELSE 0 END AS held,
            CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
            CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
-           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
+           CASE
+             WHEN LOWER(src.utm_source) IN ('facebook','ig','fb','instagram') THEN 1
+             WHEN LOWER(src.utm_source) LIKE '%google%' THEN 2
+             WHEN LOWER(src.utm_source) LIKE '%yahoo%' THEN 3
+             WHEN LOWER(src.utm_source) LIKE '%bing%' THEN 4
+             ELSE 5
+           END AS bucket
          FROM deal d
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
@@ -253,32 +284,35 @@ export class SnowflakeService {
        s AS (
          SELECT day,
            SUM(held) AS held,
-           SUM(held * is_fb) AS held_fb,
-           SUM(held * (1 - is_fb)) AS held_organic,
+           SUM(CASE WHEN bucket=1 THEN held ELSE 0 END) AS held_fb,
+           SUM(CASE WHEN bucket=2 THEN held ELSE 0 END) AS held_google,
+           SUM(CASE WHEN bucket=3 THEN held ELSE 0 END) AS held_yahoo,
+           SUM(CASE WHEN bucket=4 THEN held ELSE 0 END) AS held_bing,
+           SUM(CASE WHEN bucket=5 THEN held ELSE 0 END) AS held_na,
            SUM(ever_accepted) AS accepted,
-           SUM(ever_accepted * is_fb) AS accepted_fb,
-           SUM(ever_accepted * (1 - is_fb)) AS accepted_organic,
+           SUM(CASE WHEN bucket=1 THEN ever_accepted ELSE 0 END) AS accepted_fb,
+           SUM(CASE WHEN bucket=2 THEN ever_accepted ELSE 0 END) AS accepted_google,
+           SUM(CASE WHEN bucket=3 THEN ever_accepted ELSE 0 END) AS accepted_yahoo,
+           SUM(CASE WHEN bucket=4 THEN ever_accepted ELSE 0 END) AS accepted_bing,
+           SUM(CASE WHEN bucket=5 THEN ever_accepted ELSE 0 END) AS accepted_na,
            SUM(no_show) AS no_show,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
-         f.page_view, f.page_view_fb, f.page_view_organic,
-         f.cta_clicked, f.cta_fb, f.cta_organic,
-         f.submit_partial, f.partial_fb, f.partial_organic,
-         f.submit_qualified, f.qualified_fb, f.qualified_organic,
-         f.booked_all, f.booked_fb, f.booked_organic,
-         -- CALL1_BOOKED mirrors the marketing BOOKING_COMPLETE event (matches Amplitude).
-         -- ACCEPTED / NO_SHOW stay sourced from the sales pipeline cohort, so they can
-         -- exceed CALL1_BOOKED on a given day (sales books Call 1s the form never sees).
+         f.page_view, f.page_view_fb, f.page_view_google, f.page_view_yahoo, f.page_view_bing, f.page_view_na,
+         f.cta_clicked, f.cta_fb, f.cta_google, f.cta_yahoo, f.cta_bing, f.cta_na,
+         f.submit_partial, f.partial_fb, f.partial_google, f.partial_yahoo, f.partial_bing, f.partial_na,
+         f.submit_qualified, f.qualified_fb, f.qualified_google, f.qualified_yahoo, f.qualified_bing, f.qualified_na,
+         f.booked_all, f.booked_fb, f.booked_google, f.booked_yahoo, f.booked_bing, f.booked_na,
          COALESCE(s.accepted,0) AS accepted,
-         COALESCE(s.accepted_fb,0) AS accepted_fb,
-         COALESCE(s.accepted_organic,0) AS accepted_organic,
+         COALESCE(s.accepted_fb,0) AS accepted_fb, COALESCE(s.accepted_google,0) AS accepted_google,
+         COALESCE(s.accepted_yahoo,0) AS accepted_yahoo, COALESCE(s.accepted_bing,0) AS accepted_bing, COALESCE(s.accepted_na,0) AS accepted_na,
          COALESCE(s.no_show,0) AS no_show,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
-         COALESCE(s.held_fb,0) AS held_fb,
-         COALESCE(s.held_organic,0) AS held_organic
+         COALESCE(s.held_fb,0) AS held_fb, COALESCE(s.held_google,0) AS held_google,
+         COALESCE(s.held_yahoo,0) AS held_yahoo, COALESCE(s.held_bing,0) AS held_bing, COALESCE(s.held_na,0) AS held_na
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days, -days]
@@ -288,27 +322,48 @@ export class SnowflakeService {
       date: String(r.DATE),
       pageView: num(r.PAGE_VIEW),
       pageViewFb: num(r.PAGE_VIEW_FB),
-      pageViewOrganic: num(r.PAGE_VIEW_ORGANIC),
+      pageViewGoogle: num(r.PAGE_VIEW_GOOGLE),
+      pageViewYahoo: num(r.PAGE_VIEW_YAHOO),
+      pageViewBing: num(r.PAGE_VIEW_BING),
+      pageViewNa: num(r.PAGE_VIEW_NA),
       ctaClicked: num(r.CTA_CLICKED),
       ctaFb: num(r.CTA_FB),
-      ctaOrganic: num(r.CTA_ORGANIC),
+      ctaGoogle: num(r.CTA_GOOGLE),
+      ctaYahoo: num(r.CTA_YAHOO),
+      ctaBing: num(r.CTA_BING),
+      ctaNa: num(r.CTA_NA),
       submitPartial: num(r.SUBMIT_PARTIAL),
       submitPartialFb: num(r.PARTIAL_FB),
-      submitPartialOrganic: num(r.PARTIAL_ORGANIC),
+      submitPartialGoogle: num(r.PARTIAL_GOOGLE),
+      submitPartialYahoo: num(r.PARTIAL_YAHOO),
+      submitPartialBing: num(r.PARTIAL_BING),
+      submitPartialNa: num(r.PARTIAL_NA),
       submitQualified: num(r.SUBMIT_QUALIFIED),
       submitQualifiedFb: num(r.QUALIFIED_FB),
-      submitQualifiedOrganic: num(r.QUALIFIED_ORGANIC),
+      submitQualifiedGoogle: num(r.QUALIFIED_GOOGLE),
+      submitQualifiedYahoo: num(r.QUALIFIED_YAHOO),
+      submitQualifiedBing: num(r.QUALIFIED_BING),
+      submitQualifiedNa: num(r.QUALIFIED_NA),
       bookedAll: num(r.BOOKED_ALL),
       bookedFb: num(r.BOOKED_FB),
-      bookedOrganic: num(r.BOOKED_ORGANIC),
+      bookedGoogle: num(r.BOOKED_GOOGLE),
+      bookedYahoo: num(r.BOOKED_YAHOO),
+      bookedBing: num(r.BOOKED_BING),
+      bookedNa: num(r.BOOKED_NA),
       accepted: num(r.ACCEPTED),
       acceptedFb: num(r.ACCEPTED_FB),
-      acceptedOrganic: num(r.ACCEPTED_ORGANIC),
-      noShow: num(r.NO_SHOW),
-      disqualifiedLost: num(r.DISQUALIFIED_LOST),
+      acceptedGoogle: num(r.ACCEPTED_GOOGLE),
+      acceptedYahoo: num(r.ACCEPTED_YAHOO),
+      acceptedBing: num(r.ACCEPTED_BING),
+      acceptedNa: num(r.ACCEPTED_NA),
       held: num(r.HELD),
       heldFb: num(r.HELD_FB),
-      heldOrganic: num(r.HELD_ORGANIC),
+      heldGoogle: num(r.HELD_GOOGLE),
+      heldYahoo: num(r.HELD_YAHOO),
+      heldBing: num(r.HELD_BING),
+      heldNa: num(r.HELD_NA),
+      noShow: num(r.NO_SHOW),
+      disqualifiedLost: num(r.DISQUALIFIED_LOST),
     }));
   }
 

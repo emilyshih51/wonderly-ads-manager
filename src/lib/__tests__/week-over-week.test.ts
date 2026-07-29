@@ -1,10 +1,39 @@
 import { describe, expect, it } from 'vitest';
 
 import { WEEK_OVER_WEEK_HEADERS, computeWeekOverWeek } from '@/lib/week-over-week';
-import { blankMarketingRow, type MarketingDailyRow } from '@/lib/marketing-daily';
+import type { MarketingDailyRow } from '@/lib/marketing-daily';
 
 function row(o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
-  return { ...blankMarketingRow(o.date ?? '2026-07-27'), ...o };
+  return {
+    date: '2026-07-27',
+    pageView: 0,
+    pageViewFb: 0,
+    pageViewOrganic: 0,
+    ctaClicked: 0,
+    ctaFb: 0,
+    ctaOrganic: 0,
+    submitPartial: 0,
+    submitPartialFb: 0,
+    submitPartialOrganic: 0,
+    submitQualified: 0,
+    submitQualifiedFb: 0,
+    submitQualifiedOrganic: 0,
+    bookedAll: 0,
+    bookedFb: 0,
+    bookedOrganic: 0,
+    accepted: 0,
+    acceptedFb: 0,
+    acceptedOrganic: 0,
+    noShow: 0,
+    disqualifiedLost: 0,
+    held: 0,
+    heldFb: 0,
+    heldOrganic: 0,
+    fbSpend: 0,
+    fbImpressions: 0,
+    fbClicks: 0,
+    ...o,
+  };
 }
 
 /** { STEP: { header: value } } for readable assertions. */

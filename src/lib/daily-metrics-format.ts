@@ -35,18 +35,10 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Call 1 booked', money: false },
   { label: 'Held', money: false },
   { label: 'Accepted', money: false },
-  { label: 'Cost/visit', money: true },
-  { label: 'Cost/CTA', money: true },
-  { label: 'Cost/partial', money: true },
-  { label: 'Cost/qualified', money: true },
-  { label: 'Cost/Call 1', money: true },
-  { label: 'Cost/held', money: true },
-  { label: 'Cost/accepted', money: true },
 ];
 
 /** Columns per metric group in the grid: ALL, w/w, FB, Organic. */
-/** ALL, w/w, FB, Google, Yahoo, Bing, N/A. */
-const COLS_PER_METRIC = 7;
+const COLS_PER_METRIC = 4;
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
 const FROZEN_ROWS = 5;
@@ -166,11 +158,11 @@ export function buildDailyMetricsFormatRequests(
   metrics.forEach((m, g) => {
     const all = 1 + g * COLS_PER_METRIC;
     const wow = all + 1;
-    // Value columns: ALL plus the five source columns (FB, Google, Yahoo, Bing, N/A).
-    const valueCols = [all, all + 2, all + 3, all + 4, all + 5, all + 6];
+    const fb = all + 2;
+    const organic = all + 3;
     const valueFormat = m.money ? CURRENCY : COUNT;
 
-    // Merge the metric name across its seven columns in the group-header row.
+    // Merge the metric name across its four columns in the group-header row.
     requests.push({
       mergeCells: {
         range: {
@@ -184,8 +176,8 @@ export function buildDailyMetricsFormatRequests(
       },
     });
 
-    // ALL and each source column take the value format; w/w is a percent.
-    for (const col of valueCols) {
+    // ALL / FB / Organic take the value format; w/w is a percent.
+    for (const col of [all, fb, organic]) {
       requests.push({
         repeatCell: {
           range: column(sheetId, col),
@@ -236,18 +228,6 @@ export function buildDailyMetricsFormatRequests(
         },
       },
     });
-
-    // Facebook-only metrics (Spend, CPC) have no Google/Yahoo/Bing/N-A data — hide those
-    // four columns so the grid isn't padded with empty channels.
-    if (m.money) {
-      requests.push({
-        updateDimensionProperties: {
-          range: { sheetId, dimension: 'COLUMNS', startIndex: all + 3, endIndex: all + 7 },
-          properties: { hiddenByUser: true },
-          fields: 'hiddenByUser',
-        },
-      });
-    }
   });
 
   // Week-separator borders. Rows shift down as new days arrive, so clear the daily

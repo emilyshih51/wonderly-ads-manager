@@ -100,11 +100,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'BOOKING_COMPLETE without a Facebook signal.',
   ],
   [
-    '<STEP>_FB / _GOOGLE / _YAHOO / _BING / _NA',
+    '<STEP>_FB / <STEP>_ORGANIC',
     'wonderly_daily, Daily Metrics',
-    'Each funnel step split five ways by source — page views, CTA, partial, qualified, bookings.',
+    'Each funnel step split by channel — page views, CTA, partial, qualified, and bookings.',
     'Amplitude',
-    'Each person is assigned one source per step by priority (FB → Google → Yahoo → Bing → N/A) from utm_source/fbclid, falling back to referrer. NA = unattributed. The five buckets sum to ALL.',
+    'Every marketing event carries the session utm_source/fbclid, so FB = facebook/ig utm OR an fbclid; Organic = everything else. The split is visible from page view on.',
   ],
 
   // --- Sales outcomes (CRM cohort, keyed to booking day) ------------------
@@ -137,25 +137,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Current stage in “Disqualified or Lost” / “Disqualified Lead” / “DQ - Drip”. No event, so not dated.',
   ],
   [
-    'ACCEPTED / HELD (Daily Metrics) vs cohort',
-    'wonderly_daily, Daily Metrics, Daily Funnel',
-    'Two keyings on purpose. Daily Metrics shows Accepted/Held keyed to the day the event HAPPENED (flow — a real daily trend). The Daily Funnel keeps the cohort version (keyed to the booking day) for booked→accepted / booked→held conversion rates.',
-    'CRM',
-    'Flow: ACCEPTED_FLOW/HELD_FLOW = deals whose accepted/first-held event fell on that day. Cohort: ACCEPTED/HELD = of that day’s bookings, how many ever accepted/held.',
-  ],
-  [
-    'Cost/<stage>',
-    'Daily Metrics',
-    'Cost per action for each funnel stage — visit, CTA, partial, qualified, Call 1, held, accepted.',
-    'Derived',
-    'FB_SPEND ÷ that stage’s count. Facebook-only (spend is FB), so the non-FB channel columns are hidden.',
-  ],
-  [
-    'HELD / ACCEPTED _FB / _GOOGLE / _YAHOO / _BING / _NA',
+    'HELD_FB / HELD_ORGANIC, ACCEPTED_FB / ACCEPTED_ORGANIC',
     'wonderly_daily, Daily Metrics',
-    'Held and accepted deals split five ways by the source that produced the Call 1.',
+    'Held and accepted deals split by the channel that produced the Call 1.',
     'CRM + Amplitude',
-    'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE), then bucketed FB/Google/Yahoo/Bing/NA. NA includes unattributed deals.',
+    'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE). FB = facebook/ig; Organic = ALL − FB (includes unattributed deals).',
   ],
 
   // --- Daily Funnel derived ----------------------------------------------
@@ -338,11 +324,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
 
   // --- Daily Metrics grid -------------------------------------------------
   [
-    'ALL / w/w / FB / Google / Yahoo / Bing / N/A',
+    'ALL / w/w / FB / Organic',
     'Daily Metrics',
-    'Per-metric columns: the total, its week-over-week change, and the five-way source split.',
+    'Per-metric columns: the total, its week-over-week change, and the FB vs Organic split.',
     'Derived',
-    'w/w compares each day to the same weekday last week (7 rows back). Sources populated for the funnel steps and held/accepted; Spend/CPC are FB-only (other channels blank).',
+    'w/w compares each day to the same weekday last week (7 rows back). FB/Organic populated for spend and the funnel steps; blank for CPC, Held, Accepted (no channel split yet).',
   ],
   [
     '7d avg / MTD / Prev Month',

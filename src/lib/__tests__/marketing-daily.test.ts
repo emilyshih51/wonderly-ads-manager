@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  blankMarketingRow,
   checkStaleness,
   joinMarketingDaily,
   mergeRows,
-  parseMarketingRows,
   toSheetValues,
   RAW_TAB_HEADERS,
+  type DailyMarketingRow,
   type MarketingDailyRow,
   type MetaDailySpend,
 } from '@/lib/marketing-daily';
@@ -16,14 +15,39 @@ function spend(date: string, o: Partial<MetaDailySpend> = {}): MetaDailySpend {
   return { date, spend: 0, impressions: 0, clicks: 0, ...o };
 }
 
-function mkt(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
-  return { ...blankMarketingRow(date), ...o };
+function mkt(date: string, o: Partial<DailyMarketingRow> = {}): DailyMarketingRow {
+  return {
+    date,
+    pageView: 0,
+    pageViewFb: 0,
+    pageViewOrganic: 0,
+    ctaClicked: 0,
+    ctaFb: 0,
+    ctaOrganic: 0,
+    submitPartial: 0,
+    submitPartialFb: 0,
+    submitPartialOrganic: 0,
+    submitQualified: 0,
+    submitQualifiedFb: 0,
+    submitQualifiedOrganic: 0,
+    bookedAll: 0,
+    bookedFb: 0,
+    bookedOrganic: 0,
+    accepted: 0,
+    acceptedFb: 0,
+    acceptedOrganic: 0,
+    noShow: 0,
+    disqualifiedLost: 0,
+    held: 0,
+    heldFb: 0,
+    heldOrganic: 0,
+    ...o,
+  };
 }
 
-const row = mkt;
-
-/** Column index of a header, for order-independent assertions. */
-const col = (header: string) => RAW_TAB_HEADERS.indexOf(header);
+function row(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
+  return { ...mkt(date), fbSpend: 0, fbImpressions: 0, fbClicks: 0, ...o };
+}
 
 describe('joinMarketingDaily', () => {
   it('joins spend to the funnel on date', () => {
@@ -51,11 +75,11 @@ describe('joinMarketingDaily', () => {
     expect(rows[0].bookedAll).toBe(0);
   });
 
-  it('keeps a funnel day with no spend', () => {
-    const rows = joinMarketingDaily([], [mkt('2026-07-23', { bookedNa: 3, bookedAll: 3 })]);
+  it('keeps a funnel day with no spend (organic)', () => {
+    const rows = joinMarketingDaily([], [mkt('2026-07-23', { bookedOrganic: 3, bookedAll: 3 })]);
 
     expect(rows[0].fbSpend).toBe(0);
-    expect(rows[0].bookedNa).toBe(3);
+    expect(rows[0].bookedOrganic).toBe(3);
   });
 
   it('sorts newest first', () => {
@@ -68,42 +92,57 @@ describe('joinMarketingDaily', () => {
   });
 });
 
-describe('toSheetValues / parseMarketingRows', () => {
-  it('emits columns in header order and round-trips through the parser', () => {
-    const original = mkt('2026-07-23', {
-      fbSpend: 4937.12,
-      fbImpressions: 57000,
-      fbClicks: 1044,
-      pageView: 972,
-      pageViewFb: 700,
-      pageViewGoogle: 200,
-      bookedAll: 16,
-      bookedFb: 16,
-      accepted: 6,
-      acceptedFb: 5,
-      noShow: 2,
-      disqualifiedLost: 3,
-      held: 14,
-      heldFb: 9,
-    });
-    const values = toSheetValues([original]);
+describe('toSheetValues', () => {
+  it('emits columns in RAW_TAB_HEADERS order', () => {
+    const values = toSheetValues([
+      row('2026-07-23', {
+        fbSpend: 4937.12,
+        fbImpressions: 57000,
+        fbClicks: 1044,
+        pageView: 972,
+        ctaClicked: 129,
+        submitPartial: 73,
+        submitQualified: 18,
+        bookedAll: 16,
+        bookedFb: 16,
+        bookedOrganic: 0,
+        accepted: 6,
+        noShow: 2,
+        disqualifiedLost: 3,
+        held: 14,
+      }),
+    ]);
 
+    expect(values[0]).toEqual([
+      '2026-07-23',
+      4937.12,
+      57000,
+      1044,
+      972, // PAGE_VIEW
+      0, // PAGE_VIEW_FB
+      0, // PAGE_VIEW_ORGANIC
+      129, // CTA_CLICKED
+      0, // CTA_FB
+      0, // CTA_ORGANIC
+      73, // SUBMIT_PARTIAL
+      0, // PARTIAL_FB
+      0, // PARTIAL_ORGANIC
+      18, // SUBMIT_QUALIFIED
+      0, // QUALIFIED_FB
+      0, // QUALIFIED_ORGANIC
+      16, // BOOKED_ALL
+      16, // BOOKED_FB
+      0, // BOOKED_ORGANIC
+      6, // ACCEPTED
+      0, // ACCEPTED_FB
+      0, // ACCEPTED_ORGANIC
+      2, // NO_SHOW
+      3, // DISQUALIFIED_LOST
+      14, // HELD
+      0, // HELD_FB
+      0, // HELD_ORGANIC
+    ]);
     expect(values[0]).toHaveLength(RAW_TAB_HEADERS.length);
-    expect(values[0][col('DATE')]).toBe('2026-07-23');
-    expect(values[0][col('FB_SPEND')]).toBe(4937.12);
-    expect(values[0][col('PAGE_VIEW')]).toBe(972);
-    expect(values[0][col('PAGE_VIEW_FB')]).toBe(700);
-    expect(values[0][col('PAGE_VIEW_GOOGLE')]).toBe(200);
-    expect(values[0][col('BOOKED_ALL')]).toBe(16);
-    expect(values[0][col('ACCEPTED_FB')]).toBe(5);
-    expect(values[0][col('HELD')]).toBe(14);
-    expect(values[0][col('DISQUALIFIED_LOST')]).toBe(3);
-
-    // Round-trip: header row + the data row parse back to the same values.
-    const parsed = parseMarketingRows([RAW_TAB_HEADERS, values[0]]);
-
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0]).toEqual(original);
   });
 });
 

@@ -378,37 +378,63 @@ export class SnowflakeService {
   /**
    * Succeeding-contractor cohort counts, for the cost-per-succeeding-contractor KPI.
    *
-   * A contractor's clock starts at their ad go-live (`BASE__TEAMS.AD_START_DATE`), which
-   * is 1:1 with the prod value view. "Succeeding" = cumulative `PNL_USD` over the value
-   * view turns positive within 60 / 90 days of that start. Only teams whose window has
-   * fully elapsed count toward `matured*`, so recent cohorts don't drag the number down.
+   * Spec definition: "succeeding" = ROI ≥ 2× — the contractor's modeled expected
+   * contribution (`EV_OWED_USD`) is at least twice their actual Meta spend — within
+   * 60 / 90 days of the deal being **accepted**. The clock starts at acceptance (from
+   * the stage-change event); the accepted deal is linked to its prod customer team by
+   * contact email → BASE__TEAMS admin email (~76% match), and ROI is measured over the
+   * value view (EV) and the Meta-spend fact (spend). Only cohorts whose window has fully
+   * elapsed count toward `matured*`. `cohort*` are the acceptance-date bounds of the
+   * matured cohort, so the cron can attribute that window's acquisition spend.
    *
-   * All prod — no dev-CRM bridge — so the deal→customer link the old approach lacked is
-   * simply the team dimension joining the value view on TEAM_ID.
-   *
-   * @returns Matured and succeeding counts for the 60- and 90-day windows
+   * @returns Matured/succeeding counts and cohort acceptance windows for 60 and 90 days
    */
   async getSucceedingContractors(): Promise<SucceedingContractors> {
     const rows = await this.query<Record<string, unknown>>(
-      `WITH t AS (
-         SELECT WONDERLY__TEAM__ID AS team_id, WONDERLY__TEAM__AD_START_DATE AS ad_start
-         FROM ${BASE_TEAMS}
-         WHERE WONDERLY__TEAM__AD_START_DATE IS NOT NULL
+      `WITH acc AS (
+         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted'
+                THEN CONVERT_TIMEZONE('UTC','${REPORT_TZ}',EVENT_TIME)::date END) AS accepted_date
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
+           AND EVENT_TIME >= DATEADD('day',-300,CURRENT_DATE)
+           AND EVENT_PROPERTIES:deal_id IS NOT NULL
+         GROUP BY 1 HAVING accepted_date IS NOT NULL
        ),
-       p AS (
-         SELECT t.team_id, t.ad_start,
-           SUM(CASE WHEN v.METRIC_DATE BETWEEN t.ad_start AND DATEADD('day',60,t.ad_start) THEN v.PNL_USD ELSE 0 END) AS pnl60,
-           SUM(CASE WHEN v.METRIC_DATE BETWEEN t.ad_start AND DATEADD('day',90,t.ad_start) THEN v.PNL_USD ELSE 0 END) AS pnl90
-         FROM t
-         JOIN ${CUSTOMER_VALUE_DAILY} v ON v.TEAM_ID = t.team_id
+       em AS (
+         SELECT cd.ID AS deal_id, LOWER(ce.EMAIL) AS email
+         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
+         JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS ce
+           ON ce.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID AND ce.IS_PRIMARY
+       ),
+       team AS (
+         SELECT acc.deal_id, MIN(acc.accepted_date) AS accepted_date, MAX(t.WONDERLY__TEAM__ID) AS team_id
+         FROM acc
+         JOIN em ON em.deal_id = acc.deal_id
+         JOIN ${BASE_TEAMS} t ON LOWER(t.WONDERLY__TEAM__ADMIN_EMAIL) = em.email
+         GROUP BY 1
+       ),
+       roi AS (
+         SELECT tm.team_id, tm.accepted_date,
+           SUM(CASE WHEN v.METRIC_DATE BETWEEN tm.accepted_date AND DATEADD('day',60,tm.accepted_date) THEN v.EV_OWED_USD ELSE 0 END) AS ev60,
+           SUM(CASE WHEN ms.EVENT_DATE BETWEEN tm.accepted_date AND DATEADD('day',60,tm.accepted_date) THEN ms.TOTAL_META_SPEND_USD ELSE 0 END) AS spend60,
+           SUM(CASE WHEN v.METRIC_DATE BETWEEN tm.accepted_date AND DATEADD('day',90,tm.accepted_date) THEN v.EV_OWED_USD ELSE 0 END) AS ev90,
+           SUM(CASE WHEN ms.EVENT_DATE BETWEEN tm.accepted_date AND DATEADD('day',90,tm.accepted_date) THEN ms.TOTAL_META_SPEND_USD ELSE 0 END) AS spend90
+         FROM team tm
+         LEFT JOIN ${CUSTOMER_VALUE_DAILY} v ON v.TEAM_ID = tm.team_id
+         LEFT JOIN ${CUSTOMER_META_SPEND_DAILY} ms ON ms.TEAM_ID = tm.team_id
          GROUP BY 1, 2
        )
        SELECT
-         SUM(CASE WHEN ad_start <= DATEADD('day',-60,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured60,
-         SUM(CASE WHEN ad_start <= DATEADD('day',-60,CURRENT_DATE) AND pnl60 > 0 THEN 1 ELSE 0 END) AS succeeding60,
-         SUM(CASE WHEN ad_start <= DATEADD('day',-90,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured90,
-         SUM(CASE WHEN ad_start <= DATEADD('day',-90,CURRENT_DATE) AND pnl90 > 0 THEN 1 ELSE 0 END) AS succeeding90
-       FROM p`,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured60,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) AND spend60 > 0 AND ev60/NULLIF(spend60,0) >= 2 THEN 1 ELSE 0 END) AS succeeding60,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured90,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) AND spend90 > 0 AND ev90/NULLIF(spend90,0) >= 2 THEN 1 ELSE 0 END) AS succeeding90,
+         TO_CHAR(MIN(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort60_start,
+         TO_CHAR(MAX(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort60_end,
+         TO_CHAR(MIN(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort90_start,
+         TO_CHAR(MAX(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort90_end
+       FROM roi`,
       []
     );
 
@@ -419,6 +445,10 @@ export class SnowflakeService {
       succeeding60: num(r.SUCCEEDING60),
       matured90: num(r.MATURED90),
       succeeding90: num(r.SUCCEEDING90),
+      cohort60Start: String(r.COHORT60_START ?? ''),
+      cohort60End: String(r.COHORT60_END ?? ''),
+      cohort90Start: String(r.COHORT90_START ?? ''),
+      cohort90End: String(r.COHORT90_END ?? ''),
     };
   }
 

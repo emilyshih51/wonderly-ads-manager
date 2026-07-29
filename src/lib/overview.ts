@@ -71,17 +71,25 @@ export function computeOverview(opts: {
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
   const costPerAccepted = accepted7 > 0 ? money(spend7 / accepted7) : 0;
 
-  // Cost per succeeding contractor uses *cumulative* Facebook acquisition spend over
-  // the succeeding contractors, not the 7-day window — success takes 60/90 days to
-  // show, so a weekly numerator would never line up with the matured cohort.
-  const cumulativeFbSpend = money(sum(rows, (r) => r.fbSpend));
+  // Cost per succeeding contractor: Facebook acquisition spend over the cohort's
+  // acceptance window ÷ how many of that cohort succeed (ROI ≥ 2×). Connects a cohort's
+  // spend to that cohort's success rather than dividing all-time spend by everyone.
+  const cohortSpend = (start: string, end: string): number =>
+    start && end
+      ? money(
+          sum(
+            rows.filter((r) => r.date >= start && r.date <= end),
+            (r) => r.fbSpend
+          )
+        )
+      : 0;
   const succeeding60 = succeedingCostCell(
-    cumulativeFbSpend,
+    cohortSpend(succeeding.cohort60Start, succeeding.cohort60End),
     succeeding.succeeding60,
     succeeding.matured60
   );
   const succeeding90 = succeedingCostCell(
-    cumulativeFbSpend,
+    cohortSpend(succeeding.cohort90Start, succeeding.cohort90End),
     succeeding.succeeding90,
     succeeding.matured90
   );
@@ -110,7 +118,7 @@ export function computeOverview(opts: {
     ['Cost per succeeding contractor (90d)', succeeding90],
     [
       '',
-      'Succeeding = cumulative PNL > 0 within the window of ad go-live. Cost = total FB spend ÷ succeeding contractors; "maturing" until the cohort is large enough.',
+      'Succeeding = ROI ≥ 2× (modeled expected contribution ÷ actual Meta spend) within 60/90d of acceptance. Cost = FB spend over the cohort’s acceptance window ÷ succeeding; "maturing" until enough clear the bar.',
     ],
     [],
     ['WARNINGS'],

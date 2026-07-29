@@ -2,24 +2,33 @@
  * Cost per succeeding contractor — the acquisition economics the Growth Sheet spec
  * asks for: what Wonderly spends on Facebook to land a contractor who then *succeeds*.
  *
- * "Succeeding" = a contractor whose cumulative servicing P&L (PNL_USD in the customer
- * value view) turns positive within 60 / 90 days of going live (their ad-start date).
+ * Spec definition: "succeeding" = ROI ≥ 2× — the contractor's modeled expected
+ * contribution (EV_OWED, Wonderly's cut) is at least twice their actual Meta spend —
+ * within 60 / 90 days of their deal being **accepted**.
  *
- * The contractor → customer-value link lives entirely in prod (BASE__TEAMS is 1:1 with
- * the value view), so this no longer needs the old dev-CRM bridge. But the value data
- * only began in 2026 and P&L matures slowly, so few cohorts have 60/90 days behind them
- * — hence the low-n guard: below a minimum of succeeding contractors we show the raw
- * cohort counts instead of a noisy dollar figure.
+ * Cost basis: for the cohort of contractors accepted in the matured window, the cost is
+ * the Facebook acquisition spend over that acceptance window ÷ how many of the cohort
+ * succeed. This connects a cohort's acquisition spend to that cohort's success (an honest
+ * approximation — Facebook spend is aggregate, not tagged to an individual contractor).
+ *
+ * The data is young (acceptance events begin mid-2026) and the 2× bar is high, so few or
+ * no cohorts clear it yet — hence the low-n guard: below a minimum we show the cohort
+ * counts instead of a noisy dollar figure.
  */
 
-/** Counts from the Snowflake cohort query, per maturation window. */
+/** Counts and acceptance-window bounds from the Snowflake cohort query, per window. */
 export interface SucceedingContractors {
-  /** Teams whose ad-start is ≥60 days ago (so a 60-day P&L window has fully elapsed). */
+  /** Accepted-and-linked contractors whose 60-day window has fully elapsed. */
   matured60: number;
-  /** Of the matured-60 teams, how many reached cumulative PNL > 0 within 60 days. */
+  /** Of matured-60, how many reached ROI ≥ 2× within 60 days of acceptance. */
   succeeding60: number;
   matured90: number;
   succeeding90: number;
+  /** Acceptance-date bounds (`YYYY-MM-DD`) of the matured-60 cohort, for the CAC window. */
+  cohort60Start: string;
+  cohort60End: string;
+  cohort90Start: string;
+  cohort90End: string;
 }
 
 /**
@@ -31,24 +40,24 @@ export const MIN_SUCCEEDING = 5;
 /**
  * Build the value cell for a "Cost per succeeding contractor" row.
  *
- * With enough matured, succeeding contractors it returns the dollar cost (cumulative
- * Facebook acquisition spend ÷ succeeding contractors). Otherwise it returns a
- * transparent "maturing" string with the current counts, so the row is honest about
+ * With enough succeeding contractors it returns the dollar cost (Facebook acquisition
+ * spend over the cohort's acceptance window ÷ succeeding contractors). Otherwise it
+ * returns a transparent "maturing" string with the counts, so the row is honest about
  * why there's no number yet and fills in automatically as cohorts age.
  *
- * @param cumulativeFbSpend - Total Wonderly Facebook acquisition spend to date
+ * @param cohortFbSpend - Facebook acquisition spend over the cohort's acceptance window
  * @param succeeding - Succeeding contractors in the window
  * @param matured - Contractors whose window has fully elapsed (the cohort size)
  * @returns A dollar amount when the cohort is large enough, else a status string
  */
 export function succeedingCostCell(
-  cumulativeFbSpend: number,
+  cohortFbSpend: number,
   succeeding: number,
   matured: number
 ): number | string {
   if (succeeding >= MIN_SUCCEEDING) {
-    return Math.round(cumulativeFbSpend / succeeding);
+    return Math.round(cohortFbSpend / succeeding);
   }
 
-  return `maturing — ${succeeding}/${matured} cohort succeeding`;
+  return `maturing — ${succeeding}/${matured} cohort succeeding (ROI ≥ 2×)`;
 }

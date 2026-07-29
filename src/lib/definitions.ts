@@ -246,9 +246,9 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'Cost per succeeding contractor (60/90d)',
     'Overview',
-    'Facebook acquisition spend per contractor who succeeds within 60/90 days of go-live.',
-    'Meta + Snowflake (prod value view)',
-    'Succeeding = cumulative PNL_USD > 0 within 60/90d of a team’s AD_START_DATE. Cost = total FB spend ÷ succeeding contractors; shows “maturing” until ≥5 have matured (data began 2026, so cohorts are still aging).',
+    'Facebook acquisition spend per contractor who succeeds within 60/90 days of acceptance.',
+    'Meta + Snowflake (prod value view + Meta spend)',
+    'Succeeding = ROI ≥ 2× (EV_OWED modeled expected contribution ÷ actual Meta spend) within 60/90d of the deal’s acceptance date. Cost = FB spend over the cohort’s acceptance window ÷ succeeding; “maturing” until ≥5 clear the bar (acceptances began mid-2026, and 2× is a high bar, so it reads 0 for now).',
   ],
 
   // --- call1_deals (deal-level audit trail) ------------------------------
@@ -307,7 +307,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'EV_TAKE / AD_SPEND / PNL',
     'customer_pnl',
-    'Wonderly’s cut of customer value, the ad spend it runs for customers, and the P&L.',
+    'Wonderly’s modeled expected contribution (EV take), the Meta spend it runs for customers, and EV − spend. PNL is a forward-looking expectation, not realized/collected money.',
     'Snowflake (customer-value view + Meta spend)',
     'Paying customers only (subscription active/past_due). EV take = EV_OWED; AD_SPEND = actual delivered Meta spend (not the value view budget); PNL = EV − actual spend. Matches the Customer Funnel tool. EV is forward-looking, so daily PnL is lumpy and won’t tie to the dollar.',
   ],

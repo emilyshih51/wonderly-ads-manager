@@ -71,7 +71,16 @@ function line(matrix: (string | number)[][], label: string): (string | number)[]
 describe('computeOverview', () => {
   const base = {
     call1Deals: [deal()],
-    succeeding: { matured60: 0, succeeding60: 0, matured90: 0, succeeding90: 0 },
+    succeeding: {
+      matured60: 0,
+      succeeding60: 0,
+      matured90: 0,
+      succeeding90: 0,
+      cohort60Start: '',
+      cohort60End: '',
+      cohort90Start: '',
+      cohort90End: '',
+    },
     lastRefreshedPt: 'Jul 28, 2026, 2:30 PM',
     today: '2026-07-28',
   };
@@ -103,28 +112,44 @@ describe('computeOverview', () => {
     const m = computeOverview({
       ...base,
       rows: [row()],
-      succeeding: { matured60: 3, succeeding60: 1, matured90: 2, succeeding90: 0 },
+      succeeding: {
+        ...base.succeeding,
+        matured60: 3,
+        succeeding60: 1,
+        matured90: 2,
+        succeeding90: 0,
+      },
     });
 
     expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe(
-      'maturing — 1/3 cohort succeeding'
+      'maturing — 1/3 cohort succeeding (ROI ≥ 2×)'
     );
     expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe(
-      'maturing — 0/2 cohort succeeding'
+      'maturing — 0/2 cohort succeeding (ROI ≥ 2×)'
     );
   });
 
   it('computes cost per succeeding contractor once the cohort is large enough', () => {
+    // Rows dated 07-27; the cohort window covers that day, so cohort spend = 3×1000.
     const rows = Array(3)
       .fill(0)
-      .map(() => row({ fbSpend: 1000 }));
+      .map(() => row({ date: '2026-07-27', fbSpend: 1000 }));
     const m = computeOverview({
       ...base,
       rows,
-      succeeding: { matured60: 20, succeeding60: 6, matured90: 15, succeeding90: 5 },
+      succeeding: {
+        matured60: 20,
+        succeeding60: 6,
+        matured90: 15,
+        succeeding90: 5,
+        cohort60Start: '2026-07-27',
+        cohort60End: '2026-07-27',
+        cohort90Start: '2026-07-27',
+        cohort90End: '2026-07-27',
+      },
     });
 
-    // 3000 cumulative spend / 6 succeeding (60d) = 500; / 5 (90d) = 600.
+    // 3000 cohort-window spend / 6 succeeding (60d) = 500; / 5 (90d) = 600.
     expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe(500);
     expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe(600);
   });

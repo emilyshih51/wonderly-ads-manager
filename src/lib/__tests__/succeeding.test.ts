@@ -9,7 +9,7 @@ describe('succeedingCostCell', () => {
   });
 
   it('shows a maturing status with counts below the minimum', () => {
-    expect(succeedingCostCell(10000, 2, 8)).toBe('maturing — 2/8 cohort succeeding');
-    expect(succeedingCostCell(10000, 0, 0)).toBe('maturing — 0/0 cohort succeeding');
+    expect(succeedingCostCell(10000, 2, 8)).toBe('maturing — 2/8 cohort succeeding (ROI ≥ 2×)');
+    expect(succeedingCostCell(10000, 0, 0)).toBe('maturing — 0/0 cohort succeeding (ROI ≥ 2×)');
   });
 });

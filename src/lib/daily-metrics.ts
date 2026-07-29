@@ -137,18 +137,25 @@ function colLetter(index: number): string {
  * are plain values. Data starts at sheet row 6 (rows 1-2 headers, rows 3-5 summaries).
  *
  * @param rows - Daily rows, newest first
- * @param today - Pacific `YYYY-MM-DD`, for the MTD / Prev-Month windows
+ * @param today - Pacific `YYYY-MM-DD`, used only to skip today's partial row from the
+ *   7d average. The MTD / Prev-Month windows are live EOMONTH(TODAY()) sheet expressions.
  */
 export function computeDailyMetrics(
   rows: MarketingDailyRow[],
   today: string
 ): (string | number)[][] {
-  const [ty, tm, td] = today.split('-').map(Number);
-  const pm = tm === 1 ? 12 : tm - 1;
-  const py = tm === 1 ? ty - 1 : ty;
-  const prevMonthLastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
-  const prevSpanEndDay = Math.min(td, prevMonthLastDay);
   const dataEnd = 5 + rows.length; // last daily row (data starts at sheet row 6)
+
+  // Month windows as live sheet expressions (EOMONTH/TODAY) rather than baked-in dates,
+  // so MTD / Prev-Month advance on their own as the calendar rolls over — not only when
+  // the cron reruns. EOMONTH(TODAY(),-1)+1 = the 1st of this month; last month is
+  // EOMONTH(TODAY(),-2)+1 .. EOMONTH(TODAY(),-1).
+  const mtdLo = '(EOMONTH(TODAY(),-1)+1)';
+  const mtdHi = 'TODAY()';
+  const prevLo = '(EOMONTH(TODAY(),-2)+1)';
+  const prevHi = 'EOMONTH(TODAY(),-1)';
+  // MTD w/w compares last month through the same day-of-month as today (capped at its end).
+  const prevSpanHi = 'MIN(EOMONTH(TODAY(),-2)+DAY(TODAY()),EOMONTH(TODAY(),-1))';
 
   // The 7d average uses the last 7 *completed* days. If today's partial row is at the
   // top (sheet row 6), skip it so it isn't averaged against full days.
@@ -187,10 +194,10 @@ export function computeDailyMetrics(
 
   // Summary-row formulas reference the daily block, sheet rows 6..dataEnd.
   const dateRange = `$A$6:$A$${dataEnd}`;
-  const sumifs = (L: string, y: number, mo: number, d1: number, d2: number) =>
-    `SUMIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&DATE(${y},${mo},${d1}),${dateRange},"<="&DATE(${y},${mo},${d2}))`;
-  const avgifs = (L: string, y: number, mo: number, d1: number, d2: number) =>
-    `AVERAGEIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&DATE(${y},${mo},${d1}),${dateRange},"<="&DATE(${y},${mo},${d2}))`;
+  const sumifs = (L: string, lo: string, hi: string) =>
+    `SUMIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&${lo},${dateRange},"<="&${hi})`;
+  const avgifs = (L: string, lo: string, hi: string) =>
+    `AVERAGEIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&${lo},${dateRange},"<="&${hi})`;
 
   /** 7d-average / MTD / Prev-Month value formulas for one column (blank if not present). */
   const valueCells = (colIndex: number, present: boolean, ratio: boolean) => {
@@ -200,10 +207,8 @@ export function computeDailyMetrics(
 
     return {
       d7: `=IFERROR(AVERAGE(${L}${s7Start}:${L}${s7End}),0)`,
-      mtd: ratio ? `=IFERROR(${avgifs(L, ty, tm, 1, td)},0)` : `=${sumifs(L, ty, tm, 1, td)}`,
-      prev: ratio
-        ? `=IFERROR(${avgifs(L, py, pm, 1, prevMonthLastDay)},0)`
-        : `=${sumifs(L, py, pm, 1, prevMonthLastDay)}`,
+      mtd: ratio ? `=IFERROR(${avgifs(L, mtdLo, mtdHi)},0)` : `=${sumifs(L, mtdLo, mtdHi)}`,
+      prev: ratio ? `=IFERROR(${avgifs(L, prevLo, prevHi)},0)` : `=${sumifs(L, prevLo, prevHi)}`,
     };
   };
 
@@ -214,8 +219,8 @@ export function computeDailyMetrics(
    */
   const costCells = (stageFb: string) => ({
     d7: `=IFERROR(SUM(${spendAll}${s7Start}:${spendAll}${s7End})/SUM(${stageFb}${s7Start}:${stageFb}${s7End}),0)`,
-    mtd: `=IFERROR(${sumifs(spendAll, ty, tm, 1, td)}/${sumifs(stageFb, ty, tm, 1, td)},0)`,
-    prev: `=IFERROR(${sumifs(spendAll, py, pm, 1, prevMonthLastDay)}/${sumifs(stageFb, py, pm, 1, prevMonthLastDay)},0)`,
+    mtd: `=IFERROR(${sumifs(spendAll, mtdLo, mtdHi)}/${sumifs(stageFb, mtdLo, mtdHi)},0)`,
+    prev: `=IFERROR(${sumifs(spendAll, prevLo, prevHi)}/${sumifs(stageFb, prevLo, prevHi)},0)`,
   });
 
   const d7Row: (string | number)[] = ['7d avg'];
@@ -234,9 +239,7 @@ export function computeDailyMetrics(
     // 7d w/w: this-week average vs the previous 7 completed days.
     const wow7 = `=IFERROR((${La}3-AVERAGE(${La}${p7Start}:${La}${p7End}))/AVERAGE(${La}${p7Start}:${La}${p7End}),"")`;
     // MTD w/w: month-to-date vs the same day-span of the previous month.
-    const prevSpan = ratio
-      ? avgifs(La, py, pm, 1, prevSpanEndDay)
-      : sumifs(La, py, pm, 1, prevSpanEndDay);
+    const prevSpan = ratio ? avgifs(La, prevLo, prevSpanHi) : sumifs(La, prevLo, prevSpanHi);
     const wowMtd = `=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`;
 
     if (m.hasCost) {

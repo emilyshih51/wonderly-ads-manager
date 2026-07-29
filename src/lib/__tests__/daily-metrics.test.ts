@@ -73,10 +73,13 @@ describe('computeDailyMetrics', () => {
     // Spend ALL is column B. 7d avg = AVERAGE of the last 7 *completed* days; since the
     // newest row is today (2026-07-28), it's skipped, so the range starts at row 7.
     expect(m[2][1]).toBe('=IFERROR(AVERAGE(B7:B13),0)');
+    // MTD is a live window: 1st of this month (EOMONTH(TODAY(),-1)+1) through TODAY().
     expect(String(m[3][1])).toContain('SUMIFS(B$6:B$21');
-    expect(String(m[3][1])).toContain('DATE(2026,7,1)');
-    // Prev Month reaches into June (30 days).
-    expect(String(m[4][1])).toContain('DATE(2026,6,30)');
+    expect(String(m[3][1])).toContain('">="&(EOMONTH(TODAY(),-1)+1)');
+    expect(String(m[3][1])).toContain('"<="&TODAY()');
+    // Prev Month = all of last month: EOMONTH(TODAY(),-2)+1 through EOMONTH(TODAY(),-1).
+    expect(String(m[4][1])).toContain('">="&(EOMONTH(TODAY(),-2)+1)');
+    expect(String(m[4][1])).toContain('"<="&EOMONTH(TODAY(),-1)');
   });
 
   it('shows daily w/w as the day vs the same weekday last week', () => {

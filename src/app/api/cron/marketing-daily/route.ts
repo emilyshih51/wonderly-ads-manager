@@ -165,9 +165,12 @@ export async function GET(request: Request) {
     // Deal-level Call 1 fact table: one row per deal booked since the anchor, re-derived
     // each run (so the current stage / held / accepted flags stay up to date) and floored
     // at May 1. Full-window rewrite, no read-back/merge needed.
-    const call1Deals = (await snow.getCall1Deals(backfillDays)).filter(
-      (d) => d.bookedDay >= BACKFILL_START
-    );
+    const call1Deals = (await snow.getCall1Deals(backfillDays)).filter((d) => {
+      // Non-booked accepted/held deals have no booking day; floor on their earliest date.
+      const primary = d.bookedDay || d.heldDate || d.acceptedDate;
+
+      return primary >= BACKFILL_START;
+    });
 
     await sheets.ensureTab(sheetId, CALL1_DEALS_TAB);
     await sheets.replaceRows(

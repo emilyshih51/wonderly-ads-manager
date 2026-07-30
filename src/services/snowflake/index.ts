@@ -477,7 +477,10 @@ export class SnowflakeService {
   }
 
   /**
-   * Deal-level Call 1 fact table — one row per deal booked in the last N days.
+   * Deal-level Call 1 fact table — one row per deal that entered the Call 1 funnel in the
+   * last N days: booked, or (when the "Call 1 Scheduled" event was never captured) ever
+   * accepted / held. So the ACCEPTED count reconciles with Daily Funnel / Daily Metrics
+   * rather than dropping the ~100 accepted deals that have no booking event.
    *
    * Held and Accepted are milestones from the stage-change events (they only fire for
    * positive stages), so both stay true even after later movement — a held deal that's
@@ -485,7 +488,7 @@ export class SnowflakeService {
    * from the current CRM stage (those transitions emit no event, so they can't be dated).
    *
    * @param days - Trailing window, e.g. 90 (keeps cohorts open ~3 months)
-   * @returns One row per deal, newest booking first
+   * @returns One row per deal, newest first (by booking, else held/accepted date)
    */
   async getCall1Deals(days: number): Promise<Call1DealRow[]> {
     const rows = await this.query<Record<string, unknown>>(
@@ -573,8 +576,11 @@ export class SnowflakeService {
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN src ON src.email=em.join_email
-       WHERE de.booked_day IS NOT NULL
-       ORDER BY de.booked_day DESC`,
+       -- Include any deal that entered the Call 1 funnel: booked, or (for deals whose
+       -- "Call 1 Scheduled" event was never captured — booked before that event started)
+       -- ever accepted / held. Keeps the tab's ACCEPTED count reconciled with Daily Funnel.
+       WHERE de.booked_day IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
+       ORDER BY COALESCE(de.booked_day, de.held_day, de.accepted_day) DESC`,
       [-days, -days]
     );
 

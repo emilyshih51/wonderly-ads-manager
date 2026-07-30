@@ -172,6 +172,19 @@ export function buildDailyMetricsFormatRequests(
     },
   });
 
+  // Total columns: Date + each group's width (5 with Cost, else 4).
+  const lastColumn = 1 + metrics.reduce((n, m) => n + (m.hasCost ? 5 : 4), 0);
+
+  // Un-hide every data column first, so a column-order change can't leave a previously
+  // hidden column stuck hidden (the per-metric `hideOrganic` below re-hides the right ones).
+  requests.push({
+    updateDimensionProperties: {
+      range: { sheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: lastColumn },
+      properties: { hiddenByUser: false },
+      fields: 'hiddenByUser',
+    },
+  });
+
   // Variable-width groups: funnel stages prepend a Cost column (Cost · ALL · w/w · FB ·
   // Organic); Spend/CPC have no Cost (ALL · w/w · FB · Organic).
   let colIdx = 1;
@@ -273,8 +286,6 @@ export function buildDailyMetricsFormatRequests(
       });
     }
   });
-
-  const lastColumn = colIdx;
 
   // Tighten the grid: narrow the metric columns (short numbers) and keep the Date column
   // wide enough for the weekday prefix ("Wed 2026-07-30").

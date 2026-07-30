@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/marketing-daily",
-      "schedule": "0 */3 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }

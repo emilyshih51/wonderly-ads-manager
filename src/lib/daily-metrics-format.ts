@@ -274,9 +274,27 @@ export function buildDailyMetricsFormatRequests(
     }
   });
 
+  const lastColumn = colIdx;
+
+  // Tighten the grid: narrow the metric columns (short numbers) and keep the Date column
+  // wide enough for the weekday prefix ("Wed 2026-07-30").
+  requests.push({
+    updateDimensionProperties: {
+      range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 },
+      properties: { pixelSize: 104 },
+      fields: 'pixelSize',
+    },
+  });
+  requests.push({
+    updateDimensionProperties: {
+      range: { sheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: lastColumn },
+      properties: { pixelSize: 62 },
+      fields: 'pixelSize',
+    },
+  });
+
   // Week-separator borders. Rows shift down as new days arrive, so clear the daily
   // block's inner borders first, then draw a line under the last row of each week.
-  const lastColumn = colIdx;
 
   requests.push({
     updateBorders: {

@@ -300,7 +300,7 @@ chore(deps): Upgrade next to 16.1.0
 
 ## Marketing Performance Sheet ("Growth Sheet")
 
-A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cron, every 3h). It tracks Wonderly's own contractor-acquisition funnel: **FB spend → page view → CTA → partial form → qualified form → Call 1 booked → held → accepted → succeeding customer.** The sandbox can't `git push` — after code changes, the user pushes and reruns the cron; formatting/values only appear after that.
+A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cron, hourly). It tracks Wonderly's own contractor-acquisition funnel: **FB spend → page view → CTA → partial form → qualified form → Call 1 booked → held → accepted → succeeding customer.** The sandbox can't `git push` — after code changes, the user pushes and reruns the cron; formatting/values only appear after that.
 
 ### Data sources
 

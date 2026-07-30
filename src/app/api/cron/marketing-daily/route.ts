@@ -1,7 +1,7 @@
 /**
  * GET /api/cron/marketing-daily
  *
- * Refreshes the Marketing Performance sheet's raw (Blended) tab. Runs every 3 hours
+ * Refreshes the Marketing Performance sheet's raw (Blended) tab. Runs hourly
  * via Vercel cron (see vercel.json).
  *
  * Pulls Meta spend from the Meta API and the funnel/booking/sales counts from

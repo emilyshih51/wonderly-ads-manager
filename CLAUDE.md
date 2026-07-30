@@ -198,6 +198,12 @@ const store = new RulesStoreService(redis);
 const activeRules = await store.getActive();
 ```
 
+### Promoting ads — the `+` marker (don't break this)
+
+The promote action (`GET /api/automations/evaluate`) duplicates a winning ad into the rule's target ad set. Whether the **original** is paused is controlled per-rule by `pause_original` (defaults to `true`; the Step 3 UI toggle is "Pause the original winning ad"). When it's off, the winner keeps running in both places.
+
+Invariant to preserve: after a successful promote, the original ad is renamed with a leading `+ ` via `meta.updateName(entityId, addPromotedMarker(entityName))`. On every run, promote candidates whose name is already marked (`isPromotedName`) are skipped with `skipped: 'already_promoted'` **before** conditions are evaluated. This is the only thing preventing an ad from being promoted twice when `pause_original` is off and the winner still matches the rule — the scan (`getFilteredInsights`) only returns ACTIVE ads, so a paused original drops out on its own, but a running one would re-match forever without the marker. The helpers live in `src/services/meta/constants.ts` (`PROMOTED_AD_MARKER`, `isPromotedName`, `addPromotedMarker`, `stripPromotedMarker`). The rename is best-effort (wrapped in try/catch) so a Meta API error can't fail the promotion itself. If you change how ads are scanned, named, or promoted, keep this skip-and-mark behavior intact.
+
 ### Logging
 
 ```ts

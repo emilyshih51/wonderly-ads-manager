@@ -79,6 +79,8 @@ Both are optional. If unset, the bot responds to anyone in any channel it's invi
 
 Visual flow editor for creating rules that automatically pause, activate, or promote ads based on performance metrics. Runs via Vercel cron every 5 minutes. Each rule can send notifications to a configurable Slack channel.
 
+When a rule **promotes** a winner, it duplicates the ad into the rule's target "winners" ad set. By default it also pauses the original, but each promote rule has a **"Pause the original winning ad"** toggle — turn it off to keep the winner running in both places. Every promoted original is renamed with a leading `+ ` so it's easy to spot in Ads Manager, and any ad whose name already starts with `+` is skipped on future runs. This means an ad is never promoted twice — even when you choose to leave the original running.
+
 ## Docs
 
 - [`CLAUDE.md`](./CLAUDE.md) — architecture, conventions, security rules, known issues (read this first)

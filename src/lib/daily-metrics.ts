@@ -36,6 +36,15 @@ interface Metric {
 }
 
 const METRICS: Metric[] = [
+  // Accepted is pulled to the front so the headline outcome reads first. Split by the
+  // deal's Call 1 source (organic = ALL − FB).
+  {
+    label: 'Accepted',
+    daily: (r) => r.accepted,
+    fb: (r) => r.acceptedFb,
+    organic: (r) => r.acceptedOrganic,
+    hasCost: true,
+  },
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
   {
@@ -82,19 +91,12 @@ const METRICS: Metric[] = [
     organic: (r) => r.bookedOrganic,
     hasCost: true,
   },
-  // Held / Accepted split by the deal's Call 1 source (organic = ALL − FB).
+  // Held split by the deal's Call 1 source (organic = ALL − FB).
   {
     label: 'Held',
     daily: (r) => r.held,
     fb: (r) => r.heldFb,
     organic: (r) => r.heldOrganic,
-    hasCost: true,
-  },
-  {
-    label: 'Accepted',
-    daily: (r) => r.accepted,
-    fb: (r) => r.acceptedFb,
-    organic: (r) => r.acceptedOrganic,
     hasCost: true,
   },
 ];
@@ -177,8 +179,10 @@ export function computeDailyMetrics(
 
     return { cost, all, wow, fb, organic };
   });
-  // Spend is the first metric (no Cost column), so its ALL column is the spend column.
-  const spendAll = colLetter(layout[0].all);
+  // Cost-per-action's numerator is FB spend — the Spend metric's ALL column, wherever it
+  // sits in the column order.
+  const spendIdx = METRICS.findIndex((m) => m.label === 'Spend');
+  const spendAll = colLetter(layout[spendIdx].all);
 
   const groupHeader: (string | number)[] = [''];
   const subHeader: (string | number)[] = ['Date'];

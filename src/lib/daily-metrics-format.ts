@@ -34,6 +34,7 @@ export interface MetricFormat {
  * the admin formatter share one source.
  */
 export const DAILY_METRICS_FORMAT: MetricFormat[] = [
+  { label: 'Accepted', money: false, hasCost: true },
   { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
   { label: 'CPC', money: true, hideOrganic: true },
   { label: 'Page views', money: false, hasCost: true },
@@ -42,7 +43,6 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Qualified', money: false, hasCost: true },
   { label: 'Call 1 booked', money: false, hasCost: true },
   { label: 'Held', money: false, hasCost: true },
-  { label: 'Accepted', money: false, hasCost: true },
 ];
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
@@ -160,6 +160,17 @@ export function buildDailyMetricsFormatRequests(
       },
     },
   ];
+
+  // Date column (A): show the weekday alongside the date (e.g. "Wed 2026-07-30"). The cell
+  // stays a real date — only the display changes — so the summary rows' SUMIFS date
+  // criteria keep working. Text labels in the summary rows are unaffected by a date format.
+  requests.push({
+    repeatCell: {
+      range: { sheetId, startRowIndex: FROZEN_ROWS, startColumnIndex: 0, endColumnIndex: 1 },
+      cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'ddd yyyy-mm-dd' } } },
+      fields: 'userEnteredFormat.numberFormat',
+    },
+  });
 
   // Variable-width groups: funnel stages prepend a Cost column (Cost · ALL · w/w · FB ·
   // Organic); Spend/CPC have no Cost (ALL · w/w · FB · Organic).

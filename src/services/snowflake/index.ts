@@ -219,11 +219,11 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
-       -- Fill a missing booked_day from the manual override tab (keyed by deal_id), so
-       -- accepted deals whose Call 1 Scheduled event was never captured still land in a
-       -- booking cohort. The event-derived day always wins when present.
+       -- Booked day: the manual override tab WINS when present (so a wrong or late
+       -- "Call 1 Scheduled" event — e.g. a re-book after acceptance — can be corrected),
+       -- otherwise the event-derived day. Deals not in the override keep their event day.
        deal2 AS (
-         SELECT d.deal_id, COALESCE(d.booked_day, o.booked_day) AS booked_day,
+         SELECT d.deal_id, COALESCE(o.booked_day, d.booked_day) AS booked_day,
            d.ever_accepted, d.ever_held_event
          FROM deal d LEFT JOIN ovr o ON o.deal_id = d.deal_id
        ),
@@ -588,7 +588,7 @@ export class SnowflakeService {
        )
        SELECT de.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
-         TO_CHAR(COALESCE(de.booked_day, o.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
+         TO_CHAR(COALESCE(o.booked_day, de.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          CASE WHEN de.ever_held = 1
               OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
@@ -617,8 +617,8 @@ export class SnowflakeService {
        -- Include any deal that entered the Call 1 funnel: booked (event or manual override),
        -- or (for deals whose "Call 1 Scheduled" event was never captured) ever accepted /
        -- held. Keeps the tab's ACCEPTED count reconciled with Daily Funnel.
-       WHERE COALESCE(de.booked_day, o.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
-       ORDER BY COALESCE(de.booked_day, o.booked_day, de.held_day, de.accepted_day) DESC`,
+       WHERE COALESCE(o.booked_day, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
+       ORDER BY COALESCE(o.booked_day, de.booked_day, de.held_day, de.accepted_day) DESC`,
       [overridesJson(bookingOverrides), -days, -days]
     );
 

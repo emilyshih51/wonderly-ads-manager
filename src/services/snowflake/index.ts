@@ -251,15 +251,23 @@ export class SnowflakeService {
        email_bc AS (
          SELECT s.email, MIN(b.bc) AS bc FROM sub_amp s JOIN bc_amp b ON b.AMPLITUDE_ID = s.AMPLITUDE_ID GROUP BY 1
        ),
+       -- CRM deal-creation day (100% coverage) — booking the Call 1 is what creates the deal,
+       -- so this is the booked day and is immune to the late re-book that can pollute the
+       -- Call 1 Scheduled event.
+       crt AS (
+         SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
+         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS
+       ),
        -- Booked day per deal: the earliest booking signal — first BOOKING_COMPLETE (bridged
-       -- by email) or the Call 1 Scheduled event, whichever is earlier — unless the manual
-       -- override tab supplies one (which wins over both).
+       -- by email) or the CRM deal-creation day, whichever is earlier — falling back to the
+       -- Call 1 Scheduled event, unless the manual override tab supplies one (which wins).
        deal2 AS (
          SELECT d.deal_id,
-           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, d.booked_day), NVL(d.booked_day, ebc.bc))) AS booked_day,
+           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), d.booked_day) AS booked_day,
            d.ever_accepted, d.ever_held_event
          FROM deal d
          LEFT JOIN ovr o ON o.deal_id = d.deal_id
+         LEFT JOIN crt ON crt.deal_id = d.deal_id
          LEFT JOIN dealmail dm ON dm.deal_id = d.deal_id
          LEFT JOIN email_bc ebc ON ebc.email = dm.email
        ),
@@ -590,6 +598,12 @@ export class SnowflakeService {
        email_bc AS (
          SELECT s.email, MIN(b.bc) AS bc FROM sub_amp s JOIN bc_amp b ON b.AMPLITUDE_ID = s.AMPLITUDE_ID GROUP BY 1
        ),
+       -- CRM deal-creation day (100% coverage; booking the Call 1 creates the deal). The
+       -- truest booked day, immune to the late re-book that can pollute Call 1 Scheduled.
+       crt AS (
+         SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
+         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS
+       ),
        -- Marketing source per email, from the form-submit events (which carry the
        -- email the person typed). The source can live in several places, so we fall
        -- back in order: event utm_source -> user utm_source -> initial utm_source ->
@@ -635,7 +649,7 @@ export class SnowflakeService {
        )
        SELECT de.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
-         TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, de.booked_day), NVL(de.booked_day, ebc.bc))),'YYYY-MM-DD') AS BOOKED_DAY,
+         TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          CASE WHEN de.ever_held = 1
               OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
@@ -660,13 +674,14 @@ export class SnowflakeService {
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
+       LEFT JOIN crt ON crt.deal_id=de.deal_id
        LEFT JOIN email_bc ebc ON ebc.email=em.join_email
        LEFT JOIN src ON src.email=em.join_email
-       -- Include any deal that entered the Call 1 funnel: booked (BOOKING_COMPLETE, Call 1
-       -- Scheduled event, or manual override), or (for deals with no booking signal at all)
-       -- ever accepted / held. Keeps the tab's ACCEPTED count reconciled with Daily Funnel.
-       WHERE COALESCE(o.booked_day, ebc.bc, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
-       ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, de.booked_day), NVL(de.booked_day, ebc.bc)), de.held_day, de.accepted_day) DESC`,
+       -- Include any deal that entered the Call 1 funnel: booked (BOOKING_COMPLETE, CRM
+       -- creation day, Call 1 Scheduled event, or manual override), or (for deals with no
+       -- booking signal at all) ever accepted / held. Keeps ACCEPTED reconciled with Daily Funnel.
+       WHERE COALESCE(o.booked_day, ebc.bc, crt.created_day, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
+       ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day, de.held_day, de.accepted_day) DESC`,
       [overridesJson(bookingOverrides), -days, -days]
     );
 

@@ -8,9 +8,9 @@
  * costs are derived here. The cron writes the result to the `daily_funnel` tab.
  *
  * Funnel: FB spend → visits → CTA → partial form → qualified form → Call 1 booked
- * (the BOOKING_COMPLETE count) → held → accepted. Held and accepted are keyed to the day
- * the milestone happened (same as Daily Metrics) and convert against the Call 1 booked
- * count, so on any given day they reflect events, not that day's booking cohort.
+ * (the BOOKING_COMPLETE count) → held → accepted. Held and accepted are cohort metrics —
+ * of that day's Call 1 bookings, how many eventually held / were accepted — and convert
+ * against the Call 1 booked count, so recent days read low until the cohort matures.
  */
 
 import type { MarketingDailyRow } from '@/lib/marketing-daily';

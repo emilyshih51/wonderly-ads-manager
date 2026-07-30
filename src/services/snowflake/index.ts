@@ -175,27 +175,20 @@ export class SnowflakeService {
                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_organic
          FROM mkt GROUP BY day
        ),
-       -- One row per sales deal, with the dates it hit each milestone (from the
-       -- stage-change events, which only fire for positive stages). ACCEPTED and HELD
-       -- are keyed by the day the milestone happened (flow), like the rest of the funnel
-       -- — not by the booking day — so a deal counts on the day it accepted / held even
-       -- if its Call 1 Scheduled event was never captured. booked_day is kept only to
-       -- date no-shows / disqualifications, which have no positive event of their own.
+       -- One row per sales deal. ACCEPTED and HELD are COHORT metrics keyed to the deal's
+       -- booking day (Call 1 Scheduled): for a given day's bookings, how many of those exact
+       -- leads eventually held their call / reached Accepted. Recent days read low until the
+       -- cohort matures. Deals with no captured booking event can't be placed in a cohort
+       -- (mostly early-May deals booked before the Call 1 Scheduled event started).
        deal AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
            MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
-           -- Acceptance date: first day the deal moved to "Accepted".
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day,
            -- "Held" milestone: ever reaching a post-call stage means the Call 1 happened
-           -- (stays true even if the deal is later disqualified). Held date = the first
-           -- day it reached any post-call stage.
+           -- (stays true even if the deal is later disqualified).
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
                 IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN 1 ELSE 0 END) AS ever_held_event,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
-                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS held_day
+                THEN 1 ELSE 0 END) AS ever_held_event
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -238,7 +231,7 @@ export class SnowflakeService {
        -- and accepted can be split FB vs organic (organic = ALL − FB, i.e. every deal
        -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
        ds AS (
-         SELECT d.booked_day, d.accepted_day, d.ever_accepted,
+         SELECT d.booked_day AS day, d.ever_accepted,
            -- Held = the deal moved PAST "Call 1 Scheduled" to any real disposition (so the
            -- call happened), whether that's positive or a disqualification. It is NOT held
            -- if it's still sitting in "Call 1 Scheduled" (call not yet held / not updated)
@@ -247,9 +240,6 @@ export class SnowflakeService {
            CASE WHEN d.ever_held_event = 1
                 OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
                 THEN 1 ELSE 0 END AS held,
-           -- Held date = first post-call event when there is one; disqualified / churned
-           -- deals have no positive event, so they fall back to their booking day.
-           COALESCE(d.held_day, d.booked_day) AS held_date,
            CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
            CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
@@ -258,30 +248,22 @@ export class SnowflakeService {
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
          LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
          LEFT JOIN src ON src.email = em.join_email
+         WHERE d.booked_day IS NOT NULL
        ),
-       -- ACCEPTED keyed by the acceptance date (flow).
-       acc AS (
-         SELECT accepted_day AS day,
-           SUM(ever_accepted) AS accepted,
-           SUM(ever_accepted * is_fb) AS accepted_fb,
-           SUM(ever_accepted * (1 - is_fb)) AS accepted_organic
-         FROM ds WHERE accepted_day IS NOT NULL GROUP BY 1
-       ),
-       -- HELD keyed by the held date (flow).
-       hld AS (
-         SELECT held_date AS day,
+       -- Cohort aggregate keyed by booking day: of the deals booked that day, how many
+       -- eventually held / were accepted (with the FB/organic split), plus no-shows and
+       -- disqualifications.
+       s AS (
+         SELECT day,
            SUM(held) AS held,
            SUM(held * is_fb) AS held_fb,
-           SUM(held * (1 - is_fb)) AS held_organic
-         FROM ds WHERE held = 1 AND held_date IS NOT NULL GROUP BY 1
-       ),
-       -- No-shows / disqualifications have no positive event, so they stay keyed to the
-       -- booking day (the only date they carry).
-       coh AS (
-         SELECT booked_day AS day,
+           SUM(held * (1 - is_fb)) AS held_organic,
+           SUM(ever_accepted) AS accepted,
+           SUM(ever_accepted * is_fb) AS accepted_fb,
+           SUM(ever_accepted * (1 - is_fb)) AS accepted_organic,
            SUM(no_show) AS no_show,
            SUM(disqualified_lost) AS disqualified_lost
-         FROM ds WHERE booked_day IS NOT NULL GROUP BY 1
+         FROM ds GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -290,20 +272,17 @@ export class SnowflakeService {
          f.submit_qualified, f.qualified_fb, f.qualified_organic,
          f.booked_all, f.booked_fb, f.booked_organic,
          -- CALL1_BOOKED mirrors the marketing BOOKING_COMPLETE event (matches Amplitude).
-         -- ACCEPTED / HELD are keyed by the day they happened (flow), so they can exceed
-         -- CALL1_BOOKED on a given day (sales books Call 1s the form never sees).
-         COALESCE(acc.accepted,0) AS accepted,
-         COALESCE(acc.accepted_fb,0) AS accepted_fb,
-         COALESCE(acc.accepted_organic,0) AS accepted_organic,
-         COALESCE(coh.no_show,0) AS no_show,
-         COALESCE(coh.disqualified_lost,0) AS disqualified_lost,
-         COALESCE(hld.held,0) AS held,
-         COALESCE(hld.held_fb,0) AS held_fb,
-         COALESCE(hld.held_organic,0) AS held_organic
-       FROM f
-       LEFT JOIN acc ON f.day = acc.day
-       LEFT JOIN hld ON f.day = hld.day
-       LEFT JOIN coh ON f.day = coh.day
+         -- ACCEPTED / HELD are COHORT metrics: of THIS day's Call 1 bookings, how many
+         -- eventually held / were accepted (so recent days read low until they mature).
+         COALESCE(s.accepted,0) AS accepted,
+         COALESCE(s.accepted_fb,0) AS accepted_fb,
+         COALESCE(s.accepted_organic,0) AS accepted_organic,
+         COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.disqualified_lost,0) AS disqualified_lost,
+         COALESCE(s.held,0) AS held,
+         COALESCE(s.held_fb,0) AS held_fb,
+         COALESCE(s.held_organic,0) AS held_organic
+       FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [-days, -days, -days]
     );

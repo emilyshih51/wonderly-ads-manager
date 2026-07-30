@@ -231,7 +231,13 @@ export class SnowflakeService {
        -- and accepted can be split FB vs organic (organic = ALL − FB, i.e. every deal
        -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
        ds AS (
-         SELECT d.booked_day AS day, d.ever_accepted,
+         SELECT d.booked_day AS day,
+           -- Accepted = ever fired the "Accepted" event (a milestone — stays true even if the
+           -- deal later churned / dropped), OR is currently in a post-acceptance stage that
+           -- skipped the event (Reviewing Contract / Quote sent / On-site / Signed / Won).
+           CASE WHEN d.ever_accepted = 1
+                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+                THEN 1 ELSE 0 END AS accepted,
            -- Held = the deal moved PAST "Call 1 Scheduled" to any real disposition (so the
            -- call happened), whether that's positive or a disqualification. It is NOT held
            -- if it's still sitting in "Call 1 Scheduled" (call not yet held / not updated)
@@ -258,9 +264,9 @@ export class SnowflakeService {
            SUM(held) AS held,
            SUM(held * is_fb) AS held_fb,
            SUM(held * (1 - is_fb)) AS held_organic,
-           SUM(ever_accepted) AS accepted,
-           SUM(ever_accepted * is_fb) AS accepted_fb,
-           SUM(ever_accepted * (1 - is_fb)) AS accepted_organic,
+           SUM(accepted) AS accepted,
+           SUM(accepted * is_fb) AS accepted_fb,
+           SUM(accepted * (1 - is_fb)) AS accepted_organic,
            SUM(no_show) AS no_show,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
@@ -547,7 +553,9 @@ export class SnowflakeService {
          CASE WHEN de.ever_held = 1
               OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
               THEN 1 ELSE 0 END AS HELD,
-         de.ever_accepted AS ACCEPTED,
+         CASE WHEN de.ever_accepted = 1
+              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
+              THEN 1 ELSE 0 END AS ACCEPTED,
          CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
          CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS DISQUALIFIED,
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,

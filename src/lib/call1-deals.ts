@@ -24,7 +24,7 @@ export interface Call1DealRow {
   currentStage: string;
   /** 1 if the Call 1 ever happened — reached a post-call stage (milestone, stays true even if later disqualified). */
   held: number;
-  /** 1 if the deal ever reached "Accepted". */
+  /** 1 if the deal ever fired the "Accepted" event, or is currently in a post-acceptance stage (Reviewing Contract / Quote Sent / On-site / Signed / Won). */
   accepted: number;
   /** 1 if the deal is currently a no-show ("Call Missed Several Times"). */
   noShow: number;

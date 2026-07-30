@@ -113,7 +113,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'wonderly_daily, call1_deals',
     "Of that day's booked deals, how many ever reached “Accepted”.",
     'CRM (sales pipeline)',
-    'Ever-reached milestone from the deal stage-change events — stays 1 even if the deal later moves.',
+    'Ever fired the Accepted event (a milestone — stays 1 even if the deal later churns/drops), OR is currently in a post-acceptance stage that skipped the event (Reviewing Contract / Quote Sent / On-site / Signed / Won).',
   ],
   [
     'HELD',

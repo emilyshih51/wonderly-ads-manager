@@ -122,10 +122,10 @@ describe('computeOverview', () => {
     });
 
     expect(line(m, 'Cost per succeeding contractor (60d)')[1]).toBe(
-      'maturing — 1/3 cohort succeeding (ROI ≥ 2×)'
+      'maturing — 1/3 cohort succeeding (P&L > 0)'
     );
     expect(line(m, 'Cost per succeeding contractor (90d)')[1]).toBe(
-      'maturing — 0/2 cohort succeeding (ROI ≥ 2×)'
+      'maturing — 0/2 cohort succeeding (P&L > 0)'
     );
   });
 

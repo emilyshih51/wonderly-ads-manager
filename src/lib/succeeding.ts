@@ -2,18 +2,18 @@
  * Cost per succeeding contractor — the acquisition economics the Growth Sheet spec
  * asks for: what Wonderly spends on Facebook to land a contractor who then *succeeds*.
  *
- * Spec definition: "succeeding" = ROI ≥ 2× — the contractor's modeled expected
- * contribution (EV_OWED, Wonderly's cut) is at least twice their actual Meta spend —
- * within 60 / 90 days of their deal being **accepted**.
+ * Definition: "succeeding" = P&L > 0 — the contractor's modeled expected contribution
+ * (EV_OWED, Wonderly's cut) exceeds their actual managed Meta spend (Wonderly nets
+ * positive) — within 60 / 90 days of their deal being **accepted**.
  *
  * Cost basis: for the cohort of contractors accepted in the matured window, the cost is
  * the Facebook acquisition spend over that acceptance window ÷ how many of the cohort
  * succeed. This connects a cohort's acquisition spend to that cohort's success (an honest
  * approximation — Facebook spend is aggregate, not tagged to an individual contractor).
  *
- * The data is young (acceptance events begin mid-2026) and the 2× bar is high, so few or
- * no cohorts clear it yet — hence the low-n guard: below a minimum we show the cohort
- * counts instead of a noisy dollar figure.
+ * The data is young (acceptance events begin mid-2026) and contribution accrues slowly,
+ * so few cohorts clear P&L > 0 yet — hence the low-n guard: below a minimum we show the
+ * cohort counts instead of a noisy dollar figure.
  */
 
 /** Counts and acceptance-window bounds from the Snowflake cohort query, per window. */
@@ -59,5 +59,5 @@ export function succeedingCostCell(
     return Math.round(cohortFbSpend / succeeding);
   }
 
-  return `maturing — ${succeeding}/${matured} cohort succeeding (ROI ≥ 2×)`;
+  return `maturing — ${succeeding}/${matured} cohort succeeding (P&L > 0)`;
 }

@@ -402,9 +402,9 @@ export class SnowflakeService {
   /**
    * Succeeding-contractor cohort counts, for the cost-per-succeeding-contractor KPI.
    *
-   * Spec definition: "succeeding" = ROI ≥ 2× — the contractor's modeled expected
-   * contribution (`EV_OWED_USD`) is at least twice their actual Meta spend — within
-   * 60 / 90 days of the deal being **accepted**. The clock starts at acceptance (from
+   * Definition: "succeeding" = P&L > 0 — the contractor's modeled expected contribution
+   * (`EV_OWED_USD`) exceeds their actual managed Meta spend (Wonderly nets positive) —
+   * within 60 / 90 days of the deal being **accepted**. The clock starts at acceptance (from
    * the stage-change event); the accepted deal is linked to its prod customer team by
    * contact email → BASE__TEAMS admin email (~76% match), and ROI is measured over the
    * value view (EV) and the Meta-spend fact (spend). Only cohorts whose window has fully
@@ -451,9 +451,9 @@ export class SnowflakeService {
        )
        SELECT
          SUM(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured60,
-         SUM(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) AND spend60 > 0 AND ev60/NULLIF(spend60,0) >= 2 THEN 1 ELSE 0 END) AS succeeding60,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) AND (ev60 - spend60) > 0 THEN 1 ELSE 0 END) AS succeeding60,
          SUM(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) THEN 1 ELSE 0 END) AS matured90,
-         SUM(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) AND spend90 > 0 AND ev90/NULLIF(spend90,0) >= 2 THEN 1 ELSE 0 END) AS succeeding90,
+         SUM(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) AND (ev90 - spend90) > 0 THEN 1 ELSE 0 END) AS succeeding90,
          TO_CHAR(MIN(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort60_start,
          TO_CHAR(MAX(CASE WHEN accepted_date <= DATEADD('day',-60,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort60_end,
          TO_CHAR(MIN(CASE WHEN accepted_date <= DATEADD('day',-90,CURRENT_DATE) THEN accepted_date END),'YYYY-MM-DD') AS cohort90_start,

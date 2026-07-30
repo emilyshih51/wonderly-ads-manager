@@ -118,7 +118,7 @@ export function computeOverview(opts: {
     ['Cost per succeeding contractor (90d)', succeeding90],
     [
       '',
-      'Succeeding = ROI ≥ 2× (modeled expected contribution ÷ actual Meta spend) within 60/90d of acceptance. Cost = FB spend over the cohort’s acceptance window ÷ succeeding; "maturing" until enough clear the bar.',
+      'Succeeding = P&L > 0 (modeled expected contribution exceeds actual managed Meta spend) within 60/90d of acceptance. Cost = FB spend over the cohort’s acceptance window ÷ succeeding; "maturing" until enough clear the bar.',
     ],
     [],
     ['WARNINGS'],

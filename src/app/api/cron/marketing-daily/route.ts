@@ -77,12 +77,6 @@ const CUSTOMER_PNL_DAYS = 90;
 /** Deal-level Call 1 fact table (audit trail behind the acceptance rates). */
 const CALL1_DEALS_TAB = 'call1_deals';
 
-/**
- * Cohort window for the deal-level tab. Recent Call 1s keep maturing (held → accepted)
- * for weeks, so we re-derive a 90-day window each run and let those flags fill in.
- */
-const CALL1_DEALS_DAYS = 90;
-
 /** Headline Call 1 economics tab (cost per Call 1, held rate, accepted CAC). */
 const CALL1_SUMMARY_TAB = 'call1_summary';
 
@@ -93,13 +87,12 @@ const CALL1_SUMMARY_TAB = 'call1_summary';
 const CALL1_SUMMARY_DAYS = 30;
 
 /**
- * How many trailing days to re-pull from source each run.
- *
- * Meta only needs ~2 days (it restates spend for 24–48h), but a wider window keeps the
- * whole visible sheet sourced fresh. Set to ~100 so history reaches back to early May
- * 2026 (the first week the sales pipeline data exists) and stays continuously backfilled.
+ * Fixed backfill anchor: every data tab is sourced and displayed from this date forward.
+ * The refetch window is derived from it each run (today − BACKFILL_START), so the history
+ * stays pinned to May 1 2026 (the first week the sales pipeline data exists) rather than a
+ * rolling window that would slowly drop early-May days as time passes.
  */
-const REFETCH_DAYS = 100;
+const BACKFILL_START = '2026-05-01';
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -124,7 +117,9 @@ export async function GET(request: Request) {
 
   try {
     const today = isoDate(new Date());
-    const since = isoDate(daysAgo(REFETCH_DAYS - 1));
+    // Derive the refetch window from the fixed May-1 anchor so it always reaches back to
+    // exactly BACKFILL_START, no matter how much time has passed.
+    const backfillDays = daysSince(BACKFILL_START, today) + 1;
 
     const meta = new MetaService(
       process.env.META_SYSTEM_ACCESS_TOKEN ?? '',
@@ -135,13 +130,15 @@ export async function GET(request: Request) {
     // Meta answers the money question; Snowflake answers the funnel + sales question.
     // Neither knows the other — that is why there are two reads and one join on date.
     const [spend, marketing] = await Promise.all([
-      meta.getDailySpendForDateRange(since, today),
-      snow.getDailyMarketing(REFETCH_DAYS),
+      meta.getDailySpendForDateRange(BACKFILL_START, today),
+      snow.getDailyMarketing(backfillDays),
     ]);
 
     const fresh = joinMarketingDaily(spend, marketing);
     const existing = parseExistingRows(await sheets.readRows(sheetId, RAW_TAB_NAME));
-    const merged = mergeRows(existing, fresh);
+    // Floor at the anchor so any older rows lingering in the sheet drop off the raw tab
+    // (and therefore Daily Funnel / Daily Metrics, which derive from these rows).
+    const merged = mergeRows(existing, fresh).filter((r) => r.date >= BACKFILL_START);
 
     await sheets.replaceRows(sheetId, RAW_TAB_NAME, [...RAW_TAB_HEADERS], toSheetValues(merged));
 
@@ -165,9 +162,12 @@ export async function GET(request: Request) {
       toCustomerPnlValues(customerPnl)
     );
 
-    // Deal-level Call 1 fact table: one row per booked deal, re-derived each run so
-    // recent cohorts keep maturing. Full-window rewrite, no read-back/merge needed.
-    const call1Deals = await snow.getCall1Deals(CALL1_DEALS_DAYS);
+    // Deal-level Call 1 fact table: one row per deal booked since the anchor, re-derived
+    // each run (so the current stage / held / accepted flags stay up to date) and floored
+    // at May 1. Full-window rewrite, no read-back/merge needed.
+    const call1Deals = (await snow.getCall1Deals(backfillDays)).filter(
+      (d) => d.bookedDay >= BACKFILL_START
+    );
 
     await sheets.ensureTab(sheetId, CALL1_DEALS_TAB);
     await sheets.replaceRows(
@@ -376,10 +376,16 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function daysAgo(days: number): Date {
-  const date = new Date();
+/**
+ * Whole days from an anchor date up to `today` (both `YYYY-MM-DD`, UTC).
+ *
+ * @param startIso - The anchor date (e.g. the backfill start)
+ * @param today - Today's date
+ * @returns The number of days between them
+ */
+function daysSince(startIso: string, today: string): number {
+  const start = Date.parse(`${startIso}T00:00:00Z`);
+  const end = Date.parse(`${today}T00:00:00Z`);
 
-  date.setUTCDate(date.getUTCDate() - days);
-
-  return date;
+  return Math.round((end - start) / 86_400_000);
 }

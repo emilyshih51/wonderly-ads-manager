@@ -316,7 +316,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'booking_overrides',
     'Hand-entered booking day for a deal whose “Call 1 Scheduled” event was never captured (so its acceptance can join the right booking cohort).',
     'Manual',
-    'You own this tab — the cron only reads it. Put the deal_id (from call1_deals) and a booking date (YYYY-MM-DD). The override wins when present, so you can correct a wrong or late “Call 1 Scheduled” event (e.g. a re-book after acceptance), not just fill blanks. Deals not listed keep their event-derived day.',
+    'Booked day is normally derived automatically as the earliest booking signal — the first BOOKING_COMPLETE (matched by email) or the Call 1 Scheduled event, whichever is earlier. This tab is a manual fallback for the few deals with neither signal (outbound/manual), and to correct a wrong date; the override wins over both. You own it — the cron only reads it. Put the deal_id (from call1_deals) and a booking date (YYYY-MM-DD).',
   ],
 
   // --- customer_pnl -------------------------------------------------------

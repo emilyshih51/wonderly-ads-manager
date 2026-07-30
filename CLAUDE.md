@@ -289,3 +289,46 @@ chore(deps): Upgrade next to 16.1.0
 - Do not use `reactflow` for anything other than the automation flow editor.
 - Do not add a second state management library — Zustand is the only one.
 - Do not hardcode UI strings — always add them to `locales/en.json` (and all other locale files in `locales/`) and reference them via `useTranslations()`.
+
+---
+
+## Marketing Performance Sheet ("Growth Sheet")
+
+A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cron, every 3h). It tracks Wonderly's own contractor-acquisition funnel: **FB spend → page view → CTA → partial form → qualified form → Call 1 booked → held → accepted → succeeding customer.** The sandbox can't `git push` — after code changes, the user pushes and reruns the cron; formatting/values only appear after that.
+
+### Data sources
+
+- **Meta Marketing API** — spend for Wonderly's own ad account (`1403742814420018`). (The Fivetran→Snowflake spend pipe is dead; spend comes from the API and is joined to Snowflake outcomes by date.)
+- **Snowflake** (`SnowflakeService`, one aggregation query per read):
+  - `AMPLITUDE.AMPLITUDE.EVENTS_766268` — marketing funnel events (`MARKETING_SITE__*`, carry **email**, no deal_id) and the sales pipeline (`WONDERLY_SALES__DEAL__STAGE_CHANGE`, carry **deal_id**, no email).
+  - `AIRBYTE.WONDERLY_DEV.CRM_*` — deal/contact/stage dev tables (deal→contact→email bridge). Dev team IDs ≠ prod value-view team IDs.
+  - `WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.*` (prod) — `INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY` (EV_OWED_USD), `BASE__TEAMS` (admin email, subscription), `FCT__CUSTOMER_META_SPEND_DAILY` (actual delivered Meta spend, not budget).
+- Timezone: all daily buckets cut on `America/Los_Angeles` (matches Amplitude UI).
+
+### Tabs the cron writes
+
+`wonderly_daily` (raw, merged+backfilled), `Daily Funnel`, `Daily Metrics` (Motion-style grid), `Overview` (KPI dashboard), `customer_pnl`, `call1_deals` (per-deal audit), `Definitions` (glossary), `meta` (freshness). Input tab `booking_overrides` is **read-only to the cron**. `call1_summary` was removed (redundant; cron deletes it each run).
+
+### Key model decisions (all intentional — don't "fix" without checking)
+
+- **Backfill anchor:** `BACKFILL_START = '2026-05-01'` (first week sales data exists). The refetch window is derived from it each run (grows over time), and every tab is floored to `>= May 1`. Don't revert to a rolling day count.
+- **Channel split:** FB = `utm_source` facebook/ig OR an `fbclid`; Organic = everything else. Visible from page view on. Spend is 100% FB (Organic = 0); CPC has no split.
+- **Cost per stage:** total FB spend ÷ **ALL** (FB+organic) actions of the stage — NOT FB-only (downstream stages are weakly channel-attributed). Ratio-of-totals for the 7d/MTD/Prev summary rows; per-day = that day's spend ÷ that day's ALL count. Spend/CPC have no Cost column.
+- **Summary windows are live formulas:** MTD = `>= EOMONTH(TODAY(),-1)+1 … <= TODAY()`; Prev Month = all of last month via `EOMONTH`. They self-advance (not baked-in dates). 7d avg uses the last 7 _completed_ days (skips today's partial).
+- **HELD** = deal moved _past_ "Call 1 Scheduled" to any real disposition (positive stage-change event, OR current CRM stage in Accepted/Reviewing Contract/Quote Sent/On-site/Signed/Won/Churned/Disqualified/DQ). NOT held if still in "Call 1 Scheduled" or "Call Missed Several Times" (no-show). Pipeline hygiene is poor (many held calls left in "Call 1 Scheduled"), so held undercounts real calls held.
+- **ACCEPTED** = ever fired the `Accepted` event (milestone; stays true after churn/drop) OR currently in a post-acceptance stage (Accepted/Reviewing Contract/Quote Sent/On-site/Signed/Won).
+- **HELD/ACCEPTED are COHORT-keyed by booking day** (of the deals booked that day, how many eventually held/accepted). Recent days read low until they mature. The rest of the funnel (page views → booked) is flow-keyed by event date. Deals with no captured "Call 1 Scheduled" event can't be placed in a cohort → see `booking_overrides`.
+- **`booking_overrides` tab** (`DEAL_ID`, `BOOKED_DAY`): manual booking-day fills for deals whose Call 1 Scheduled event was never captured (~103 accepted deals came in outbound/manual/pre-tracking). The cron reads it (seeds the header once, never overwrites), injects it into `getDailyMarketing`/`getCall1Deals` via a `PARSE_JSON(?)` CTE (single bound param — injection-safe), and `COALESCE(event_booked_day, override)` so the event day always wins. Editing `call1_deals`/`wonderly_daily` directly is futile — the cron rewrites them every run.
+- **Succeeding contractor** = **P&L > 0** (EV_OWED > the contractor's managed Meta spend) within 60/90 days of acceptance. Cost per succeeding = FB acquisition spend over the cohort's acceptance window ÷ succeeding; `MIN_SUCCEEDING = 5` low-n guard shows a "maturing — s/m …" string below that. Data is young (acceptances start ~May 8) so both rows are still maturing.
+- **customer_pnl** = EV_OWED − **actual** Meta spend (FCT\_\_…META_SPEND, not the value-view budget), paying customers only (subscription active/past_due). Matches the internal "Customer Funnel" tool. EV is forward-looking so daily PnL is lumpy.
+- **call1_deals** = one row per deal that entered the funnel (booked OR accepted OR held, even without a booking event). Carries **CAMPAIGN_ID / AD_ID** = Meta `utm_medium` / `utm_content` from the lead/booking events (most-recent numeric id), matched by email — for ranking ads by qualified/accepted yield.
+
+### Identity / double-counting
+
+Marketing events are keyed by **email** (anonymous before submit); sales events by **deal_id**; bridged deal→contact→email. One person can span multiple `amplitude_id`s (~9% inflate the marketing partial/qualified counts, which use `COUNT(DISTINCT AMPLITUDE_ID)`). **ACCEPTED is not double-counted** — it's keyed on deal_id (144 accepted deals = 144 emails). `BOOKING_COMPLETE` carries no email, so bookings can't be email-deduped.
+
+### Cron/plumbing notes
+
+- `GoogleSheetsService.replaceRows` writes with `USER_ENTERED` (dates parse to real dates → SUMIFS date criteria work). Formatting is orthogonal (`formatTab`, idempotent) and survives value rewrites. `ensureTab`/`deleteTab` manage tab lifecycle.
+- Libs are pure + unit-tested (vitest): `daily-metrics(-format)`, `daily-funnel`, `overview(-format)`, `call1-deals`, `succeeding`, `customer-pnl`, `definitions`, `marketing-daily`, `week-over-week`. The Snowflake SQL itself is validated ad-hoc against the live warehouse, not unit-tested.
+- When touching keying/definitions, verify against Snowflake before/after and keep `Definitions` tab (`src/lib/definitions.ts`) in sync.

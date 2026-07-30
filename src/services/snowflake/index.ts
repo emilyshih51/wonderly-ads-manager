@@ -49,6 +49,22 @@ interface SnowflakeConfig {
   role?: string;
 }
 
+/**
+ * A manual booking-day override for a deal whose "Call 1 Scheduled" event was never
+ * captured. Sourced from the `booking_overrides` sheet tab and injected into the sales
+ * queries so the deal's acceptance lands in the right booking cohort.
+ */
+export interface BookingOverride {
+  dealId: string;
+  /** `YYYY-MM-DD` booking day to use for this deal. */
+  bookedDay: string;
+}
+
+/** Serialize overrides for the query's PARSE_JSON override CTE (a single bound param). */
+function overridesJson(overrides: BookingOverride[]): string {
+  return JSON.stringify(overrides.map((o) => ({ deal_id: o.dealId, booked_day: o.bookedDay })));
+}
+
 export class SnowflakeService {
   private conn: Connection | null = null;
 
@@ -131,11 +147,19 @@ export class SnowflakeService {
    * by the sales rep so they're counted as events (not distinct prospects).
    *
    * @param days - Trailing window to pull, e.g. 35
+   * @param bookingOverrides - Manual deal_id → booked_day fills for deals missing the event
    * @returns One row per day, newest first
    */
-  async getDailyMarketing(days: number): Promise<DailyMarketingRow[]> {
+  async getDailyMarketing(
+    days: number,
+    bookingOverrides: BookingOverride[] = []
+  ): Promise<DailyMarketingRow[]> {
     const rows = await this.query<Record<string, unknown>>(
-      `WITH mkt AS (
+      `WITH ovr AS (
+         SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
+         FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
+       ),
+       mkt AS (
          SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID,
            LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) AS src,
            EVENT_PROPERTIES:fbclid::string AS fbclid
@@ -195,6 +219,14 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
+       -- Fill a missing booked_day from the manual override tab (keyed by deal_id), so
+       -- accepted deals whose Call 1 Scheduled event was never captured still land in a
+       -- booking cohort. The event-derived day always wins when present.
+       deal2 AS (
+         SELECT d.deal_id, COALESCE(d.booked_day, o.booked_day) AS booked_day,
+           d.ever_accepted, d.ever_held_event
+         FROM deal d LEFT JOIN ovr o ON o.deal_id = d.deal_id
+       ),
        -- Primary email per contact, to bridge a CRM deal back to its marketing source.
        em AS (
          SELECT CONTACT_ID,
@@ -249,7 +281,7 @@ export class SnowflakeService {
            CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
            CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
-         FROM deal d
+         FROM deal2 d
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
          LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
          LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
@@ -290,7 +322,7 @@ export class SnowflakeService {
          COALESCE(s.held_organic,0) AS held_organic
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
-      [-days, -days, -days]
+      [overridesJson(bookingOverrides), -days, -days, -days]
     );
 
     return rows.map((r) => ({
@@ -473,11 +505,19 @@ export class SnowflakeService {
    * from the current CRM stage (those transitions emit no event, so they can't be dated).
    *
    * @param days - Trailing window, e.g. 90 (keeps cohorts open ~3 months)
+   * @param bookingOverrides - Manual deal_id → booked_day fills for deals missing the event
    * @returns One row per deal, newest first (by booking, else held/accepted date)
    */
-  async getCall1Deals(days: number): Promise<Call1DealRow[]> {
+  async getCall1Deals(
+    days: number,
+    bookingOverrides: BookingOverride[] = []
+  ): Promise<Call1DealRow[]> {
     const rows = await this.query<Record<string, unknown>>(
-      `WITH de AS (
+      `WITH ovr AS (
+         SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
+         FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
+       ),
+       de AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
            MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
            MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
@@ -548,7 +588,7 @@ export class SnowflakeService {
        )
        SELECT de.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
-         TO_CHAR(de.booked_day,'YYYY-MM-DD') AS BOOKED_DAY,
+         TO_CHAR(COALESCE(de.booked_day, o.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          CASE WHEN de.ever_held = 1
               OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
@@ -568,17 +608,18 @@ export class SnowflakeService {
          COALESCE(TO_CHAR(de.held_day,'YYYY-MM-DD'),'') AS HELD_DATE,
          COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
        FROM de
+       LEFT JOIN ovr o ON o.deal_id = de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN src ON src.email=em.join_email
-       -- Include any deal that entered the Call 1 funnel: booked, or (for deals whose
-       -- "Call 1 Scheduled" event was never captured — booked before that event started)
-       -- ever accepted / held. Keeps the tab's ACCEPTED count reconciled with Daily Funnel.
-       WHERE de.booked_day IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
-       ORDER BY COALESCE(de.booked_day, de.held_day, de.accepted_day) DESC`,
-      [-days, -days]
+       -- Include any deal that entered the Call 1 funnel: booked (event or manual override),
+       -- or (for deals whose "Call 1 Scheduled" event was never captured) ever accepted /
+       -- held. Keeps the tab's ACCEPTED count reconciled with Daily Funnel.
+       WHERE COALESCE(de.booked_day, o.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
+       ORDER BY COALESCE(de.booked_day, o.booked_day, de.held_day, de.accepted_day) DESC`,
+      [overridesJson(bookingOverrides), -days, -days]
     );
 
     return rows.map((r) => ({

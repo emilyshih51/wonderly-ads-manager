@@ -310,6 +310,15 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Starts the 60/90-day succeeding clock. Blank if never accepted.',
   ],
 
+  // --- booking_overrides (manual input) -----------------------------------
+  [
+    'DEAL_ID / BOOKED_DAY',
+    'booking_overrides',
+    'Hand-entered booking day for a deal whose “Call 1 Scheduled” event was never captured (so its acceptance can join the right booking cohort).',
+    'Manual',
+    'You own this tab — the cron only reads it. Put the deal_id (from call1_deals) and a booking date (YYYY-MM-DD). The event-derived booking day always wins when present; the override only fills blanks.',
+  ],
+
   // --- customer_pnl -------------------------------------------------------
   [
     'EV_TAKE / AD_SPEND / PNL',

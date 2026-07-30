@@ -39,7 +39,7 @@ import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 import { MetaService } from '@/services/meta';
 import { SlackService } from '@/services/slack';
-import { SnowflakeService } from '@/services/snowflake';
+import { SnowflakeService, type BookingOverride } from '@/services/snowflake';
 
 const logger = createLogger('MarketingDailyCron');
 
@@ -74,6 +74,14 @@ const CALL1_DEALS_TAB = 'call1_deals';
 
 /** Retired tab — deleted each run so it can't linger with stale data. */
 const CALL1_SUMMARY_TAB = 'call1_summary';
+
+/**
+ * User-owned tab of manual booking-day fills (DEAL_ID, BOOKED_DAY) for deals whose
+ * "Call 1 Scheduled" event was never captured. The cron only reads it (seeding the header
+ * once), so hand-entered rows survive every refresh, and injects them into the sales
+ * queries so those deals land in the right booking cohort.
+ */
+const BOOKING_OVERRIDES_TAB = 'booking_overrides';
 
 /**
  * Fixed backfill anchor: every data tab is sourced and displayed from this date forward.
@@ -116,11 +124,22 @@ export async function GET(request: Request) {
     );
     const sheets = GoogleSheetsService.fromEnv();
 
+    // Manual booking-day overrides (deal_id → booked_day). Read-only tab; seed its header
+    // once so it's discoverable, then leave hand-entered rows untouched across refreshes.
+    await sheets.ensureTab(sheetId, BOOKING_OVERRIDES_TAB);
+    const overrideCells = await sheets.readRows(sheetId, BOOKING_OVERRIDES_TAB);
+
+    if (overrideCells.length === 0) {
+      await sheets.replaceRows(sheetId, BOOKING_OVERRIDES_TAB, ['DEAL_ID', 'BOOKED_DAY'], []);
+    }
+
+    const bookingOverrides = parseBookingOverrides(overrideCells);
+
     // Meta answers the money question; Snowflake answers the funnel + sales question.
     // Neither knows the other — that is why there are two reads and one join on date.
     const [spend, marketing] = await Promise.all([
       meta.getDailySpendForDateRange(BACKFILL_START, today),
-      snow.getDailyMarketing(backfillDays),
+      snow.getDailyMarketing(backfillDays, bookingOverrides),
     ]);
 
     const fresh = joinMarketingDaily(spend, marketing);
@@ -154,7 +173,7 @@ export async function GET(request: Request) {
     // Deal-level Call 1 fact table: one row per deal booked since the anchor, re-derived
     // each run (so the current stage / held / accepted flags stay up to date) and floored
     // at May 1. Full-window rewrite, no read-back/merge needed.
-    const call1Deals = (await snow.getCall1Deals(backfillDays)).filter((d) => {
+    const call1Deals = (await snow.getCall1Deals(backfillDays, bookingOverrides)).filter((d) => {
       // Non-booked accepted/held deals have no booking day; floor on their earliest date.
       const primary = d.bookedDay || d.heldDate || d.acceptedDate;
 
@@ -357,6 +376,33 @@ function num(value: string | number | undefined): number {
   const parsed = Number(value);
 
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * Parse the booking-overrides tab into typed rows. Skips the header, keeps rows with a
+ * deal id and a parseable date, and normalizes the date to `YYYY-MM-DD` (accepts ISO or
+ * `M/D/YYYY`, whichever Google renders the cell as).
+ *
+ * @param values - Raw cell matrix from the tab, header row first
+ */
+function parseBookingOverrides(values: (string | number)[][]): BookingOverride[] {
+  return values
+    .slice(1)
+    .map((row) => ({ dealId: String(row[0] ?? '').trim(), bookedDay: toIsoDate(row[1]) }))
+    .filter((o): o is BookingOverride => o.dealId !== '' && o.bookedDay !== '');
+}
+
+/** Normalize a sheet date cell to `YYYY-MM-DD`; returns '' when it isn't a date. */
+function toIsoDate(value: string | number | undefined): string {
+  const s = String(value ?? '').trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+
+  return '';
 }
 
 function isoDate(date: Date): string {

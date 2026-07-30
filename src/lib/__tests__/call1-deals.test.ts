@@ -17,6 +17,8 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     phone: '+15551234567',
     email: 'jane@example.com',
     source: 'facebook',
+    campaignId: '',
+    adId: '',
     heldDate: '',
     acceptedDate: '',
     ...o,
@@ -38,7 +40,9 @@ describe('toCall1DealsValues', () => {
         contactName: 'Harrison Wermuth',
         phone: '+15550001111',
         email: 'harrison@dewittbuilding.com',
-        source: 'google',
+        source: 'facebook',
+        campaignId: '120242022304100408',
+        adId: '120246607811180408',
         acceptedDate: '2026-07-24',
       }),
     ]);
@@ -56,7 +60,9 @@ describe('toCall1DealsValues', () => {
       'Harrison Wermuth',
       '+15550001111',
       'harrison@dewittbuilding.com',
-      'google',
+      'facebook',
+      '120242022304100408', // CAMPAIGN_ID
+      '120246607811180408', // AD_ID
       '', // HELD_DATE
       '2026-07-24', // ACCEPTED_DATE
     ]);

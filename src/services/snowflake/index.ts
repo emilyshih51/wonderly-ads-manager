@@ -524,6 +524,8 @@ export class SnowflakeService {
        -- the referrer domain (facebook.com etc.) -> a Facebook click id. Reading only
        -- event utm_source missed everyone whose tag was a user property or just a
        -- referrer/fbclid.
+       -- Also carry the Meta campaign / ad id (utm_medium = campaign.id, utm_content =
+       -- ad.id, set on the ad's click URL), so each deal can be traced to the exact ad.
        src_raw AS (
          SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, EVENT_TIME,
            COALESCE(
@@ -541,15 +543,21 @@ export class SnowflakeService {
                WHEN USER_PROPERTIES:initial_referrer::string ILIKE '%bing%'
                  OR USER_PROPERTIES:referrer::string ILIKE '%bing%' THEN 'bing'
              END
-           ) AS source
+           ) AS source,
+           COALESCE(NULLIF(EVENT_PROPERTIES:utm_medium::string,''), NULLIF(USER_PROPERTIES:utm_medium::string,'')) AS campaign_id,
+           COALESCE(NULLIF(EVENT_PROPERTIES:utm_content::string,''), NULLIF(USER_PROPERTIES:utm_content::string,'')) AS ad_id
          FROM ${EVENTS_TABLE}
-         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED','MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE')
            AND EVENT_PROPERTIES:email IS NOT NULL
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
        ),
        src AS (
          SELECT email,
-           MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
+           MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source,
+           -- Prefer the numeric Meta ids (skip organic tags like 'link_in_bio'); take the
+           -- most recent such event, i.e. the ad that most recently drove this person.
+           MAX_BY(campaign_id, CASE WHEN campaign_id RLIKE '[0-9]+' THEN EVENT_TIME END) AS campaign_id,
+           MAX_BY(ad_id, CASE WHEN ad_id RLIKE '[0-9]+' THEN EVENT_TIME END) AS ad_id
          FROM src_raw
          GROUP BY 1
        )
@@ -568,6 +576,8 @@ export class SnowflakeService {
          COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
          COALESCE(em.primary_email, em.any_email, '') AS EMAIL,
          COALESCE(src.utm_source,'') AS SOURCE,
+         COALESCE(src.campaign_id,'') AS CAMPAIGN_ID,
+         COALESCE(src.ad_id,'') AS AD_ID,
          COALESCE(TO_CHAR(de.held_day,'YYYY-MM-DD'),'') AS HELD_DATE,
          COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
        FROM de
@@ -598,6 +608,8 @@ export class SnowflakeService {
       phone: String(r.PHONE ?? ''),
       email: String(r.EMAIL ?? ''),
       source: String(r.SOURCE ?? ''),
+      campaignId: String(r.CAMPAIGN_ID ?? ''),
+      adId: String(r.AD_ID ?? ''),
       heldDate: String(r.HELD_DATE ?? ''),
       acceptedDate: String(r.ACCEPTED_DATE ?? ''),
     }));

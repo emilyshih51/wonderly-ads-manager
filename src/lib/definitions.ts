@@ -296,6 +296,13 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'From the form-submit event, matched by email; falls back utm → user-property utm → referrer → fbclid. Blank = unattributed.',
   ],
   [
+    'CAMPAIGN_ID / AD_ID',
+    'call1_deals',
+    'The Meta campaign and ad that drove the lead — so you can see which ad produces the most qualified/accepted deals.',
+    'Amplitude → CRM',
+    'utm_medium = campaign.id, utm_content = ad.id, set on the ad’s click URL and carried on the lead-submission / booking events; matched to the deal by email, taking the most recent numeric (paid) id. Blank for organic/unattributed.',
+  ],
+  [
     'ACCEPTED_DATE',
     'call1_deals',
     'Day the deal first reached “Accepted”.',

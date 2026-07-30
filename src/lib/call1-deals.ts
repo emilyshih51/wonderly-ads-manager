@@ -40,6 +40,10 @@ export interface Call1DealRow {
   email: string;
   /** Marketing source (e.g. facebook), from the form-submit event's utm_source, joined by email. Blank when unattributed. */
   source: string;
+  /** Meta campaign id (utm_medium) that drove this lead, from the ad's click URL. Blank if organic/unattributed. */
+  campaignId: string;
+  /** Meta ad id (utm_content) that drove this lead, from the ad's click URL. Blank if organic/unattributed. */
+  adId: string;
   /** `YYYY-MM-DD` the Call 1 was first held (first post-call event). Blank if held only via current stage or never. */
   heldDate: string;
   /** `YYYY-MM-DD` the deal first reached "Accepted" (the 60/90-day clock start). Blank if never accepted. */
@@ -61,6 +65,8 @@ export const CALL1_DEALS_HEADERS = [
   'PHONE',
   'EMAIL',
   'SOURCE',
+  'CAMPAIGN_ID',
+  'AD_ID',
   'HELD_DATE',
   'ACCEPTED_DATE',
 ] as const;
@@ -85,6 +91,8 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.phone,
     r.email,
     r.source,
+    r.campaignId,
+    r.adId,
     r.heldDate,
     r.acceptedDate,
   ]);

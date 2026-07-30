@@ -15,12 +15,7 @@
 
 import { NextResponse } from 'next/server';
 
-import {
-  CALL1_DEALS_HEADERS,
-  CALL1_SUMMARY_HEADERS,
-  computeCall1Summary,
-  toCall1DealsValues,
-} from '@/lib/call1-deals';
+import { CALL1_DEALS_HEADERS, toCall1DealsValues } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import { computeDailyMetrics } from '@/lib/daily-metrics';
 import {
@@ -77,14 +72,8 @@ const CUSTOMER_PNL_DAYS = 90;
 /** Deal-level Call 1 fact table (audit trail behind the acceptance rates). */
 const CALL1_DEALS_TAB = 'call1_deals';
 
-/** Headline Call 1 economics tab (cost per Call 1, held rate, accepted CAC). */
+/** Retired tab — deleted each run so it can't linger with stale data. */
 const CALL1_SUMMARY_TAB = 'call1_summary';
-
-/**
- * Cohort window for the summary. 30 days keeps it aligned with the FB spend the cron
- * pulls (REFETCH_DAYS), so cost-per figures share a numerator/denominator window.
- */
-const CALL1_SUMMARY_DAYS = 30;
 
 /**
  * Fixed backfill anchor: every data tab is sourced and displayed from this date forward.
@@ -180,14 +169,9 @@ export async function GET(request: Request) {
       toCall1DealsValues(call1Deals)
     );
 
-    // Headline economics derived from the same deals + FB spend, over a 30-day window.
-    await sheets.ensureTab(sheetId, CALL1_SUMMARY_TAB);
-    await sheets.replaceRows(
-      sheetId,
-      CALL1_SUMMARY_TAB,
-      [...CALL1_SUMMARY_HEADERS],
-      computeCall1Summary(call1Deals, merged, CALL1_SUMMARY_DAYS, today)
-    );
+    // call1_summary was retired — its metrics live in Overview, Daily Funnel, and Daily
+    // Metrics. Delete the leftover tab (idempotent once it's gone).
+    await sheets.deleteTab(sheetId, CALL1_SUMMARY_TAB);
 
     // Freshness stamp on its own tab (never cleared with the data tabs).
     const refreshedPt = new Date().toLocaleString('en-US', {

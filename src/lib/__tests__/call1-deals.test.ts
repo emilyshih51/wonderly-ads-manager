@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  computeCall1Summary,
-  toCall1DealsValues,
-  CALL1_DEALS_HEADERS,
-  type Call1DealRow,
-} from '@/lib/call1-deals';
-import type { MarketingDailyRow } from '@/lib/marketing-daily';
+import { toCall1DealsValues, CALL1_DEALS_HEADERS, type Call1DealRow } from '@/lib/call1-deals';
 
 function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
   return {
@@ -27,44 +21,6 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     acceptedDate: '',
     ...o,
   };
-}
-
-function mkt(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
-  return {
-    date,
-    pageView: 0,
-    pageViewFb: 0,
-    pageViewOrganic: 0,
-    ctaClicked: 0,
-    ctaFb: 0,
-    ctaOrganic: 0,
-    submitPartial: 0,
-    submitPartialFb: 0,
-    submitPartialOrganic: 0,
-    submitQualified: 0,
-    submitQualifiedFb: 0,
-    submitQualifiedOrganic: 0,
-    bookedAll: 0,
-    bookedFb: 0,
-    bookedOrganic: 0,
-    accepted: 0,
-    acceptedFb: 0,
-    acceptedOrganic: 0,
-    noShow: 0,
-    disqualifiedLost: 0,
-    held: 0,
-    heldFb: 0,
-    heldOrganic: 0,
-    fbSpend: 0,
-    fbImpressions: 0,
-    fbClicks: 0,
-    ...o,
-  };
-}
-
-/** Turn the metric/value matrix into a lookup for readable assertions. */
-function asMap(rows: (string | number)[][]): Record<string, string | number> {
-  return Object.fromEntries(rows);
 }
 
 describe('toCall1DealsValues', () => {
@@ -106,100 +62,19 @@ describe('toCall1DealsValues', () => {
     ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
   });
-});
 
-describe('computeCall1Summary', () => {
-  const today = '2026-07-27';
+  it('emits a row for a non-booked accepted deal (blank BOOKED_DAY)', () => {
+    const values = toCall1DealsValues([
+      deal({
+        dealId: 'noBooking',
+        bookedDay: '',
+        accepted: 1,
+        held: 1,
+        acceptedDate: '2026-05-20',
+      }),
+    ]);
 
-  it('counts sales deals inside the trailing window', () => {
-    const deals = [
-      deal({ dealId: 'in', bookedDay: '2026-07-10' }),
-      deal({ dealId: 'old', bookedDay: '2026-05-01' }), // outside 30d
-    ];
-
-    const map = asMap(computeCall1Summary(deals, [], 30, today));
-
-    expect(map['CALL1_SCHEDULED (CRM deals)']).toBe(1);
-  });
-
-  it('takes CALL1_BOOKED from the marketing BOOKING_COMPLETE count', () => {
-    const marketing = [
-      mkt('2026-07-20', { bookedAll: 2 }),
-      mkt('2026-07-21', { bookedAll: 3 }),
-      mkt('2026-05-01', { bookedAll: 9 }), // outside window
-    ];
-
-    const map = asMap(computeCall1Summary([], marketing, 30, today));
-
-    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(5);
-  });
-
-  it('rates held, accepted, and no-show against the sales denominator', () => {
-    const deals = [
-      deal({ dealId: 'a', bookedDay: '2026-07-20', held: 1, accepted: 1 }),
-      deal({ dealId: 'b', bookedDay: '2026-07-21', held: 1 }),
-      deal({ dealId: 'c', bookedDay: '2026-07-22', noShow: 1 }),
-      deal({ dealId: 'd', bookedDay: '2026-07-23' }),
-    ];
-
-    const map = asMap(computeCall1Summary(deals, [], 30, today));
-
-    expect(map.HELD).toBe(2);
-    expect(map.HELD_RATE).toBe(0.5); // 2 / 4 sales deals
-    expect(map.BOOKED_TO_ACCEPTED_RATE).toBe(0.25);
-    expect(map.NO_SHOW_RATE).toBe(0.25);
-  });
-
-  it('costs Call 1 by marketing bookings and CAC by accepted', () => {
-    const deals = [
-      deal({ dealId: 'a', bookedDay: '2026-07-20', accepted: 1 }),
-      deal({ dealId: 'b', bookedDay: '2026-07-21', accepted: 1 }),
-    ];
-    const marketing = [
-      mkt('2026-07-20', { fbSpend: 400, bookedAll: 1 }),
-      mkt('2026-07-21', { fbSpend: 400, bookedAll: 1 }),
-    ];
-
-    const map = asMap(computeCall1Summary(deals, marketing, 30, today));
-
-    expect(map.FB_SPEND).toBe(800);
-    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(2);
-    expect(map.COST_PER_CALL1_BOOKED).toBe(400); // 800 / 2 marketing bookings
-    expect(map.ACCEPTED_CUSTOMER_CAC).toBe(400); // 800 / 2 accepted
-  });
-
-  it('excludes rows outside the window and never divides by zero', () => {
-    const marketing = [
-      mkt('2026-05-01', { fbSpend: 999, bookedAll: 9 }),
-      mkt('2026-07-25', { fbSpend: 100, bookedAll: 0 }),
-    ];
-
-    const map = asMap(computeCall1Summary([], marketing, 30, today));
-
-    expect(map.FB_SPEND).toBe(100);
-    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(0);
-    expect(map.COST_PER_CALL1_BOOKED).toBe(0);
-    expect(map.ACCEPTED_CUSTOMER_CAC).toBe(0);
-  });
-
-  it('leaves cost per succeeding customer pending', () => {
-    const map = asMap(computeCall1Summary([], [], 30, today));
-
-    expect(map.COST_PER_SUCCEEDING_CUSTOMER).toBe('pending deal→customer link');
-  });
-
-  it('lets sales-based accepted exceed the marketing Call 1 count', () => {
-    // Sales books more Call 1s than the form sees, so accepted can be > marketing bookings.
-    const deals = [
-      deal({ dealId: 'a', bookedDay: '2026-07-20', accepted: 1 }),
-      deal({ dealId: 'b', bookedDay: '2026-07-21', accepted: 1 }),
-      deal({ dealId: 'c', bookedDay: '2026-07-22', accepted: 1 }),
-    ];
-    const marketing = [mkt('2026-07-20', { bookedAll: 1 })];
-
-    const map = asMap(computeCall1Summary(deals, marketing, 30, today));
-
-    expect(map['CALL1_BOOKED (BOOKING_COMPLETE)']).toBe(1);
-    expect(map['ACCEPTED (maturing)']).toBe(3);
+    expect(values[0][2]).toBe(''); // BOOKED_DAY blank
+    expect(values[0][5]).toBe(1); // ACCEPTED still counted
   });
 });

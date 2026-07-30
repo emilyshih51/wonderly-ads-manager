@@ -183,6 +183,29 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Delete a tab if it exists. Idempotent — a no-op when the tab is already gone, so it's
+   * safe to call every run to retire a tab the cron no longer produces.
+   *
+   * @param spreadsheetId - Sheet ID from its URL
+   * @param tabName - Exact tab name to remove
+   */
+  async deleteTab(spreadsheetId: string, tabName: string): Promise<void> {
+    const meta = await this.request<{
+      sheets?: { properties?: { sheetId?: number; title?: string } }[];
+    }>(`/${spreadsheetId}?fields=sheets.properties(sheetId,title)`);
+
+    const sheetId = (meta.sheets ?? []).find((s) => s.properties?.title === tabName)?.properties
+      ?.sheetId;
+
+    if (sheetId === undefined) return;
+
+    await this.request(`/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests: [{ deleteSheet: { sheetId } }] }),
+    });
+  }
+
+  /**
    * Apply formatting to a tab via `batchUpdate`, idempotently.
    *
    * Looks up the tab's numeric gid, deletes any conditional-format rules already on it

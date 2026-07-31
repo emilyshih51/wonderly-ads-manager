@@ -5,9 +5,11 @@
  * Cowork, Claude Code) can query the funnel, CAC, cohorts, deals, and ad performance
  * directly — reusing the same Meta + Snowflake reads and lib functions as the cron.
  *
- * Read-only: no writes, no ad changes, no sheet mutation. Bearer-token protected via
- * `MCP_TOKEN`. Endpoint: POST `/api/mcp/mcp` (streamable HTTP). Runs on the Node runtime
- * (snowflake-sdk needs Node) with a longer timeout for the Snowflake round-trips.
+ * Read-only: no writes, no ad changes, no sheet mutation. Auth: OAuth 2.1 (the client runs
+ * the flow against `/api/oauth/*`; the user is gated by the app login) — an unauthenticated
+ * request gets a 401 pointing at the resource metadata, which kicks off the flow. A static
+ * `MCP_TOKEN` bearer is also accepted, for header-capable clients (e.g. Claude Code).
+ * Endpoint: POST `/api/mcp/mcp` (streamable HTTP). Node runtime, longer timeout for Snowflake.
  */
 
 import { createMcpHandler } from 'mcp-handler';
@@ -16,6 +18,7 @@ import { z } from 'zod';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import { adPerformance, fetchGrowthData } from '@/lib/growth-data';
 import { HISTORICAL_CAC_HEADERS, toHistoricalCacValues } from '@/lib/historical-cac';
+import { baseUrl, isValidToken } from '@/lib/mcp-oauth';
 import { computeOverview } from '@/lib/overview';
 
 export const runtime = 'nodejs';
@@ -171,19 +174,31 @@ const handler = createMcpHandler(
   { basePath: '/api/mcp', maxDuration: 60 }
 );
 
-/** Bearer-token gate. When MCP_TOKEN is set, every request must send it. */
+/** 401 that tells the client where to discover the OAuth flow (RFC 9728). */
+function unauthorized(): Response {
+  return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    status: 401,
+    headers: {
+      'Content-Type': 'application/json',
+      'WWW-Authenticate': `Bearer resource_metadata="${baseUrl()}/.well-known/oauth-protected-resource"`,
+    },
+  });
+}
+
+/**
+ * Require either a valid OAuth access token (issued by `/api/oauth/*`) or the static
+ * `MCP_TOKEN` bearer. Anything else → 401 with the metadata pointer that starts OAuth.
+ */
 function authed(fn: (req: Request) => Promise<Response> | Response) {
   return async (req: Request): Promise<Response> => {
-    const token = process.env.MCP_TOKEN;
+    const auth = req.headers.get('authorization') ?? '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
-    if (token && req.headers.get('authorization') !== `Bearer ${token}`) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    if (!token) return unauthorized();
+    if (process.env.MCP_TOKEN && token === process.env.MCP_TOKEN) return fn(req);
+    if (await isValidToken(token)) return fn(req);
 
-    return fn(req);
+    return unauthorized();
   };
 }
 

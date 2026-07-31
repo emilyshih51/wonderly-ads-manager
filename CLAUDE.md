@@ -342,7 +342,9 @@ Marketing events are keyed by **email** (anonymous before submit); sales events 
 
 ### Read-only MCP server (`/api/mcp`)
 
-A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools for any MCP client (endpoint `POST /api/mcp/mcp`). **Read-only** — no writes, no ad changes, no sheet mutation. Bearer-token gated by `MCP_TOKEN` (open if unset). Node runtime, `maxDuration 60`.
+A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools for any MCP client (endpoint `POST /api/mcp/mcp`). **Read-only** — no writes, no ad changes, no sheet mutation. Node runtime, `maxDuration 60`.
+
+- **Auth = OAuth 2.1** (Claude's connector only supports OAuth, not a bearer header). A minimal authorization server lives at `/api/oauth/*` (`src/lib/mcp-oauth.ts` + routes: `register` DCR, `authorize`, `token`, `protected-resource` + `authorization-server` metadata served at `/.well-known/*` via `next.config.ts` rewrites). Public clients + PKCE (no client secret); the **user** is gated by the app's existing session (`getSession`) — only someone logged into the dashboard can authorize; codes/tokens live in **Redis**. Requires `NEXT_PUBLIC_APP_URL` + `REDIS_URL`. A static `MCP_TOKEN` bearer is also accepted for header-capable clients (Claude Code). The MCP returns 401 + `WWW-Authenticate: …resource_metadata=…` when unauthenticated, which starts the flow.
 
 - `src/app/api/mcp/[transport]/route.ts` — `mcp-handler` + `zod` tools: `growth_overview`, `daily_funnel`, `historical_cac`, `call1_deals` (filterable by status/campaign/ad/booked-after), `ad_performance` (rank ads by booked→held→accepted), `customer_pnl`.
 - `src/lib/growth-data.ts` — `fetchGrowthData({ rows?, deals?, succeeding?, pnl? })` reads Meta + Snowflake live (mirrors the cron, minus the sheet merge/overrides) and returns typed objects; `adPerformance(deals)` aggregates by ad.

@@ -99,17 +99,14 @@ describe('computeOverview', () => {
   });
 
   it('computes cost per Call 1 booked and accepted over the last 7 completed days', () => {
-    // Dated 07-27 (< today 07-28) so they count as completed days.
+    // Dated 07-27 (< today 07-28) so they count as completed days. Accepted is the
+    // booking-day cohort (r.accepted), matching Daily Metrics / Daily Funnel.
     const rows = Array(7)
       .fill(0)
-      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 2 }));
-    // Cost per accepted is flow-keyed: 7 acceptances dated in the window → 700 / 7 = 100.
-    const call1Deals = Array(7)
-      .fill(0)
-      .map(() => deal({ acceptedDate: '2026-07-27' }));
-    const m = computeOverview({ ...base, rows, call1Deals });
+      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 2, accepted: 1 }));
+    const m = computeOverview({ ...base, rows });
 
-    // 700 spend / 14 booked = 50; 700 spend / 7 acceptances = 100
+    // 700 spend / 14 booked = 50; 700 / 7 accepted = 100
     expect(line(m, 'Cost per Call 1 booked')[1]).toBe(50);
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
   });
@@ -124,22 +121,14 @@ describe('computeOverview', () => {
     expect(line(m, 'Cost per accepted contractor (30d)')[1]).toBe(100);
   });
 
-  it('keeps the week-over-week ACCEPTED flow-keyed and consistent with the headline', () => {
-    // Daily rows carry cohort accepted = 0 for the window; call1Deals has 3 acceptances by date.
-    const rows = Array(7)
+  it('week-over-week ACCEPTED is the booking cohort (matches Daily Metrics)', () => {
+    const rows = Array(14)
       .fill(0)
-      .map(() => row({ date: '2026-07-27', fbSpend: 100, accepted: 0 }));
-    const call1Deals = [
-      deal({ acceptedDate: '2026-07-27' }),
-      deal({ acceptedDate: '2026-07-27' }),
-      deal({ acceptedDate: '2026-07-27' }),
-    ];
-    const m = computeOverview({ ...base, rows, call1Deals });
+      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 5, accepted: 2 }));
+    const m = computeOverview({ ...base, rows });
 
-    // w/w ACCEPTED THIS_7D shows the flow count (3), not the cohort 0.
-    expect(line(m, 'ACCEPTED')[1]).toBe(3);
-    // Headline reconciles: 700 spend / 3 acceptances = 233.33.
-    expect(line(m, 'Cost per accepted contractor')[1]).toBe(233.33);
+    // ACCEPTED THIS_7D = 7 days × 2 cohort-accepted = 14.
+    expect(line(m, 'ACCEPTED')[1]).toBe(14);
   });
 
   it('shows the succeeding rows as maturing when the cohort is small', () => {

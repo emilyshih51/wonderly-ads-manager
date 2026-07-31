@@ -66,33 +66,17 @@ export function computeOverview(opts: {
   const wk = complete.slice(0, 7);
   const spend7 = sum(wk, (r) => r.fbSpend);
   const call1_7 = sum(wk, (r) => r.bookedAll);
+  const accepted7 = sum(wk, (r) => r.accepted);
 
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
+  // Cost per accepted contractor (7d): COHORT-keyed, exactly like Daily Metrics / Daily
+  // Funnel — of the deals booked in the window, how many accepted. Reads ~$0 for the most
+  // recent week because those bookings haven't converted yet; the 30d row and historical_cac
+  // are the matured figures.
+  const costPerAccepted = accepted7 > 0 ? money(spend7 / accepted7) : 0;
 
-  // HELD / ACCEPTED are counted by the day they HAPPENED (flow, from call1Deals) across the
-  // Overview — parallel to how the marketing steps count events in the window, and the
-  // parallel to Cost per Call 1 booked. The daily rows carry the booking-day COHORT (which
-  // is ~0 for the most recent days since those bookings haven't converted yet), so using it
-  // here would zero out the headline and contradict the week-over-week table.
-  const pv = complete.slice(7, 14);
-  const bounds = (arr: MarketingDailyRow[]) => ({
-    from: arr[arr.length - 1]?.date ?? '',
-    to: arr[0]?.date ?? '',
-  });
-  const inWindow = (
-    dateOf: (d: Call1DealRow) => string,
-    b: { from: string; to: string }
-  ): number =>
-    b.from && b.to ? call1Deals.filter((d) => dateOf(d) >= b.from && dateOf(d) <= b.to).length : 0;
-  const thisB = bounds(wk);
-  const prevB = bounds(pv);
-
-  const flowAccepted7 = inWindow((d) => d.acceptedDate, thisB);
-  const costPerAccepted = flowAccepted7 > 0 ? money(spend7 / flowAccepted7) : 0;
-
-  // Cost per accepted contractor over the last 30 completed days — the booking-day COHORT
-  // (of the deals booked in that window, how many accepted), so recent windows read high
-  // until the cohort matures.
+  // Cost per accepted contractor over the last 30 completed days — same booking-day COHORT,
+  // just a wider (more matured) window.
   const mo = complete.slice(0, 30);
   const spend30 = sum(mo, (r) => r.fbSpend);
   const accepted30 = sum(mo, (r) => r.accepted);
@@ -124,10 +108,7 @@ export function computeOverview(opts: {
   const newest = rows[0]?.date ?? '';
   const dataStale = newest !== '' && newest < today;
 
-  const wow = computeWeekOverWeek(complete, {
-    HELD: { this: inWindow((d) => d.heldDate, thisB), prev: inWindow((d) => d.heldDate, prevB) },
-    ACCEPTED: { this: flowAccepted7, prev: inWindow((d) => d.acceptedDate, prevB) },
-  });
+  const wow = computeWeekOverWeek(complete);
   const call1Wow = wow.find((r) => r[0] === 'CALL1_BOOKED');
   const call1Pct = call1Wow ? Number(call1Wow[4]) : 0;
   const call1Drop = call1Pct < CALL1_DROP_THRESHOLD;

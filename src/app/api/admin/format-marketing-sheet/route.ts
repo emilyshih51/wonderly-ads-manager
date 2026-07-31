@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     const weekBreaks = weekBreakRows(dates, 5);
 
     await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
-      buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks)
+      buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks, rows)
     );
 
     logger.info('Formatted Daily Metrics tab');

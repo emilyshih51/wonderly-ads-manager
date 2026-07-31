@@ -96,6 +96,55 @@ const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
 /** Sheet row index (0-based) of the 7d-average summary row — its counts are fractional. */
 const SEVEN_DAY_ROW = 2;
 
+/**
+ * Money columns show whole dollars when they typically run above this, else cents — so
+ * big figures (spend, cost per accepted) drop the noise while small ones (CPC, cheap
+ * per-stage costs) keep their precision.
+ */
+const WHOLE_DOLLAR_THRESHOLD = 10;
+
+/** Parse a cell to a finite number (stripping `$`, commas, `%`); null if not numeric. */
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+
+  const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Mean of a column's daily rows (skips the header + summary rows); null if none numeric. */
+function columnMean(values: (string | number)[][] | undefined, col: number): number | null {
+  if (!values) return null;
+
+  const nums: number[] = [];
+
+  for (let r = FROZEN_ROWS; r < values.length; r++) {
+    const n = toNumber(values[r]?.[col]);
+
+    if (n !== null) nums.push(n);
+  }
+
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+
+/**
+ * Pick a currency format for a money column by its typical magnitude: whole dollars when
+ * the column averages above $10, cents otherwise. Falls back to `fallbackWhole` when there
+ * are no data rows to average (e.g. the one-off admin formatter runs before values exist).
+ */
+function moneyFormat(
+  values: (string | number)[][] | undefined,
+  col: number,
+  fallbackWhole: boolean
+): { type: string; pattern: string } {
+  const mean = columnMean(values, col);
+
+  if (mean === null) return fallbackWhole ? CURRENCY_WHOLE : CURRENCY;
+
+  return mean > WHOLE_DOLLAR_THRESHOLD ? CURRENCY_WHOLE : CURRENCY;
+}
+
 /** A column range on the sheet, open-ended downward so new daily rows inherit the format. */
 function column(sheetId: number, col: number, startRow = FIRST_VALUE_ROW): SheetsRequest {
   return { sheetId, startRowIndex: startRow, startColumnIndex: col, endColumnIndex: col + 1 };
@@ -107,13 +156,17 @@ function column(sheetId: number, col: number, startRow = FIRST_VALUE_ROW): Sheet
  * @param sheetId - The tab's numeric gid
  * @param metrics - Metric groups in column order (their `money` flag drives value formatting)
  * @param weekBreaks - 0-based sheet rows to get a bottom border (from `weekBreakRows`)
+ * @param values - The full Daily Metrics matrix (header + summary + daily rows) the cron just
+ *   wrote. Used to pick whole-dollar vs cents per money column by its average; omit and every
+ *   money column falls back to its static default.
  * @returns Ordered `batchUpdate` requests: freeze, header styling, then per-metric merge,
  *   number formats, the week-over-week heat-map rule, and week-separator borders
  */
 export function buildDailyMetricsFormatRequests(
   sheetId: number,
   metrics: MetricFormat[],
-  weekBreaks: number[] = []
+  weekBreaks: number[] = [],
+  values?: (string | number)[][]
 ): SheetsRequest[] {
   const requests: SheetsRequest[] = [
     // Unmerge the group-header row first so re-running (e.g. every cron) can't fail on
@@ -196,7 +249,6 @@ export function buildDailyMetricsFormatRequests(
     const wow = colIdx++;
     const fb = colIdx++;
     const organic = colIdx++;
-    const valueFormat = m.money ? (m.wholeDollars ? CURRENCY_WHOLE : CURRENCY) : COUNT;
 
     // Merge the metric name across its whole group in the group-header row.
     requests.push({
@@ -212,19 +264,22 @@ export function buildDailyMetricsFormatRequests(
       },
     });
 
-    // Cost (per action) is always whole dollars, whatever the stage's own format is.
+    // Cost (per action) is dollars — whole above $10, cents below (per its column average).
     if (cost !== undefined) {
       requests.push({
         repeatCell: {
           range: column(sheetId, cost),
-          cell: { userEnteredFormat: { numberFormat: CURRENCY_WHOLE } },
+          cell: { userEnteredFormat: { numberFormat: moneyFormat(values, cost, true) } },
           fields: 'userEnteredFormat.numberFormat',
         },
       });
     }
 
-    // ALL / FB / Organic take the value format; w/w is a percent.
+    // ALL / FB / Organic take the value format; w/w is a percent. Money columns choose
+    // whole-dollars vs cents by their own average; counts are plain integers.
     for (const col of [all, fb, organic]) {
+      const valueFormat = m.money ? moneyFormat(values, col, m.wholeDollars ?? false) : COUNT;
+
       requests.push({
         repeatCell: {
           range: column(sheetId, col),

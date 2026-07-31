@@ -284,7 +284,7 @@ export async function GET(request: Request) {
       );
 
       await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
-        buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks)
+        buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks, dailyMetrics)
       );
     } catch (formatError) {
       logger.error('Daily Metrics formatting failed (values still written)', formatError);

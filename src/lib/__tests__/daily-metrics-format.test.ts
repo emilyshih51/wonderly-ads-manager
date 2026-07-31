@@ -100,4 +100,45 @@ describe('buildDailyMetricsFormatRequests', () => {
     expect(types).toContain('NUMBER');
     expect(types).toContain('PERCENT');
   });
+
+  it('picks whole dollars vs cents per money column by its average when values are given', () => {
+    // Two frozen headers + three summary rows (indices 0..4), then two daily rows.
+    // Page views' Cost column is index 9. Give it a >$10 average → whole dollars.
+    const bigCost = [
+      Array(14).fill(''), // group header
+      Array(14).fill(''), // sub header
+      Array(14).fill(''), // 7d avg
+      Array(14).fill(''), // MTD
+      Array(14).fill(''), // Prev Month
+      (() => {
+        const r = Array(14).fill('');
+
+        r[9] = 68;
+
+        return r;
+      })(),
+      (() => {
+        const r = Array(14).fill('');
+
+        r[9] = 72;
+
+        return r;
+      })(),
+    ];
+    const wholeReqs = buildDailyMetricsFormatRequests(123, METRICS, [], bigCost);
+    const costFmt = (rs: any[]) =>
+      (rs.find((r) => 'repeatCell' in r && r.repeatCell.range.startColumnIndex === 9) as any)
+        .repeatCell.cell.userEnteredFormat.numberFormat;
+
+    expect(costFmt(wholeReqs)).toEqual({ type: 'CURRENCY', pattern: '"$"#,##0' });
+
+    // Same column, but a cheap (<$10) average → keep cents.
+    const cheapCost = bigCost.map((r) => [...r]);
+
+    cheapCost[5][9] = 4;
+    cheapCost[6][9] = 6;
+    const centReqs = buildDailyMetricsFormatRequests(123, METRICS, [], cheapCost);
+
+    expect(costFmt(centReqs)).toEqual({ type: 'CURRENCY', pattern: '"$"#,##0.00' });
+  });
 });

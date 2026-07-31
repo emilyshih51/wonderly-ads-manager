@@ -22,9 +22,29 @@ const HEAT_MID = { red: 1, green: 1, blue: 1 };
 const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 };
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
-// Cost-per-result / CAC figures round to whole dollars (no cents); only raw spend keeps cents.
 const CURRENCY_WHOLE = { type: 'CURRENCY', pattern: '"$"#,##0' };
 const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
+
+/** Above this a dollar figure shows whole (no cents); at or below it keeps cents. */
+const WHOLE_DOLLAR_THRESHOLD = 10;
+
+/** Parse a cell to a finite number (stripping `$`, commas, `%`); null if not numeric. */
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+
+  const n = parseFloat(v.replace(/[^0-9.-]/g, ''));
+
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Whole dollars when a figure runs above $10, cents otherwise; cents when non-numeric. */
+function moneyByMagnitude(value: unknown): { type: string; pattern: string } {
+  const n = toNumber(value);
+
+  return n !== null && n > WHOLE_DOLLAR_THRESHOLD ? CURRENCY_WHOLE : CURRENCY;
+}
+
 // Plain integer with thousands separators — no decimal point, so counts don't show a
 // stray trailing dot. (Spend cents are kept via a currency override on the FB_SPEND row.)
 const NUMBER = { type: 'NUMBER', pattern: '#,##0' };
@@ -131,7 +151,7 @@ export function buildOverviewFormatRequests(
       requests.push({
         repeatCell: {
           range: cellRange(sheetId, i, 1),
-          cell: { userEnteredFormat: { numberFormat: CURRENCY_WHOLE } },
+          cell: { userEnteredFormat: { numberFormat: moneyByMagnitude(row[1]) } },
           fields: 'userEnteredFormat.numberFormat',
         },
       });
@@ -200,7 +220,18 @@ export function buildOverviewFormatRequests(
     requests.push(numberFmt(WOW.pctChange, PERCENT));
     requests.push(numberFmt(WOW.conversion, PERCENT));
     requests.push(numberFmt(WOW.costPctChange, PERCENT));
-    requests.push(numberFmt(WOW.costPerResult, CURRENCY_WHOLE));
+    // Cost-per-result column: whole dollars when it averages above $10, else cents.
+    const costValues = matrix
+      .slice(firstData)
+      .map((r) => toNumber(r[WOW.costPerResult]))
+      .filter((n): n is number => n !== null);
+    const costMean = costValues.length
+      ? costValues.reduce((a, b) => a + b, 0) / costValues.length
+      : null;
+    const costPerResultFmt =
+      costMean !== null && costMean > WHOLE_DOLLAR_THRESHOLD ? CURRENCY_WHOLE : CURRENCY;
+
+    requests.push(numberFmt(WOW.costPerResult, costPerResultFmt));
 
     // Heat-map the week-over-week % change.
     requests.push({

@@ -339,3 +339,12 @@ Marketing events are keyed by **email** (anonymous before submit); sales events 
 - `GoogleSheetsService.replaceRows` writes with `USER_ENTERED` (dates parse to real dates → SUMIFS date criteria work). Formatting is orthogonal (`formatTab`, idempotent) and survives value rewrites. `ensureTab`/`deleteTab` manage tab lifecycle.
 - Libs are pure + unit-tested (vitest): `daily-metrics(-format)`, `daily-funnel`, `overview(-format)`, `call1-deals`, `succeeding`, `customer-pnl`, `definitions`, `marketing-daily`, `week-over-week`. The Snowflake SQL itself is validated ad-hoc against the live warehouse, not unit-tested.
 - When touching keying/definitions, verify against Snowflake before/after and keep `Definitions` tab (`src/lib/definitions.ts`) in sync.
+
+### Read-only MCP server (`/api/mcp`)
+
+A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools for any MCP client (endpoint `POST /api/mcp/mcp`). **Read-only** — no writes, no ad changes, no sheet mutation. Bearer-token gated by `MCP_TOKEN` (open if unset). Node runtime, `maxDuration 60`.
+
+- `src/app/api/mcp/[transport]/route.ts` — `mcp-handler` + `zod` tools: `growth_overview`, `daily_funnel`, `historical_cac`, `call1_deals` (filterable by status/campaign/ad/booked-after), `ad_performance` (rank ads by booked→held→accepted), `customer_pnl`.
+- `src/lib/growth-data.ts` — `fetchGrowthData({ rows?, deals?, succeeding?, pnl? })` reads Meta + Snowflake live (mirrors the cron, minus the sheet merge/overrides) and returns typed objects; `adPerformance(deals)` aggregates by ad.
+- `src/lib/growth-config.ts` — shared `BACKFILL_START`, `WONDERLY_AD_ACCOUNT_ID`, `isoDate`, `daysSince` (imported by both the cron and the MCP so they never drift).
+- Deps: `mcp-handler`, `zod`. Tools reuse the same pure libs (`computeOverview`, `toDailyFunnelValues`, `toHistoricalCacValues`) so definitions stay identical to the sheet.

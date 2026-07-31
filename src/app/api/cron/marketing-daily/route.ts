@@ -40,6 +40,7 @@ import {
   RAW_TAB_HEADERS,
   type MarketingDailyRow,
 } from '@/lib/marketing-daily';
+import { BACKFILL_START, WONDERLY_AD_ACCOUNT_ID, daysSince, isoDate } from '@/lib/growth-config';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 import { MetaService } from '@/services/meta';
@@ -47,9 +48,6 @@ import { SlackService } from '@/services/slack';
 import { SnowflakeService, type BookingOverride } from '@/services/snowflake';
 
 const logger = createLogger('MarketingDailyCron');
-
-/** Wonderly's own ad account. Not the client accounts — their spend is not our CAC. */
-const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
 const RAW_TAB_NAME = 'wonderly_daily';
 
@@ -90,14 +88,6 @@ const CALL1_SUMMARY_TAB = 'call1_summary';
  * queries so those deals land in the right booking cohort.
  */
 const BOOKING_OVERRIDES_TAB = 'booking_overrides';
-
-/**
- * Fixed backfill anchor: every data tab is sourced and displayed from this date forward.
- * The refetch window is derived from it each run (today − BACKFILL_START), so the history
- * stays pinned to May 1 2026 (the first week the sales pipeline data exists) rather than a
- * rolling window that would slowly drop early-May days as time passes.
- */
-const BACKFILL_START = '2026-05-01';
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -430,22 +420,4 @@ function toIsoDate(value: string | number | undefined): string {
   if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
 
   return '';
-}
-
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * Whole days from an anchor date up to `today` (both `YYYY-MM-DD`, UTC).
- *
- * @param startIso - The anchor date (e.g. the backfill start)
- * @param today - Today's date
- * @returns The number of days between them
- */
-function daysSince(startIso: string, today: string): number {
-  const start = Date.parse(`${startIso}T00:00:00Z`);
-  const end = Date.parse(`${today}T00:00:00Z`);
-
-  return Math.round((end - start) / 86_400_000);
 }

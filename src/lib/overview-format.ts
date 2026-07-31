@@ -22,6 +22,8 @@ const HEAT_MID = { red: 1, green: 1, blue: 1 };
 const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 };
 
 const CURRENCY = { type: 'CURRENCY', pattern: '"$"#,##0.00' };
+// Cost-per-result / CAC figures round to whole dollars (no cents); only raw spend keeps cents.
+const CURRENCY_WHOLE = { type: 'CURRENCY', pattern: '"$"#,##0' };
 const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
 // Plain integer with thousands separators — no decimal point, so counts don't show a
 // stray trailing dot. (Spend cents are kept via a currency override on the FB_SPEND row.)
@@ -129,7 +131,7 @@ export function buildOverviewFormatRequests(
       requests.push({
         repeatCell: {
           range: cellRange(sheetId, i, 1),
-          cell: { userEnteredFormat: { numberFormat: CURRENCY } },
+          cell: { userEnteredFormat: { numberFormat: CURRENCY_WHOLE } },
           fields: 'userEnteredFormat.numberFormat',
         },
       });
@@ -198,7 +200,7 @@ export function buildOverviewFormatRequests(
     requests.push(numberFmt(WOW.pctChange, PERCENT));
     requests.push(numberFmt(WOW.conversion, PERCENT));
     requests.push(numberFmt(WOW.costPctChange, PERCENT));
-    requests.push(numberFmt(WOW.costPerResult, CURRENCY));
+    requests.push(numberFmt(WOW.costPerResult, CURRENCY_WHOLE));
 
     // Heat-map the week-over-week % change.
     requests.push({

@@ -212,12 +212,12 @@ export function buildDailyMetricsFormatRequests(
       },
     });
 
-    // Cost (per action) is always dollars, whatever the stage's own format is.
+    // Cost (per action) is always whole dollars, whatever the stage's own format is.
     if (cost !== undefined) {
       requests.push({
         repeatCell: {
           range: column(sheetId, cost),
-          cell: { userEnteredFormat: { numberFormat: CURRENCY } },
+          cell: { userEnteredFormat: { numberFormat: CURRENCY_WHOLE } },
           fields: 'userEnteredFormat.numberFormat',
         },
       });

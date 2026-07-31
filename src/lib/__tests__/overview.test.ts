@@ -102,10 +102,14 @@ describe('computeOverview', () => {
     // Dated 07-27 (< today 07-28) so they count as completed days.
     const rows = Array(7)
       .fill(0)
-      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 2, accepted: 1 }));
-    const m = computeOverview({ ...base, rows });
+      .map(() => row({ date: '2026-07-27', fbSpend: 100, bookedAll: 2 }));
+    // Cost per accepted is flow-keyed: 7 acceptances dated in the window → 700 / 7 = 100.
+    const call1Deals = Array(7)
+      .fill(0)
+      .map(() => deal({ acceptedDate: '2026-07-27' }));
+    const m = computeOverview({ ...base, rows, call1Deals });
 
-    // 700 spend / 14 booked = 50; 700 / 7 accepted = 100
+    // 700 spend / 14 booked = 50; 700 spend / 7 acceptances = 100
     expect(line(m, 'Cost per Call 1 booked')[1]).toBe(50);
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
   });

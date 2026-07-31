@@ -66,13 +66,25 @@ export function computeOverview(opts: {
   const wk = complete.slice(0, 7);
   const spend7 = sum(wk, (r) => r.fbSpend);
   const call1_7 = sum(wk, (r) => r.bookedAll);
-  const accepted7 = sum(wk, (r) => r.accepted);
 
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
-  const costPerAccepted = accepted7 > 0 ? money(spend7 / accepted7) : 0;
 
-  // Cost per accepted contractor over the last 30 completed days. Accepted is cohort-keyed
-  // by booking day, so recent windows read high until the cohort matures.
+  // Cost per accepted contractor (7d): count acceptances that HAPPENED in the window (by
+  // each deal's acceptance date) — the parallel to Cost per Call 1 booked, which counts
+  // bookings that happened in the window. (The booking-day cohort is ~0 for the most recent
+  // days since those bookings haven't converted yet, so spend ÷ cohort would read $0.)
+  const acceptedByDateInWindow = (fromDate: string, toDate: string): number =>
+    fromDate && toDate
+      ? call1Deals.filter((d) => d.acceptedDate >= fromDate && d.acceptedDate <= toDate).length
+      : 0;
+  const wkStart = wk[wk.length - 1]?.date ?? '';
+  const wkEnd = wk[0]?.date ?? '';
+  const flowAccepted7 = acceptedByDateInWindow(wkStart, wkEnd);
+  const costPerAccepted = flowAccepted7 > 0 ? money(spend7 / flowAccepted7) : 0;
+
+  // Cost per accepted contractor over the last 30 completed days — the booking-day COHORT
+  // (of the deals booked in that window, how many accepted), so recent windows read high
+  // until the cohort matures.
   const mo = complete.slice(0, 30);
   const spend30 = sum(mo, (r) => r.fbSpend);
   const accepted30 = sum(mo, (r) => r.accepted);

@@ -313,7 +313,7 @@ A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cro
 
 ### Tabs the cron writes
 
-`wonderly_daily` (raw, merged+backfilled), `Daily Funnel`, `Daily Metrics` (Motion-style grid), `Overview` (KPI dashboard), `customer_pnl`, `call1_deals` (per-deal audit), `Definitions` (glossary), `meta` (freshness). Input tab `booking_overrides` is **read-only to the cron**. `call1_summary` was removed (redundant; cron deletes it each run).
+`wonderly_daily` (raw, merged+backfilled), `Daily Funnel`, `Daily Metrics` (Motion-style grid; Accepted group is first), `Overview` (KPI dashboard — includes cost per accepted 7d & 30d), `historical_cac` (monthly + all-time cost per accepted, cohort-keyed), `customer_pnl`, `call1_deals` (per-deal audit), `Definitions` (glossary), `meta` (freshness). Input tab `booking_overrides` is **read-only to the cron**. `call1_summary` was removed (redundant; cron deletes it each run).
 
 ### Key model decisions (all intentional — don't "fix" without checking)
 

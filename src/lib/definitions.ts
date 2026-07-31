@@ -319,6 +319,15 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Booked day is derived automatically as the earliest of: first BOOKING_COMPLETE (matched by email) or the CRM deal-creation day (booking creates the deal), falling back to the Call 1 Scheduled event. CREATED_AT covers every deal, so overrides are rarely needed — this tab is a manual correction that wins over all of the above. You own it — the cron only reads it. Put the deal_id (from call1_deals) and a booking date (YYYY-MM-DD).',
   ],
 
+  // --- historical_cac -----------------------------------------------------
+  [
+    'MONTH / CAC',
+    'historical_cac',
+    'Cost to acquire an accepted contractor, per booking month + all-time. CAC = FB spend ÷ accepted (that month’s booking cohort). CALL1_BOOKED / ACCEPT_RATE give the funnel context.',
+    'Meta spend + Snowflake',
+    'Cohort-keyed by booking day. "maturing" months are too recent for their cohort to have finished converting (CAC reads high); the all-time row is the stable figure. Recomputed each run, so past months refine as cohorts mature.',
+  ],
+
   // --- customer_pnl -------------------------------------------------------
   [
     'EV_TAKE / AD_SPEND / PNL',

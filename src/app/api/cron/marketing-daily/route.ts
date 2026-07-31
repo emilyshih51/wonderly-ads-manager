@@ -17,6 +17,11 @@ import { NextResponse } from 'next/server';
 
 import { CALL1_DEALS_HEADERS, toCall1DealsValues } from '@/lib/call1-deals';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
+import {
+  HISTORICAL_CAC_HEADERS,
+  buildHistoricalCacFormatRequests,
+  toHistoricalCacValues,
+} from '@/lib/historical-cac';
 import { computeDailyMetrics } from '@/lib/daily-metrics';
 import {
   DAILY_METRICS_FORMAT,
@@ -65,6 +70,9 @@ const META_TAB = 'meta';
 
 /** Customer P&L tab (Wonderly's servicing economics), written by the same cron. */
 const CUSTOMER_PNL_TAB = 'customer_pnl';
+
+/** Historical CAC tab: monthly + all-time cost per accepted contractor. */
+const HISTORICAL_CAC_TAB = 'historical_cac';
 
 /** Customer P&L is a cheap aggregate view — pull a longer window for the trend. */
 const CUSTOMER_PNL_DAYS = 90;
@@ -158,6 +166,25 @@ export async function GET(request: Request) {
       [...DAILY_FUNNEL_HEADERS],
       toDailyFunnelValues(merged)
     );
+
+    // Historical CAC: monthly + all-time cost per accepted contractor, from the same rows.
+    const historicalCac = toHistoricalCacValues(merged, today);
+
+    await sheets.ensureTab(sheetId, HISTORICAL_CAC_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      HISTORICAL_CAC_TAB,
+      [...HISTORICAL_CAC_HEADERS],
+      historicalCac
+    );
+
+    try {
+      await sheets.formatTab(sheetId, HISTORICAL_CAC_TAB, (gid) =>
+        buildHistoricalCacFormatRequests(gid, historicalCac.length)
+      );
+    } catch (formatError) {
+      logger.error('historical_cac formatting failed (values still written)', formatError);
+    }
 
     // Customer P&L: a self-contained daily aggregate from the customer-value view.
     // Full-window rewrite each run, so no read-back/merge needed.

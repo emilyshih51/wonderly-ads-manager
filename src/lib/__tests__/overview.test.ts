@@ -52,6 +52,8 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     phone: '',
     email: '',
     source: 'facebook',
+    campaignId: '',
+    adId: '',
     heldDate: '',
     acceptedDate: '',
     ...o,
@@ -106,6 +108,16 @@ describe('computeOverview', () => {
     // 700 spend / 14 booked = 50; 700 / 7 accepted = 100
     expect(line(m, 'Cost per Call 1 booked')[1]).toBe(50);
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
+  });
+
+  it('computes cost per accepted contractor over the last 30 completed days', () => {
+    // 30 completed days: 30×200 spend / 30×2 accepted = 6000/60 = 100.
+    const rows = Array(30)
+      .fill(0)
+      .map(() => row({ date: '2026-07-27', fbSpend: 200, accepted: 2 }));
+    const m = computeOverview({ ...base, rows });
+
+    expect(line(m, 'Cost per accepted contractor (30d)')[1]).toBe(100);
   });
 
   it('shows the succeeding rows as maturing when the cohort is small', () => {

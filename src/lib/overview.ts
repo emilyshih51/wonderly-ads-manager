@@ -71,6 +71,13 @@ export function computeOverview(opts: {
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
   const costPerAccepted = accepted7 > 0 ? money(spend7 / accepted7) : 0;
 
+  // Cost per accepted contractor over the last 30 completed days. Accepted is cohort-keyed
+  // by booking day, so recent windows read high until the cohort matures.
+  const mo = complete.slice(0, 30);
+  const spend30 = sum(mo, (r) => r.fbSpend);
+  const accepted30 = sum(mo, (r) => r.accepted);
+  const costPerAccepted30 = accepted30 > 0 ? money(spend30 / accepted30) : 0;
+
   // Cost per succeeding contractor: Facebook acquisition spend over the cohort's
   // acceptance window ÷ how many of that cohort succeed (ROI ≥ 2×). Connects a cohort's
   // spend to that cohort's success rather than dividing all-time spend by everyone.
@@ -111,9 +118,10 @@ export function computeOverview(opts: {
     ['Last refreshed (PT)', lastRefreshedPt],
     ['Data through', newest],
     [],
-    ['HEADLINE COST — last 7 days'],
+    ['HEADLINE COST PER RESULT — last 7 days unless noted'],
     ['Cost per Call 1 booked', costPerCall1],
     ['Cost per accepted contractor', costPerAccepted],
+    ['Cost per accepted contractor (30d)', costPerAccepted30],
     ['Cost per succeeding contractor (60d)', succeeding60],
     ['Cost per succeeding contractor (90d)', succeeding90],
     [

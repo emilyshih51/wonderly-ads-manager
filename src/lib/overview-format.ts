@@ -27,12 +27,14 @@ const PERCENT = { type: 'PERCENT', pattern: '0.0%' };
 // stray trailing dot. (Spend cents are kept via a currency override on the FB_SPEND row.)
 const NUMBER = { type: 'NUMBER', pattern: '#,##0' };
 
-/** Section-band rows, matched on their exact label in column A. */
-const SECTION_LABELS = new Set([
-  'HEADLINE COST — last 7 days',
-  'WARNINGS',
-  'SEVEN DAYS vs PREVIOUS SEVEN DAYS',
-]);
+/** True for a section-band header row (HEADLINE COST… matched by prefix, others exact). */
+function isSectionLabel(label: string): boolean {
+  return (
+    label.startsWith('HEADLINE COST') ||
+    label === 'WARNINGS' ||
+    label === 'SEVEN DAYS vs PREVIOUS SEVEN DAYS'
+  );
+}
 
 /** Column indices inside the week-over-week table. */
 const WOW = { pctChange: 4, conversion: 5, costPerResult: 6, costPctChange: 7 };
@@ -98,7 +100,7 @@ export function buildOverviewFormatRequests(
   matrix.forEach((row, i) => {
     const label = String(row[0] ?? '');
 
-    if (SECTION_LABELS.has(label)) {
+    if (isSectionLabel(label)) {
       requests.push({
         repeatCell: {
           range: rowRange(sheetId, i),

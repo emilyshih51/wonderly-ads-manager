@@ -124,6 +124,24 @@ describe('computeOverview', () => {
     expect(line(m, 'Cost per accepted contractor (30d)')[1]).toBe(100);
   });
 
+  it('keeps the week-over-week ACCEPTED flow-keyed and consistent with the headline', () => {
+    // Daily rows carry cohort accepted = 0 for the window; call1Deals has 3 acceptances by date.
+    const rows = Array(7)
+      .fill(0)
+      .map(() => row({ date: '2026-07-27', fbSpend: 100, accepted: 0 }));
+    const call1Deals = [
+      deal({ acceptedDate: '2026-07-27' }),
+      deal({ acceptedDate: '2026-07-27' }),
+      deal({ acceptedDate: '2026-07-27' }),
+    ];
+    const m = computeOverview({ ...base, rows, call1Deals });
+
+    // w/w ACCEPTED THIS_7D shows the flow count (3), not the cohort 0.
+    expect(line(m, 'ACCEPTED')[1]).toBe(3);
+    // Headline reconciles: 700 spend / 3 acceptances = 233.33.
+    expect(line(m, 'Cost per accepted contractor')[1]).toBe(233.33);
+  });
+
   it('shows the succeeding rows as maturing when the cohort is small', () => {
     const m = computeOverview({
       ...base,

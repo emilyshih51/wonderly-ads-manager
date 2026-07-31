@@ -57,6 +57,10 @@ function money(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Per-step count overrides (this / previous week) — used to swap cohort-keyed HELD /
+ * ACCEPTED for flow counts (by event date) so the Overview reads consistently. */
+export type WeekOverWeekOverrides = Record<string, { this: number; prev: number }>;
+
 /**
  * Build the week-over-week matrix in WEEK_OVER_WEEK_HEADERS order.
  *
@@ -64,16 +68,22 @@ function money(value: number): number {
  * first 7 are "this week", the next 7 are "previous week".
  *
  * @param rows - Daily rows, newest first
+ * @param overrides - Optional this/prev counts to use for a step instead of summing rows
+ *   (e.g. flow-keyed HELD / ACCEPTED, since the daily rows carry the booking-day cohort)
  */
-export function computeWeekOverWeek(rows: MarketingDailyRow[]): (string | number)[][] {
+export function computeWeekOverWeek(
+  rows: MarketingDailyRow[],
+  overrides: WeekOverWeekOverrides = {}
+): (string | number)[][] {
   const thisWk = rows.slice(0, 7);
   const prevWk = rows.slice(7, 14);
   const spendThis = sum(thisWk, (r) => r.fbSpend);
   const spendPrev = sum(prevWk, (r) => r.fbSpend);
 
   return STEPS.map((step) => {
-    const t = sum(thisWk, step.count);
-    const p = sum(prevWk, step.count);
+    const ov = overrides[step.label];
+    const t = ov ? ov.this : sum(thisWk, step.count);
+    const p = ov ? ov.prev : sum(prevWk, step.count);
     const conversion = step.prev ? frac(t, sum(thisWk, step.prev)) : '';
     const costThis = step.isSpend || t === 0 ? 0 : spendThis / t;
     const costPrev = step.isSpend || p === 0 ? 0 : spendPrev / p;

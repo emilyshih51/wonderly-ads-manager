@@ -26,6 +26,8 @@ export interface MetricFormat {
   wholeDollars?: boolean;
   hasCost?: boolean;
   hideOrganic?: boolean;
+  /** Drop the week-over-week column (must match the same flag in `daily-metrics.ts`). */
+  noWow?: boolean;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface MetricFormat {
  * the admin formatter share one source.
  */
 export const DAILY_METRICS_FORMAT: MetricFormat[] = [
-  { label: 'Accepted', money: false, hasCost: true },
+  { label: 'Accepted', money: false, hasCost: true, noWow: true },
   { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
   { label: 'CPC', money: true, hideOrganic: true },
   { label: 'Page views', money: false, hasCost: true },
@@ -225,8 +227,10 @@ export function buildDailyMetricsFormatRequests(
     },
   });
 
-  // Total columns: Date + each group's width (5 with Cost, else 4).
-  const lastColumn = 1 + metrics.reduce((n, m) => n + (m.hasCost ? 5 : 4), 0);
+  // Total columns: Date + each group's width. Base is 4 (ALL · w/w · FB · Organic); a Cost
+  // column adds one, and a `noWow` metric drops one.
+  const lastColumn =
+    1 + metrics.reduce((n, m) => n + 4 + (m.hasCost ? 1 : 0) - (m.noWow ? 1 : 0), 0);
 
   // Un-hide every data column first, so a column-order change can't leave a previously
   // hidden column stuck hidden (the per-metric `hideOrganic` below re-hides the right ones).
@@ -246,7 +250,7 @@ export function buildDailyMetricsFormatRequests(
     const groupStart = colIdx;
     const cost = m.hasCost ? colIdx++ : undefined;
     const all = colIdx++;
-    const wow = colIdx++;
+    const wow = m.noWow ? undefined : colIdx++;
     const fb = colIdx++;
     const organic = colIdx++;
 
@@ -307,28 +311,31 @@ export function buildDailyMetricsFormatRequests(
       }
     }
 
-    requests.push({
-      repeatCell: {
-        range: column(sheetId, wow),
-        cell: { userEnteredFormat: { numberFormat: PERCENT } },
-        fields: 'userEnteredFormat.numberFormat',
-      },
-    });
+    // w/w column: percent format + a −50% red → 0 white → +50% green heat-map. Skipped
+    // entirely for `noWow` metrics (e.g. Accepted), which have no w/w column.
+    if (wow !== undefined) {
+      requests.push({
+        repeatCell: {
+          range: column(sheetId, wow),
+          cell: { userEnteredFormat: { numberFormat: PERCENT } },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      });
 
-    // Heat-map the w/w column: −50% red → 0 white → +50% green.
-    requests.push({
-      addConditionalFormatRule: {
-        index: 0,
-        rule: {
-          ranges: [column(sheetId, wow)],
-          gradientRule: {
-            minpoint: { color: HEAT_MIN, type: 'NUMBER', value: '-0.5' },
-            midpoint: { color: HEAT_MID, type: 'NUMBER', value: '0' },
-            maxpoint: { color: HEAT_MAX, type: 'NUMBER', value: '0.5' },
+      requests.push({
+        addConditionalFormatRule: {
+          index: 0,
+          rule: {
+            ranges: [column(sheetId, wow)],
+            gradientRule: {
+              minpoint: { color: HEAT_MIN, type: 'NUMBER', value: '-0.5' },
+              midpoint: { color: HEAT_MID, type: 'NUMBER', value: '0' },
+              maxpoint: { color: HEAT_MAX, type: 'NUMBER', value: '0.5' },
+            },
           },
         },
-      },
-    });
+      });
+    }
 
     // Hide the Organic column when it carries no data (CPC — no organic ad spend).
     if (m.hideOrganic) {

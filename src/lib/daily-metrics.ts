@@ -33,6 +33,8 @@ interface Metric {
   denom?: (r: MarketingDailyRow) => number;
   /** Add a "Cost" column = FB spend ÷ this stage's count (cost per action), before ALL. */
   hasCost?: boolean;
+  /** Drop the week-over-week column — for tiny-count metrics where w/w is just noise. */
+  noWow?: boolean;
 }
 
 const METRICS: Metric[] = [
@@ -44,6 +46,8 @@ const METRICS: Metric[] = [
     fb: (r) => r.acceptedFb,
     organic: (r) => r.acceptedOrganic,
     hasCost: true,
+    // Accepted runs 0–5 a day, so a day-vs-last-week % is just −100%/+400% noise. Drop it.
+    noWow: true,
   },
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
@@ -173,7 +177,7 @@ export function computeDailyMetrics(
   const layout = METRICS.map((m) => {
     const cost = m.hasCost ? colIdx++ : undefined;
     const all = colIdx++;
-    const wow = colIdx++;
+    const wow = m.noWow ? undefined : colIdx++;
     const fb = colIdx++;
     const organic = colIdx++;
 
@@ -188,9 +192,12 @@ export function computeDailyMetrics(
   const subHeader: (string | number)[] = ['Date'];
 
   for (const m of METRICS) {
-    const cols = m.hasCost
-      ? ['Cost', 'ALL', 'w/w', 'FB', 'Organic']
-      : ['ALL', 'w/w', 'FB', 'Organic'];
+    const cols: string[] = [];
+
+    if (m.hasCost) cols.push('Cost');
+    cols.push('ALL');
+    if (!m.noWow) cols.push('w/w');
+    cols.push('FB', 'Organic');
 
     groupHeader.push(m.label, ...Array(cols.length - 1).fill(''));
     subHeader.push(...cols);
@@ -249,14 +256,24 @@ export function computeDailyMetrics(
     if (m.hasCost) {
       const cost = costCells(La);
 
-      d7Row.push(cost.d7, all.d7, wow7, fb.d7, organic.d7);
-      mtdRow.push(cost.mtd, all.mtd, wowMtd, fb.mtd, organic.mtd);
-      prevRow.push(cost.prev, all.prev, '', fb.prev, organic.prev);
-    } else {
-      d7Row.push(all.d7, wow7, fb.d7, organic.d7);
-      mtdRow.push(all.mtd, wowMtd, fb.mtd, organic.mtd);
-      prevRow.push(all.prev, '', fb.prev, organic.prev);
+      d7Row.push(cost.d7);
+      mtdRow.push(cost.mtd);
+      prevRow.push(cost.prev);
     }
+
+    d7Row.push(all.d7);
+    mtdRow.push(all.mtd);
+    prevRow.push(all.prev);
+
+    if (!m.noWow) {
+      d7Row.push(wow7);
+      mtdRow.push(wowMtd);
+      prevRow.push('');
+    }
+
+    d7Row.push(fb.d7, organic.d7);
+    mtdRow.push(fb.mtd, organic.mtd);
+    prevRow.push(fb.prev, organic.prev);
   });
 
   const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
@@ -277,10 +294,12 @@ export function computeDailyMetrics(
         // stage (blank on zero-action days).
         const costV = count > 0 ? round2(r.fbSpend / count) : '';
 
-        out.push(costV, allV, wowV, fbV, orgV);
-      } else {
-        out.push(allV, wowV, fbV, orgV);
+        out.push(costV);
       }
+
+      out.push(allV);
+      if (!m.noWow) out.push(wowV);
+      out.push(fbV, orgV);
     }
 
     matrix.push(out);

@@ -52,16 +52,44 @@ migration only relocates the **sales side** — stage, held/no‑show, accepted 
 - `campaignId` ← `DEAL_METADATA_CAMPAIGN_ID`; `adId` ← `DEAL_METADATA_AD_ID`
 - `estAmount` ← prod value table
 
-## Open questions / decisions
+## Step‑1 finding: ACCEPTED does NOT reconcile — keep the dev definition (DECIDED)
 
-1. **Accepted signal in prod** — confirm the canonical prod "accepted" (wins table vs stage
-   name vs deal outcome) and reconcile its count to the validated dev‑CRM 144. This is step 1;
-   everything else is low‑risk once it's pinned.
-2. **Accepted consistency (important).** If `call1_deals` accepted comes from prod but Daily
-   Metrics accepted stays on dev CRM (our prior decision), the two tabs will disagree. Options:
-   (a) keep `call1_deals` accepted on dev too (only held/no‑show/attribution move to prod), or
-   (b) move Daily Metrics accepted to prod as well for one coherent source. Recommend deciding
-   this before building — leaning (b) long‑term, since prod is the complete self‑joining source.
+Reconciliation (deals booked since 2026‑05‑01, keyed by booking day):
+
+| "Accepted" candidate         | Count   |
+| ---------------------------- | ------- |
+| **Dev — current, validated** | **148** |
+| Prod reached on‑site         | 1,128   |
+| Prod quote sent              | 525     |
+| Prod quote signed            | 91      |
+| Prod won                     | 59      |
+
+Deal universes are the same size (dev 6,135 created vs prod 4,764 booked since May 1), so this is
+a **definition gap, not a population gap**. The old dev CRM had an explicit **"Accepted" stage**;
+the prod Motion CRM has none (call‑outcome → Scheduling On‑site → On‑Site Scheduled → Quote →
+Signed → Paid/Won). Dev's 148 matches no prod milestone.
+
+**Decision: keep accepted on the validated dev definition (148) everywhere. Do NOT migrate it** —
+redefining it moves cost‑per‑accepted / CAC and is a business call for the metric owner, not an
+inference.
+
+## Constraint this creates (important)
+
+Because prod deals don't bridge to dev (0 deal‑id / ~0 email overlap), a **prod‑keyed
+`call1_deals` cannot carry the dev accepted**. So for that one table you can't have both:
+
+- **Prod** → accurate per‑ad held/no‑show, but no dev accepted per ad.
+- **Dev** → accepted correct per deal, but held/no‑show stays the old stage signal.
+
+**Recommended path:** keep `call1_deals` / `ad_performance` on **dev** for now (accepted stays
+correct; document that per‑ad held/no‑show is the old signal, while the accurate attendance
+numbers live in the aggregate Daily Metrics / Funnel / Overview). A full prod rebuild — which
+_requires_ redefining accepted with RevOps — is a separate, deliberate project, not a bolt‑on.
+
+## Prior open questions (now resolved)
+
+- **Accepted signal / consistency** — resolved above: keep dev.
+
 3. **`ad_id` ↔ Meta.** Confirm `DEAL_METADATA_AD_ID` matches the Meta ad ids used elsewhere
    (ad account `1403742814420018`, the ads MCP), so `ad_performance` ranking lines up with the
    ad manager.

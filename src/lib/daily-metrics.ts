@@ -142,22 +142,6 @@ function colLetter(index: number): string {
 }
 
 /**
- * Build the Daily Metrics matrix.
- *
- * Layout: a group-header row (metric names), a sub-header row (Date + ALL/w-w/FB/Organic
- * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first —
- * grouped into ISO-week blocks with a "Week of …" summary row at the bottom of each block.
- *
- * The three summary rows are written as live Google Sheets FORMULAS (=AVERAGE / =SUMIFS /
- * =AVERAGEIFS) rather than pre-computed values, so the math stays visible and editable in
- * the sheet. The cron re-writes them verbatim each run, so they persist. Daily rows below
- * are plain values. Data starts at sheet row 6 (rows 1-2 headers, rows 3-5 summaries).
- *
- * @param rows - Daily rows, newest first
- * @param today - Pacific `YYYY-MM-DD`, used only to skip today's partial row from the
- *   7d average. The MTD / Prev-Month windows are live EOMONTH(TODAY()) sheet expressions.
- */
-/**
  * One weekly summary row: sums for counts/spend, ratio-of-totals for CPC/cost (Σnumer ÷
  * Σdenom), and a blank w/w cell (a week-total w/w would mix meanings with the daily
  * same-weekday w/w in that column). Labelled "Week of <Monday>" so the formatter can spot
@@ -201,6 +185,22 @@ function weeklyRow(members: MarketingDailyRow[]): (string | number)[] {
   return out;
 }
 
+/**
+ * Build the Daily Metrics matrix.
+ *
+ * Layout: a group-header row (metric names), a sub-header row (Date + ALL/w-w/FB/Organic
+ * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first —
+ * grouped into ISO-week blocks with a "Week of …" summary row at the bottom of each block.
+ *
+ * The three summary rows are written as live Google Sheets FORMULAS (=AVERAGE / =SUMIFS /
+ * =AVERAGEIFS) rather than pre-computed values, so the math stays visible and editable in
+ * the sheet. The cron re-writes them verbatim each run, so they persist. Daily rows below
+ * are plain values. Data starts at sheet row 6 (rows 1-2 headers, rows 3-5 summaries).
+ *
+ * @param rows - Daily rows, newest first
+ * @param today - Pacific `YYYY-MM-DD`, used only to skip today's partial row from the
+ *   7d average. The MTD / Prev-Month windows are live EOMONTH(TODAY()) sheet expressions.
+ */
 export function computeDailyMetrics(
   rows: MarketingDailyRow[],
   today: string

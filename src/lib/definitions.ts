@@ -118,16 +118,16 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'HELD',
     'wonderly_daily, call1_deals',
-    'Call 1 meetings that were actually attended, counted on the call date.',
+    'Of the leads booked that day, how many attended their Call 1.',
     'Meeting model',
-    'wonderly_daily / Daily Metrics / Daily Funnel: prod meeting-outcome = “meeting_finished” (real attendance), flow-keyed by the outcome date; ALL only (prod leads don’t bridge to the marketing channel, so no FB/Organic split). call1_deals still uses the CRM post-call stage milestone.',
+    'wonderly_daily / Daily Metrics / Daily Funnel: prod meeting-outcome = “meeting_finished” (real attendance), COHORT-keyed by the deal’s booking day (DEAL_CREATED_TIME, 100% coverage); ALL only (prod leads don’t bridge to the marketing channel, so no FB/Organic split). Recent days read low until the cohort’s calls happen. call1_deals still uses the CRM post-call stage milestone.',
   ],
   [
     'NO_SHOW',
     'wonderly_daily',
-    'Call 1 meetings the lead did not attend, counted on the call date.',
+    'Of the leads booked that day, how many no-showed their Call 1.',
     'Meeting model',
-    'Prod meeting-outcome = “meeting_no_show” and never “meeting_finished” (excludes reschedules that later held). Flow-keyed by the outcome date; ALL only (no channel split). Replaces the old “current stage = Call Missed Several Times”, which undercounts ~2× because no-shows sit stranded in “Call 1 Scheduled”.',
+    'Prod meeting-outcome = “meeting_no_show” and never “meeting_finished” (excludes reschedules that later held). COHORT-keyed by the deal’s booking day (DEAL_CREATED_TIME); ALL only (no channel split). Replaces the old “current stage = Call Missed Several Times”, which undercounts ~2× because no-shows sit stranded in “Call 1 Scheduled”. Recent days read low until the cohort’s calls happen.',
   ],
   [
     'DISQUALIFIED',

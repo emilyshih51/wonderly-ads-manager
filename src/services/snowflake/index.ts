@@ -335,29 +335,30 @@ export class SnowflakeService {
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
        ),
-       -- HELD and NO_SHOW come from the prod meeting-outcome model (real attendance), FLOW-keyed
-       -- by the call/outcome date. The current-stage signal misses no-shows stranded in "Call 1
-       -- Scheduled" (booking-day cohorting isn't possible either — prod booking-day coverage is
-       -- ~8%). No FB/Organic split: the prod leads don't bridge to the marketing utm signal
-       -- (email overlap ~0), so these two are ALL-only. meeting_finished = held; meeting_no_show
-       -- and never finished (excludes reschedules that later held) = no-show.
+       -- HELD and NO_SHOW come from the prod meeting-outcome model (real attendance), COHORT-keyed
+       -- by the deal's BOOKING day (DEAL_CREATED_TIME = the day the Call 1 was booked; 100%
+       -- coverage) — of the leads booked that day, how many held / no-showed. The current-stage
+       -- signal misses no-shows stranded in "Call 1 Scheduled". No FB/Organic split: the prod
+       -- leads don't bridge to the marketing utm signal (email overlap ~0), so these two are
+       -- ALL-only. meeting_finished = held; meeting_no_show and never finished (excludes
+       -- reschedules that later held) = no-show. Like ACCEPTED, recent booking days read low until
+       -- the cohort's calls happen.
        mo AS (
          SELECT DEAL_ID,
            MAX(CASE WHEN DESTINATION_STAGE_TYPE='meeting_finished' THEN 1 ELSE 0 END) AS finished,
-           MAX(CASE WHEN DESTINATION_STAGE_TYPE='meeting_no_show' THEN 1 ELSE 0 END) AS no_show,
-           MIN(CASE WHEN DESTINATION_STAGE_TYPE='meeting_finished' THEN EVENT_DATE END) AS finished_date,
-           MIN(CASE WHEN DESTINATION_STAGE_TYPE='meeting_no_show' THEN EVENT_DATE END) AS no_show_date
+           MAX(CASE WHEN DESTINATION_STAGE_TYPE='meeting_no_show' THEN 1 ELSE 0 END) AS no_show
          FROM WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_MEETING_OUTCOMES
          WHERE EVENT_DATE >= DATEADD('day', ?, CURRENT_DATE)
          GROUP BY 1
        ),
        hc AS (
          SELECT
-           CASE WHEN finished=1 THEN finished_date ELSE no_show_date END AS day,
-           finished,
-           CASE WHEN no_show=1 AND finished=0 THEN 1 ELSE 0 END AS no_show
+           CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', dd.DEAL_CREATED_TIME)::date AS day,
+           mo.finished,
+           CASE WHEN mo.no_show=1 AND mo.finished=0 THEN 1 ELSE 0 END AS no_show
          FROM mo
-         WHERE finished=1 OR no_show=1
+         JOIN WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_CRM_DEAL_DETAILS dd ON dd.DEAL_ID = mo.DEAL_ID
+         WHERE mo.finished=1 OR mo.no_show=1
        ),
        hcs AS (
          SELECT day, SUM(finished) AS held, SUM(no_show) AS no_show

@@ -49,8 +49,15 @@ export interface DailyMarketingRow {
   acceptedFb: number;
   /** Accepted deals not attributed to Facebook (= accepted − acceptedFb). */
   acceptedOrganic: number;
-  /** Sales-pipeline cohort: how many of that day's booked deals are currently a no-show. */
+  /**
+   * Sales-pipeline cohort: how many of that day's booked deals are currently a no-show
+   * (CRM stage "Call Missed Several Times").
+   */
   noShow: number;
+  /** No-show deals attributed to Facebook (via the deal's Call 1 source). */
+  noShowFb: number;
+  /** No-show deals not attributed to Facebook (= noShow − noShowFb). */
+  noShowOrganic: number;
   /** Sales-pipeline cohort: how many of that day's booked deals are currently "Disqualified or Lost". */
   disqualifiedLost: number;
   /** Sales-pipeline cohort: how many of that day's booked deals were held (the call happened). */
@@ -93,6 +100,10 @@ export const RAW_TAB_HEADERS = [
   'HELD',
   'HELD_FB',
   'HELD_ORGANIC',
+  // Appended after HELD_* (not next to NO_SHOW) so the positional raw-tab reader keeps every
+  // existing column index; older rows without these cells just read 0 until refetched.
+  'NO_SHOW_FB',
+  'NO_SHOW_ORGANIC',
 ] as const;
 
 /** One fully joined day, ready to write to the Blended tab. */
@@ -151,6 +162,8 @@ export function joinMarketingDaily(
         acceptedFb: m?.acceptedFb ?? 0,
         acceptedOrganic: m?.acceptedOrganic ?? 0,
         noShow: m?.noShow ?? 0,
+        noShowFb: m?.noShowFb ?? 0,
+        noShowOrganic: m?.noShowOrganic ?? 0,
         disqualifiedLost: m?.disqualifiedLost ?? 0,
         held: m?.held ?? 0,
         heldFb: m?.heldFb ?? 0,
@@ -193,6 +206,8 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.held,
     r.heldFb,
     r.heldOrganic,
+    r.noShowFb,
+    r.noShowOrganic,
   ]);
 }
 

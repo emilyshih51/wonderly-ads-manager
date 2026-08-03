@@ -25,6 +25,8 @@ function row(date: string, o: Partial<MarketingDailyRow> = {}): MarketingDailyRo
     acceptedFb: 0,
     acceptedOrganic: 0,
     noShow: 0,
+    noShowFb: 0,
+    noShowOrganic: 0,
     disqualifiedLost: 0,
     held: 0,
     heldFb: 0,

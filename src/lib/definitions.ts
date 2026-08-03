@@ -125,7 +125,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'NO_SHOW',
     'wonderly_daily, call1_deals',
-    'Booked deals currently a no-show on the Call 1.',
+    'Of that day’s booked deals, how many are currently in the “Call Missed Several Times” stage (no-showed the Call 1).',
     'CRM',
     'Current stage = “Call Missed Several Times”. (This transition fires no event, so it can’t be dated and flips if rescheduled.)',
   ],
@@ -137,9 +137,9 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Current stage in “Disqualified or Lost” / “Disqualified Lead” / “DQ - Drip”. No event, so not dated.',
   ],
   [
-    'HELD_FB / HELD_ORGANIC, ACCEPTED_FB / ACCEPTED_ORGANIC',
+    'HELD_FB / HELD_ORGANIC, ACCEPTED_FB / ACCEPTED_ORGANIC, NO_SHOW_FB / NO_SHOW_ORGANIC',
     'wonderly_daily, Daily Metrics',
-    'Held and accepted deals split by the channel that produced the Call 1.',
+    'Held, accepted, and no-show deals split by the channel that produced the Call 1.',
     'CRM + Amplitude',
     'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE). FB = facebook/ig; Organic = ALL − FB (includes unattributed deals).',
   ],

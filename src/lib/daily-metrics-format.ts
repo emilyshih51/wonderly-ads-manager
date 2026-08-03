@@ -47,7 +47,7 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Qualified', money: false, hasCost: true },
   { label: 'Call 1 booked', money: false, hasCost: true },
   { label: 'Held', money: false, hasCost: true },
-  { label: 'No show', money: false, noWow: true, hideFb: true, hideOrganic: true },
+  { label: 'No show', money: false, noWow: true },
 ];
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */

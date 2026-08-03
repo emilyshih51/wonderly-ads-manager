@@ -103,9 +103,15 @@ const METRICS: Metric[] = [
     organic: (r) => r.heldOrganic,
     hasCost: true,
   },
-  // No show = booked calls that didn't hold. No channel split in the data and small daily
-  // counts, so it's a plain count (no Cost, no w/w, FB/Organic hidden by the formatter).
-  { label: 'No show', daily: (r) => r.noShow, noWow: true },
+  // No show = booked calls now in "Call Missed Several Times", split by the deal's Call 1
+  // source. Small daily counts, so (like Accepted) it drops the noisy w/w and has no Cost.
+  {
+    label: 'No show',
+    daily: (r) => r.noShow,
+    fb: (r) => r.noShowFb,
+    organic: (r) => r.noShowOrganic,
+    noWow: true,
+  },
 ];
 
 function round2(n: number): number {

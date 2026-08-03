@@ -378,6 +378,9 @@ function parseExistingRows(values: (string | number)[][]): MarketingDailyRow[] {
       held: num(row[24]),
       heldFb: num(row[25]),
       heldOrganic: num(row[26]),
+      // Appended columns (older rows predating the split read 0 until refetched).
+      noShowFb: num(row[27]),
+      noShowOrganic: num(row[28]),
     }));
 }
 

@@ -295,9 +295,9 @@ export class SnowflakeService {
          SELECT email, MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
          FROM src_raw GROUP BY 1
        ),
-       -- One row per deal with its stage-derived outcomes and a channel flag, so held
-       -- and accepted can be split FB vs organic (organic = ALL − FB, i.e. every deal
-       -- whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
+       -- One row per deal with its stage-derived outcomes and a channel flag, so held,
+       -- accepted, and no-show can be split FB vs organic (organic = ALL − FB, i.e. every
+       -- deal whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
        ds AS (
          SELECT d.booked_day AS day,
            -- Accepted = ever fired the "Accepted" event (a milestone — stays true even if the
@@ -336,6 +336,8 @@ export class SnowflakeService {
            SUM(accepted * is_fb) AS accepted_fb,
            SUM(accepted * (1 - is_fb)) AS accepted_organic,
            SUM(no_show) AS no_show,
+           SUM(no_show * is_fb) AS no_show_fb,
+           SUM(no_show * (1 - is_fb)) AS no_show_organic,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
        )
@@ -352,6 +354,8 @@ export class SnowflakeService {
          COALESCE(s.accepted_fb,0) AS accepted_fb,
          COALESCE(s.accepted_organic,0) AS accepted_organic,
          COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.no_show_fb,0) AS no_show_fb,
+         COALESCE(s.no_show_organic,0) AS no_show_organic,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
          COALESCE(s.held_fb,0) AS held_fb,
@@ -382,6 +386,8 @@ export class SnowflakeService {
       acceptedFb: num(r.ACCEPTED_FB),
       acceptedOrganic: num(r.ACCEPTED_ORGANIC),
       noShow: num(r.NO_SHOW),
+      noShowFb: num(r.NO_SHOW_FB),
+      noShowOrganic: num(r.NO_SHOW_ORGANIC),
       disqualifiedLost: num(r.DISQUALIFIED_LOST),
       held: num(r.HELD),
       heldFb: num(r.HELD_FB),

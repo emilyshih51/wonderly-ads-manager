@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = ['/login', '/api/auth', '/api/slack', '/api/automations/evaluate', '/api/cron'];
+const publicPaths = [
+  '/login',
+  '/api/auth',
+  '/api/slack',
+  '/api/automations/evaluate',
+  '/api/cron',
+  // OAuth + MCP handle their own auth: the MCP replies 401 with a WWW-Authenticate pointer,
+  // the OAuth metadata/register/token endpoints must be reachable without an app session, and
+  // /api/oauth/authorize enforces the session itself (redirecting to /login when absent). The
+  // .well-known paths are the discovery documents Claude's connector fetches first.
+  '/.well-known',
+  '/api/oauth',
+  '/api/mcp',
+];
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // Sliding window per IP. Not distributed — each Vercel instance tracks its own

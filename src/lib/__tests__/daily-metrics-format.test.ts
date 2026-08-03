@@ -101,6 +101,41 @@ describe('buildDailyMetricsFormatRequests', () => {
     expect(types).toContain('PERCENT');
   });
 
+  it('shades and underlines each weekly summary row found in the values matrix', () => {
+    // Header (0-1) + summaries (2-4), a daily row (5), then a "Week of …" row (6).
+    const values = [
+      Array(14).fill(''),
+      Array(14).fill(''),
+      Array(14).fill(''),
+      Array(14).fill(''),
+      Array(14).fill(''),
+      ['2026-07-20', ...Array(13).fill('')],
+      ['Week of 2026-07-20', ...Array(13).fill('')],
+    ];
+    const reqsWithValues = buildDailyMetricsFormatRequests(123, METRICS, [], values);
+
+    // The weekly row (index 6) gets a background + bold repeatCell...
+    const shaded = reqsWithValues.some(
+      (r) =>
+        'repeatCell' in r &&
+        (r as any).repeatCell.range.startRowIndex === 6 &&
+        (r as any).repeatCell.cell.userEnteredFormat.backgroundColor &&
+        (r as any).repeatCell.cell.userEnteredFormat.textFormat?.bold === true
+    );
+
+    expect(shaded).toBe(true);
+
+    // ...and a bottom border under it, as the block separator.
+    const bordered = reqsWithValues.some(
+      (r) =>
+        'updateBorders' in r &&
+        (r as any).updateBorders.range.startRowIndex === 6 &&
+        (r as any).updateBorders.bottom
+    );
+
+    expect(bordered).toBe(true);
+  });
+
   it('picks whole dollars vs cents per money column by its average when values are given', () => {
     // Two frozen headers + three summary rows (indices 0..4), then two daily rows.
     // Page views' Cost column is index 9. Give it a >$10 average → whole dollars.

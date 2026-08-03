@@ -23,11 +23,7 @@ import {
   toHistoricalCacValues,
 } from '@/lib/historical-cac';
 import { computeDailyMetrics } from '@/lib/daily-metrics';
-import {
-  DAILY_METRICS_FORMAT,
-  buildDailyMetricsFormatRequests,
-  weekBreakRows,
-} from '@/lib/daily-metrics-format';
+import { DAILY_METRICS_FORMAT, buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
 import { DEFINITIONS_HEADERS, toDefinitionsValues } from '@/lib/definitions';
 import { computeOverview } from '@/lib/overview';
 import { buildOverviewFormatRequests } from '@/lib/overview-format';
@@ -277,14 +273,10 @@ export async function GET(request: Request) {
     // re-applying it each run is idempotent and keeps the layout in sync with the columns.
     // Wrapped so a formatting hiccup can never fail the data refresh.
     try {
-      // Daily rows start at sheet row 6 (0-based row 5), newest first.
-      const weekBreaks = weekBreakRows(
-        merged.map((r) => r.date),
-        5
-      );
-
+      // The formatter finds the weekly summary rows (and their block-separator borders)
+      // straight from the matrix, so no separate week-break computation is needed.
       await sheets.formatTab(sheetId, DAILY_METRICS_TAB, (gid) =>
-        buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, weekBreaks, dailyMetrics)
+        buildDailyMetricsFormatRequests(gid, DAILY_METRICS_FORMAT, [], dailyMetrics)
       );
     } catch (formatError) {
       logger.error('Daily Metrics formatting failed (values still written)', formatError);

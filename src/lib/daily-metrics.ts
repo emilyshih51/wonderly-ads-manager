@@ -118,6 +118,16 @@ function pct(now: number, base: number): number | '' {
   return base > 0 ? round4((now - base) / base) : '';
 }
 
+/** Monday (UTC) of a date's week, as a stable weekly key. */
+function weekKey(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7;
+
+  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
+
+  return d.toISOString().slice(0, 10);
+}
+
 /** 0-based column index to an A1 column letter (0 → A, 26 → AA). */
 function colLetter(index: number): string {
   let s = '';
@@ -135,7 +145,8 @@ function colLetter(index: number): string {
  * Build the Daily Metrics matrix.
  *
  * Layout: a group-header row (metric names), a sub-header row (Date + ALL/w-w/FB/Organic
- * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first.
+ * per metric), the 7d-avg / MTD / Prev-Month summary rows, then daily rows newest-first —
+ * grouped into ISO-week blocks with a "Week of …" summary row at the bottom of each block.
  *
  * The three summary rows are written as live Google Sheets FORMULAS (=AVERAGE / =SUMIFS /
  * =AVERAGEIFS) rather than pre-computed values, so the math stays visible and editable in
@@ -146,11 +157,84 @@ function colLetter(index: number): string {
  * @param today - Pacific `YYYY-MM-DD`, used only to skip today's partial row from the
  *   7d average. The MTD / Prev-Month windows are live EOMONTH(TODAY()) sheet expressions.
  */
+/**
+ * One weekly summary row: sums for counts/spend, ratio-of-totals for CPC/cost (Σnumer ÷
+ * Σdenom), and a blank w/w cell (a week-total w/w would mix meanings with the daily
+ * same-weekday w/w in that column). Labelled "Week of <Monday>" so the formatter can spot
+ * it and the date-criteria SUMIFS in the summary rows skip it (its column A is text).
+ */
+function weeklyRow(members: MarketingDailyRow[]): (string | number)[] {
+  const weekSpend = members.reduce((s, r) => s + r.fbSpend, 0);
+  const out: (string | number)[] = [`Week of ${weekKey(members[0].date)}`];
+
+  for (const m of METRICS) {
+    const ratio = Boolean(m.numer && m.denom);
+    const allCount = members.reduce((s, r) => s + m.daily(r), 0);
+
+    let allV: number | '';
+    let fbV: number | '';
+    let orgV: number | '';
+
+    if (ratio) {
+      const numerFn = m.numer!;
+      const denomFn = m.denom!;
+      const denom = members.reduce((s, r) => s + denomFn(r), 0);
+
+      allV = denom > 0 ? round2(members.reduce((s, r) => s + numerFn(r), 0) / denom) : 0;
+      fbV = allV; // FB mirrors ALL — 100% of spend/clicks are Facebook
+      orgV = ''; // no organic ad spend to divide
+    } else {
+      const fbFn = m.fb;
+      const orgFn = m.organic;
+
+      allV = round2(allCount);
+      fbV = fbFn ? round2(members.reduce((s, r) => s + fbFn(r), 0)) : '';
+      orgV = orgFn ? round2(members.reduce((s, r) => s + orgFn(r), 0)) : '';
+    }
+
+    if (m.hasCost) out.push(allCount > 0 ? round2(weekSpend / allCount) : '');
+    out.push(allV);
+    if (!m.noWow) out.push('');
+    out.push(fbV, orgV);
+  }
+
+  return out;
+}
+
 export function computeDailyMetrics(
   rows: MarketingDailyRow[],
   today: string
 ): (string | number)[][] {
-  const dataEnd = 5 + rows.length; // last daily row (data starts at sheet row 6)
+  // Emission plan: daily rows (newest first) grouped into ISO-week blocks, each block
+  // followed by a weekly summary row. Building the plan first lets us assign an exact sheet
+  // row number to every daily row, so the 7d formulas below can list them explicitly and
+  // stay correct even though weekly rows are interleaved among them.
+  type PlanItem =
+    | { kind: 'day'; row: MarketingDailyRow; i: number }
+    | { kind: 'week'; members: MarketingDailyRow[] };
+  const plan: PlanItem[] = [];
+  let members: MarketingDailyRow[] = [];
+
+  rows.forEach((r, i) => {
+    plan.push({ kind: 'day', row: r, i });
+    members.push(r);
+
+    if (i === rows.length - 1 || weekKey(rows[i + 1].date) !== weekKey(r.date)) {
+      plan.push({ kind: 'week', members });
+      members = [];
+    }
+  });
+
+  // Assign sheet row numbers (data starts at row 6) and record each daily row's number.
+  let sheetRow = 6;
+  const dailyRowNums: number[] = [];
+
+  for (const item of plan) {
+    if (item.kind === 'day') dailyRowNums.push(sheetRow);
+    sheetRow += 1;
+  }
+
+  const dataEnd = sheetRow - 1; // last row of the block (daily rows + weekly summaries)
 
   // Month windows as live sheet expressions (EOMONTH/TODAY) rather than baked-in dates,
   // so MTD / Prev-Month advance on their own as the calendar rolls over — not only when
@@ -163,13 +247,12 @@ export function computeDailyMetrics(
   // MTD w/w compares last month through the same day-of-month as today (capped at its end).
   const prevSpanHi = 'MIN(EOMONTH(TODAY(),-2)+DAY(TODAY()),EOMONTH(TODAY(),-1))';
 
-  // The 7d average uses the last 7 *completed* days. If today's partial row is at the
-  // top (sheet row 6), skip it so it isn't averaged against full days.
-  const firstComplete = 6 + (rows[0]?.date === today ? 1 : 0);
-  const s7Start = firstComplete;
-  const s7End = firstComplete + 6;
-  const p7Start = firstComplete + 7;
-  const p7End = firstComplete + 13;
+  // The 7d average uses the last 7 *completed* daily rows (skip today's partial if it's at
+  // the top). Explicit row numbers, since weekly summary rows sit between the daily rows.
+  const completedRows = dailyRowNums.slice(rows[0]?.date === today ? 1 : 0);
+  const s7 = completedRows.slice(0, 7);
+  const p7 = completedRows.slice(7, 14);
+  const cellList = (L: string, nums: number[]) => nums.map((n) => `${L}${n}`).join(',');
 
   // Per-metric column layout. Funnel stages prepend a Cost column, so groups are variable
   // width: Spend/CPC are [ALL, w/w, FB, Organic]; stages are [Cost, ALL, w/w, FB, Organic].
@@ -217,7 +300,7 @@ export function computeDailyMetrics(
     const L = colLetter(colIndex);
 
     return {
-      d7: `=IFERROR(AVERAGE(${L}${s7Start}:${L}${s7End}),0)`,
+      d7: s7.length ? `=IFERROR(AVERAGE(${cellList(L, s7)}),0)` : 0,
       mtd: ratio ? `=IFERROR(${avgifs(L, mtdLo, mtdHi)},0)` : `=${sumifs(L, mtdLo, mtdHi)}`,
       prev: ratio ? `=IFERROR(${avgifs(L, prevLo, prevHi)},0)` : `=${sumifs(L, prevLo, prevHi)}`,
     };
@@ -229,7 +312,7 @@ export function computeDailyMetrics(
    * weakly channel-attributed, so ALL is the stable, gap-free denominator.
    */
   const costCells = (stageAll: string) => ({
-    d7: `=IFERROR(SUM(${spendAll}${s7Start}:${spendAll}${s7End})/SUM(${stageAll}${s7Start}:${stageAll}${s7End}),0)`,
+    d7: s7.length ? `=IFERROR(SUM(${cellList(spendAll, s7)})/SUM(${cellList(stageAll, s7)}),0)` : 0,
     mtd: `=IFERROR(${sumifs(spendAll, mtdLo, mtdHi)}/${sumifs(stageAll, mtdLo, mtdHi)},0)`,
     prev: `=IFERROR(${sumifs(spendAll, prevLo, prevHi)}/${sumifs(stageAll, prevLo, prevHi)},0)`,
   });
@@ -248,7 +331,8 @@ export function computeDailyMetrics(
     const organic = valueCells(L.organic, Boolean(m.organic), ratio);
 
     // 7d w/w: this-week average vs the previous 7 completed days.
-    const wow7 = `=IFERROR((${La}3-AVERAGE(${La}${p7Start}:${La}${p7End}))/AVERAGE(${La}${p7Start}:${La}${p7End}),"")`;
+    const p7avg = `AVERAGE(${cellList(La, p7)})`;
+    const wow7 = p7.length ? `=IFERROR((${La}3-${p7avg})/${p7avg},"")` : '';
     // MTD w/w: month-to-date vs the same day-span of the previous month.
     const prevSpan = ratio ? avgifs(La, prevLo, prevSpanHi) : sumifs(La, prevLo, prevSpanHi);
     const wowMtd = `=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`;
@@ -278,7 +362,13 @@ export function computeDailyMetrics(
 
   const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
 
-  rows.forEach((r, i) => {
+  for (const item of plan) {
+    if (item.kind === 'week') {
+      matrix.push(weeklyRow(item.members));
+      continue;
+    }
+
+    const { row: r, i } = item;
     const weekAgo = rows[i + 7];
     const out: (string | number)[] = [r.date];
 
@@ -303,7 +393,7 @@ export function computeDailyMetrics(
     }
 
     matrix.push(out);
-  });
+  }
 
   return matrix;
 }

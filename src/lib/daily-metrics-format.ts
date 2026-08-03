@@ -58,6 +58,7 @@ const HEAT_MIN = { red: 0.96, green: 0.6, blue: 0.6 }; // negative w/w → red
 const HEAT_MID = { red: 1, green: 1, blue: 1 }; // flat → white
 const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 }; // positive w/w → green
 const WEEK_LINE = { red: 0.45, green: 0.45, blue: 0.45 }; // week-separator border
+const WEEK_ROW_BG = { red: 0.9, green: 0.93, blue: 0.9 }; // weekly-summary row shading
 
 /** Rows cleared of stale inner borders before redrawing (well past any real data). */
 const BORDER_CLEAR_ROWS = 500;
@@ -366,9 +367,37 @@ export function buildDailyMetricsFormatRequests(
     },
   });
 
-  // Week-separator borders. Rows shift down as new days arrive, so clear the daily
-  // block's inner borders first, then draw a line under the last row of each week.
+  // Weekly summary rows: when the values matrix is supplied, find each "Week of …" row
+  // (bottom of its 7-day block), shade + bold it, and put the block-separator border under
+  // it. Falling back to the passed-in `weekBreaks` keeps the one-off formatter working when
+  // no values are handed in.
+  const weeklyRowIndices = values
+    ? values.reduce<number[]>((acc, row, i) => {
+        if (i >= FROZEN_ROWS && String(row[0] ?? '').startsWith('Week of')) acc.push(i);
 
+        return acc;
+      }, [])
+    : [];
+
+  for (const rowIndex of weeklyRowIndices) {
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: rowIndex,
+          endRowIndex: rowIndex + 1,
+          startColumnIndex: 0,
+          endColumnIndex: lastColumn,
+        },
+        cell: { userEnteredFormat: { backgroundColor: WEEK_ROW_BG, textFormat: { bold: true } } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat.bold)',
+      },
+    });
+  }
+
+  // Week-separator borders. Rows shift down as new days arrive, so clear the block's inner
+  // borders first, then draw a line under each week (the weekly summary row, or the passed
+  // week-break rows when no values are supplied).
   requests.push({
     updateBorders: {
       range: {
@@ -382,7 +411,9 @@ export function buildDailyMetricsFormatRequests(
     },
   });
 
-  for (const rowIndex of weekBreaks) {
+  const borderRows = weeklyRowIndices.length > 0 ? weeklyRowIndices : weekBreaks;
+
+  for (const rowIndex of borderRows) {
     requests.push({
       updateBorders: {
         range: {

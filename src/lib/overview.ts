@@ -67,6 +67,11 @@ export function computeOverview(opts: {
   const spend7 = sum(wk, (r) => r.fbSpend);
   const call1_7 = sum(wk, (r) => r.bookedAll);
   const accepted7 = sum(wk, (r) => r.accepted);
+  const noShow7 = sum(wk, (r) => r.noShow);
+
+  // No-show rate: of the last 7 days' booked calls, how many are currently a no-show. Same
+  // booking-day cohort as held/accepted, so recent windows read low until the cohort matures.
+  const noShowRate = call1_7 > 0 ? Math.round((noShow7 / call1_7) * 10000) / 10000 : 0;
 
   const costPerCall1 = call1_7 > 0 ? money(spend7 / call1_7) : 0;
   // Cost per accepted contractor (7d): COHORT-keyed, exactly like Daily Metrics / Daily
@@ -132,6 +137,7 @@ export function computeOverview(opts: {
       '',
       'Succeeding = P&L > 0 (modeled expected contribution exceeds actual managed Meta spend) within 60/90d of acceptance. Cost = FB spend over the cohort’s acceptance window ÷ succeeding; "maturing" until enough clear the bar.',
     ],
+    ['No-show rate (7d)', noShowRate],
     [],
     ['WARNINGS'],
     [dataStale ? `⚠️ Data is stale — newest is ${newest}` : `✓ Data current through ${newest}`],

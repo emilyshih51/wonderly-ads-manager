@@ -8,9 +8,10 @@
  * costs are derived here. The cron writes the result to the `daily_funnel` tab.
  *
  * Funnel: FB spend → visits → CTA → partial form → qualified form → Call 1 booked
- * (the BOOKING_COMPLETE count) → held → accepted. Held and accepted are cohort metrics —
- * of that day's Call 1 bookings, how many eventually held / were accepted — and convert
- * against the Call 1 booked count, so recent days read low until the cohort matures.
+ * (the BOOKING_COMPLETE count) → held → accepted, with no-show shown alongside held as the
+ * other disposition of a booked call. Held, no-show, and accepted are cohort metrics — of
+ * that day's Call 1 bookings, how many eventually held / no-showed / were accepted — and
+ * convert against the Call 1 booked count, so recent days read low until the cohort matures.
  */
 
 import type { MarketingDailyRow } from '@/lib/marketing-daily';
@@ -36,6 +37,8 @@ export const DAILY_FUNNEL_HEADERS = [
   'HELD',
   'HELD_RATE',
   'COST_PER_HELD',
+  'NO_SHOW',
+  'NO_SHOW_RATE',
   'ACCEPTED',
   'ACCEPT_RATE',
   'COST_PER_ACCEPTED',
@@ -86,6 +89,10 @@ export function toDailyFunnelValues(rows: MarketingDailyRow[]): (string | number
     r.held,
     rate(r.held, r.bookedAll),
     cost(r.fbSpend, r.held),
+    // No show is a disposition of a booked call (no cost-per — you don't pay for no-shows),
+    // so it carries a rate against Call 1 booked but no cost column.
+    r.noShow,
+    rate(r.noShow, r.bookedAll),
     r.accepted,
     rate(r.accepted, r.bookedAll),
     cost(r.fbSpend, r.accepted),

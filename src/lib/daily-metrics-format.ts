@@ -26,6 +26,8 @@ export interface MetricFormat {
   wholeDollars?: boolean;
   hasCost?: boolean;
   hideOrganic?: boolean;
+  /** Hide the FB column (a metric with no channel split — its FB cells are blank). */
+  hideFb?: boolean;
   /** Drop the week-over-week column (must match the same flag in `daily-metrics.ts`). */
   noWow?: boolean;
 }
@@ -45,6 +47,7 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Qualified', money: false, hasCost: true },
   { label: 'Call 1 booked', money: false, hasCost: true },
   { label: 'Held', money: false, hasCost: true },
+  { label: 'No show', money: false, noWow: true, hideFb: true, hideOrganic: true },
 ];
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
@@ -338,7 +341,18 @@ export function buildDailyMetricsFormatRequests(
       });
     }
 
-    // Hide the Organic column when it carries no data (CPC — no organic ad spend).
+    // Hide channel columns that carry no data (CPC — no organic ad spend; No show — no
+    // channel split at all, so both FB and Organic are hidden).
+    if (m.hideFb) {
+      requests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: 'COLUMNS', startIndex: fb, endIndex: fb + 1 },
+          properties: { hiddenByUser: true },
+          fields: 'hiddenByUser',
+        },
+      });
+    }
+
     if (m.hideOrganic) {
       requests.push({
         updateDimensionProperties: {

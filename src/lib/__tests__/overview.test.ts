@@ -111,6 +111,16 @@ describe('computeOverview', () => {
     expect(line(m, 'Cost per accepted contractor')[1]).toBe(100);
   });
 
+  it('computes the 7d no-show rate against booked calls', () => {
+    const rows = Array(7)
+      .fill(0)
+      .map(() => row({ date: '2026-07-27', bookedAll: 4, noShow: 1 }));
+    const m = computeOverview({ ...base, rows });
+
+    // 7 no-shows / 28 booked = 0.25.
+    expect(line(m, 'No-show rate (7d)')[1]).toBe(0.25);
+  });
+
   it('computes cost per accepted contractor over the last 30 completed days', () => {
     // 30 completed days: 30×200 spend / 30×2 accepted = 6000/60 = 100.
     const rows = Array(30)

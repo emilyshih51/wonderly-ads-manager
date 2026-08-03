@@ -59,6 +59,7 @@ describe('toDailyFunnelValues', () => {
           submitQualified: 25,
           bookedAll: 10,
           held: 6,
+          noShow: 3,
           accepted: 2,
         }),
       ])[0]
@@ -69,6 +70,8 @@ describe('toDailyFunnelValues', () => {
     expect(m.QUAL_RATE).toBe(0.5); // 25 / 50
     expect(m.CALL1_RATE).toBe(0.4); // 10 / 25
     expect(m.HELD_RATE).toBe(0.6); // 6 / 10 (vs Call 1 booked)
+    expect(m.NO_SHOW).toBe(3); // count
+    expect(m.NO_SHOW_RATE).toBe(0.3); // 3 / 10 (vs Call 1 booked)
     expect(m.ACCEPT_RATE).toBe(0.2); // 2 / 10 (vs Call 1 booked)
   });
 

@@ -134,6 +134,7 @@ export function buildOverviewFormatRequests(
 
     if (
       label.startsWith('Cost per') ||
+      label.startsWith('No-show rate') ||
       label.startsWith('Last refreshed') ||
       label === 'Data through'
     ) {
@@ -152,6 +153,16 @@ export function buildOverviewFormatRequests(
         repeatCell: {
           range: cellRange(sheetId, i, 1),
           cell: { userEnteredFormat: { numberFormat: moneyByMagnitude(row[1]) } },
+          fields: 'userEnteredFormat.numberFormat',
+        },
+      });
+    }
+
+    if (label.startsWith('No-show rate')) {
+      requests.push({
+        repeatCell: {
+          range: cellRange(sheetId, i, 1),
+          cell: { userEnteredFormat: { numberFormat: PERCENT } },
           fields: 'userEnteredFormat.numberFormat',
         },
       });

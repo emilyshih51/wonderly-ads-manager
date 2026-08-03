@@ -329,40 +329,17 @@ export class SnowflakeService {
        -- disqualifications.
        s AS (
          SELECT day,
+           SUM(held) AS held,
+           SUM(held * is_fb) AS held_fb,
+           SUM(held * (1 - is_fb)) AS held_organic,
            SUM(accepted) AS accepted,
            SUM(accepted * is_fb) AS accepted_fb,
            SUM(accepted * (1 - is_fb)) AS accepted_organic,
+           SUM(no_show) AS no_show,
+           SUM(no_show * is_fb) AS no_show_fb,
+           SUM(no_show * (1 - is_fb)) AS no_show_organic,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
-       ),
-       -- HELD and NO_SHOW come from the prod meeting-outcome model (real attendance), COHORT-keyed
-       -- by the deal's BOOKING day (DEAL_CREATED_TIME = the day the Call 1 was booked; 100%
-       -- coverage) — of the leads booked that day, how many held / no-showed. The current-stage
-       -- signal misses no-shows stranded in "Call 1 Scheduled". No FB/Organic split: the prod
-       -- leads don't bridge to the marketing utm signal (email overlap ~0), so these two are
-       -- ALL-only. meeting_finished = held; meeting_no_show and never finished (excludes
-       -- reschedules that later held) = no-show. Like ACCEPTED, recent booking days read low until
-       -- the cohort's calls happen.
-       mo AS (
-         SELECT DEAL_ID,
-           MAX(CASE WHEN DESTINATION_STAGE_TYPE='meeting_finished' THEN 1 ELSE 0 END) AS finished,
-           MAX(CASE WHEN DESTINATION_STAGE_TYPE='meeting_no_show' THEN 1 ELSE 0 END) AS no_show
-         FROM WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_MEETING_OUTCOMES
-         WHERE EVENT_DATE >= DATEADD('day', ?, CURRENT_DATE)
-         GROUP BY 1
-       ),
-       hc AS (
-         SELECT
-           CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', dd.DEAL_CREATED_TIME)::date AS day,
-           mo.finished,
-           CASE WHEN mo.no_show=1 AND mo.finished=0 THEN 1 ELSE 0 END AS no_show
-         FROM mo
-         JOIN WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_CRM_DEAL_DETAILS dd ON dd.DEAL_ID = mo.DEAL_ID
-         WHERE mo.finished=1 OR mo.no_show=1
-       ),
-       hcs AS (
-         SELECT day, SUM(finished) AS held, SUM(no_show) AS no_show
-         FROM hc WHERE day IS NOT NULL GROUP BY day
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -376,16 +353,16 @@ export class SnowflakeService {
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.accepted_fb,0) AS accepted_fb,
          COALESCE(s.accepted_organic,0) AS accepted_organic,
-         COALESCE(hcs.no_show,0) AS no_show,
-         0 AS no_show_fb,
-         0 AS no_show_organic,
+         COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.no_show_fb,0) AS no_show_fb,
+         COALESCE(s.no_show_organic,0) AS no_show_organic,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
-         COALESCE(hcs.held,0) AS held,
-         0 AS held_fb,
-         0 AS held_organic
-       FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN hcs ON f.day = hcs.day
+         COALESCE(s.held,0) AS held,
+         COALESCE(s.held_fb,0) AS held_fb,
+         COALESCE(s.held_organic,0) AS held_organic
+       FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
-      [overridesJson(bookingOverrides), -days, -days, -days, -days]
+      [overridesJson(bookingOverrides), -days, -days, -days]
     );
 
     return rows.map((r) => ({

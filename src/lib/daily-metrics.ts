@@ -95,11 +95,23 @@ const METRICS: Metric[] = [
     organic: (r) => r.bookedOrganic,
     hasCost: true,
   },
-  // Held & No show come from the prod meeting-outcome model (real attendance), flow-keyed
-  // by the call date. That source carries no marketing channel, so both are ALL-only (the
-  // formatter hides their empty FB/Organic columns). No show also drops the noisy w/w.
-  { label: 'Held', daily: (r) => r.held, hasCost: true },
-  { label: 'No show', daily: (r) => r.noShow, noWow: true },
+  // Held split by the deal's Call 1 source (organic = ALL − FB).
+  {
+    label: 'Held',
+    daily: (r) => r.held,
+    fb: (r) => r.heldFb,
+    organic: (r) => r.heldOrganic,
+    hasCost: true,
+  },
+  // No show = booked calls now in "Call Missed Several Times", split by the deal's Call 1
+  // source. Small daily counts, so (like Accepted) it drops the noisy w/w and has no Cost.
+  {
+    label: 'No show',
+    daily: (r) => r.noShow,
+    fb: (r) => r.noShowFb,
+    organic: (r) => r.noShowOrganic,
+    noWow: true,
+  },
 ];
 
 function round2(n: number): number {

@@ -597,6 +597,18 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
+       -- Base deal set: the event-based deals UNION all deals currently in "Call Missed
+       -- Several Times". That stage fires no stage-change event, so ~75% of no-shows are
+       -- absent from the event set (de) — adding them here makes call1_deals' no-show match
+       -- Daily Metrics. Added deals have NULL de.* (held/accepted fall to current stage = 0).
+       funnel_deals AS (
+         SELECT deal_id FROM de
+         UNION
+         SELECT cd.ID AS deal_id
+         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
+         JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         WHERE st.NAME = 'Call Missed Several Times'
+       ),
        em AS (
          SELECT CONTACT_ID,
            MAX(CASE WHEN IS_PRIMARY THEN EMAIL END) AS primary_email,
@@ -674,7 +686,7 @@ export class SnowflakeService {
          FROM src_raw
          GROUP BY 1
        )
-       SELECT de.deal_id AS DEAL_ID,
+       SELECT fd.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
          TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
@@ -695,13 +707,14 @@ export class SnowflakeService {
          COALESCE(src.ad_id,'') AS AD_ID,
          COALESCE(TO_CHAR(de.held_day,'YYYY-MM-DD'),'') AS HELD_DATE,
          COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
-       FROM de
-       LEFT JOIN ovr o ON o.deal_id = de.deal_id
-       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=de.deal_id
+       FROM funnel_deals fd
+       LEFT JOIN de ON de.deal_id = fd.deal_id
+       LEFT JOIN ovr o ON o.deal_id = fd.deal_id
+       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=fd.deal_id
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
        LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
-       LEFT JOIN crt ON crt.deal_id=de.deal_id
+       LEFT JOIN crt ON crt.deal_id=fd.deal_id
        LEFT JOIN email_bc ebc ON ebc.email=em.join_email
        LEFT JOIN src ON src.email=em.join_email
        -- Include any deal that entered the Call 1 funnel: booked (BOOKING_COMPLETE, CRM

@@ -62,6 +62,7 @@ const HEAT_MID = { red: 1, green: 1, blue: 1 }; // flat → white
 const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 }; // positive w/w → green
 const WEEK_LINE = { red: 0.45, green: 0.45, blue: 0.45 }; // week-separator border
 const WEEK_ROW_BG = { red: 0.9, green: 0.93, blue: 0.9 }; // weekly-summary row shading
+const WHITE = { red: 1, green: 1, blue: 1 }; // reset shading on non-weekly rows
 
 /** Rows cleared of stale inner borders before redrawing (well past any real data). */
 const BORDER_CLEAR_ROWS = 500;
@@ -392,6 +393,26 @@ export function buildDailyMetricsFormatRequests(
         return acc;
       }, [])
     : [];
+
+  // Reset shading + bold across the whole data block first. Rows shift down by one each day
+  // as a new row is added at the top, so a prior run's weekly-row green would otherwise
+  // linger on what is now a daily row — leaving two green rows. Clear, then re-shade the
+  // current weekly rows below. (Only backgroundColor/bold are touched; number formats stay.)
+  if (weeklyRowIndices.length > 0) {
+    requests.push({
+      repeatCell: {
+        range: {
+          sheetId,
+          startRowIndex: FROZEN_ROWS,
+          endRowIndex: FROZEN_ROWS + BORDER_CLEAR_ROWS,
+          startColumnIndex: 0,
+          endColumnIndex: lastColumn,
+        },
+        cell: { userEnteredFormat: { backgroundColor: WHITE, textFormat: { bold: false } } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat.bold)',
+      },
+    });
+  }
 
   for (const rowIndex of weeklyRowIndices) {
     requests.push({

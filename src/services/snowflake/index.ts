@@ -335,11 +335,32 @@ export class SnowflakeService {
            SUM(accepted) AS accepted,
            SUM(accepted * is_fb) AS accepted_fb,
            SUM(accepted * (1 - is_fb)) AS accepted_organic,
-           SUM(no_show) AS no_show,
-           SUM(no_show * is_fb) AS no_show_fb,
-           SUM(no_show * (1 - is_fb)) AS no_show_organic,
            SUM(disqualified_lost) AS disqualified_lost
          FROM ds GROUP BY 1
+       ),
+       -- NO_SHOW is enumerated straight from CRM_DEALS (current stage "Call Missed Several
+       -- Times"), NOT the stage-change events: that transition fires no event, so the
+       -- event-based set (deal2/ds) misses ~75% of no-shows (~118 of ~469). Still COHORT-keyed
+       -- by booking day — each deal's marketing BOOKING_COMPLETE day (email bridge), else CRM
+       -- creation day, else a manual override — and split FB/organic by the same email→utm
+       -- bridge (unattributed → organic).
+       nsc AS (
+         SELECT cd.ID AS deal_id,
+           COALESCE(o.booked_day, ebc.bc, crt.created_day) AS day,
+           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
+         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
+         JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         LEFT JOIN ovr o ON o.deal_id = cd.ID
+         LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
+         LEFT JOIN email_bc ebc ON ebc.email = em.join_email
+         LEFT JOIN crt ON crt.deal_id = cd.ID
+         LEFT JOIN src ON src.email = em.join_email
+         WHERE st.NAME = 'Call Missed Several Times'
+       ),
+       nscs AS (
+         SELECT day, COUNT(*) AS no_show,
+           SUM(is_fb) AS no_show_fb, SUM(1 - is_fb) AS no_show_organic
+         FROM nsc WHERE day IS NOT NULL GROUP BY day
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -353,14 +374,14 @@ export class SnowflakeService {
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.accepted_fb,0) AS accepted_fb,
          COALESCE(s.accepted_organic,0) AS accepted_organic,
-         COALESCE(s.no_show,0) AS no_show,
-         COALESCE(s.no_show_fb,0) AS no_show_fb,
-         COALESCE(s.no_show_organic,0) AS no_show_organic,
+         COALESCE(nscs.no_show,0) AS no_show,
+         COALESCE(nscs.no_show_fb,0) AS no_show_fb,
+         COALESCE(nscs.no_show_organic,0) AS no_show_organic,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
          COALESCE(s.held_fb,0) AS held_fb,
          COALESCE(s.held_organic,0) AS held_organic
-       FROM f LEFT JOIN s ON f.day = s.day
+       FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN nscs ON f.day = nscs.day
        ORDER BY f.day DESC`,
       [overridesJson(bookingOverrides), -days, -days, -days]
     );

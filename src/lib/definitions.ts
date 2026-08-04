@@ -124,10 +124,10 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   ],
   [
     'NO_SHOW',
-    'wonderly_daily, call1_deals',
+    'wonderly_daily',
     'Of that day’s booked deals, how many are currently in the “Call Missed Several Times” stage (no-showed the Call 1).',
     'CRM',
-    'Current stage = “Call Missed Several Times”. (This transition fires no event, so it can’t be dated and flips if rescheduled.)',
+    'Current stage = “Call Missed Several Times”, enumerated straight from CRM_DEALS (not the stage-change events — that transition fires no event, so the event-based set misses ~75%). Cohort-keyed by booking day (marketing BOOKING_COMPLETE, else CRM creation day). ~460 since May, matching the CSM Ops tool.',
   ],
   [
     'DISQUALIFIED',

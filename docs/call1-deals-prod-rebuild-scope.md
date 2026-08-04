@@ -1,3 +1,11 @@
+> ⛔ **INVALIDATED — do not build on this.** The prod `DERIVED__CUSTOMER_FUNNEL` model this
+> doc is based on turns out to be **Wonderly's _customers'_ funnel** (contractors' meetings with
+> their homeowner leads — 165 contractor teams, homeowner deal names, contractor actor emails),
+> **not Wonderly's own contractor‑acquisition funnel**. It shares no keys with the acquisition
+> funnel because it's a different population entirely. The Growth sheet's held/no‑show/accepted
+> correctly come from the **dev CRM** (`WONDERLY_SALES` + `AIRBYTE.WONDERLY_DEV.CRM`); the prod
+> attendance model must not be used here. Kept for the record of what was investigated.
+
 # Scope: Rebuild `call1_deals` (and `ad_performance`) on the prod funnel
 
 ## Why

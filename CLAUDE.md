@@ -335,6 +335,10 @@ A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cro
 
 Marketing events are keyed by **email** (anonymous before submit); sales events by **deal_id**; bridged deal→contact→email. One person can span multiple `amplitude_id`s (~9% inflate the marketing partial/qualified counts, which use `COUNT(DISTINCT AMPLITUDE_ID)`). **ACCEPTED is not double-counted** — it's keyed on deal_id (144 accepted deals = 144 emails). `BOOKING_COMPLETE` carries no email, so bookings can't be email-deduped.
 
+### Test / internal exclusion (matches the Amplitude charts)
+
+The Amplitude funnel charts exclude four email-rule cohorts, so the sheet replicates them in SQL (`excludedEmail()` in `SnowflakeService`): **Test Accounts** (email contains `test`/`wonderly`/`motion`/`tanya`), **Internal Wonderly** (`wonderly.com`/`usemotion.com`), and **Design Partners** / **Design Partners with Ads** (a list of company substrings + exact emails). Marketing funnel: excluded via `excluded_amps` (amplitude_ids whose email matches drop out of `mkt`). Sales side (no-show `nsc`, held/accepted `ds`) and `call1_deals`: excluded via the contact email (`em.join_email`). Snowflake `RLIKE` is whole-string, so substrings are wrapped `.*(…).*`. **Update the lists in `snowflake/index.ts` if the Design Partners cohorts change in Amplitude** (cohort ids urrlbtg2 / euq2js5s / ujlb6h0x / lv6hfo0w).
+
 ### Cron/plumbing notes
 
 - `GoogleSheetsService.replaceRows` writes with `USER_ENTERED` (dates parse to real dates → SUMIFS date criteria work). Formatting is orthogonal (`formatTab`, idempotent) and survives value rewrites. `ensureTab`/`deleteTab` manage tab lifecycle.

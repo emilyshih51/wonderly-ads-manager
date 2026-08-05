@@ -30,6 +30,39 @@ const EVENTS_TABLE = 'AMPLITUDE.AMPLITUDE.EVENTS_766268';
  */
 const REPORT_TZ = 'America/Los_Angeles';
 
+/**
+ * Amplitude exclusion cohorts replicated in SQL so the sheet matches the Amplitude charts,
+ * which filter these out: Test Accounts (email contains test/wonderly/motion/tanya), Internal
+ * Wonderly (wonderly.com/usemotion.com — caught by the substrings), and the Design Partners /
+ * Design Partners with Ads lists. All are email-rule cohorts. **Update these if the Design
+ * Partners cohorts change in Amplitude** (cohort ids urrlbtg2 / euq2js5s / ujlb6h0x / lv6hfo0w).
+ */
+const EXCLUDED_EMAIL_SUBSTRINGS =
+  'test|wonderly|motion|tanya|gccg|smartbeertap|tamarack|airsenseenvironmental|houstonsigncrafters|huggibearexpress|modernlalaland|chicsketch|garvit03jain|callhuggibear';
+const EXCLUDED_EMAIL_EXACT = [
+  'keith@theestatelawyer.com',
+  'homesheartskitchens@gmail.com',
+  'taylor@launchpartners.consulting',
+  'josh@rnkd123.com',
+  'echodogstraining@gmail.com',
+  'exodiuscommercial@gmail.com',
+  'tidylawnsga@gmail.com',
+  'jeff@activtrim.com',
+  'david@getcontentsponge.com',
+];
+
+/**
+ * SQL boolean predicate — true when the (already lowercased) email column belongs to an
+ * exclusion cohort. Snowflake RLIKE is whole-string, so the substrings are wrapped in `.*….*`.
+ *
+ * @param col - A lowercased email SQL expression (e.g. `em.join_email`)
+ */
+function excludedEmail(col: string): string {
+  const exact = EXCLUDED_EMAIL_EXACT.map((e) => `'${e}'`).join(',');
+
+  return `(${col} RLIKE '.*(${EXCLUDED_EMAIL_SUBSTRINGS}).*' OR ${col} IN (${exact}))`;
+}
+
 /** Data-team-owned view: one row per customer per day of funnel value + P&L. */
 const CUSTOMER_VALUE_DAILY =
   'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY';
@@ -159,6 +192,16 @@ export class SnowflakeService {
          SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
          FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
        ),
+       -- Users in the Amplitude exclusion cohorts (test / internal / design partners), by
+       -- their amplitude_id, so their events drop out of the funnel — matching the Amplitude
+       -- charts. Identified from any marketing event whose email matches an exclusion rule.
+       excluded_amps AS (
+         SELECT DISTINCT AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND ${excludedEmail('LOWER(COALESCE(USER_PROPERTIES:email::string, EVENT_PROPERTIES:email::string))')}
+       ),
        mkt AS (
          SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID,
            LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) AS src,
@@ -166,6 +209,7 @@ export class SnowflakeService {
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        -- Every marketing event carries the session's utm_source / fbclid, so each
        -- funnel step splits into FB (facebook/ig utm OR an fbclid) vs organic the
@@ -323,6 +367,7 @@ export class SnowflakeService {
          LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
          LEFT JOIN src ON src.email = em.join_email
          WHERE d.booked_day IS NOT NULL
+           AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
        ),
        -- Cohort aggregate keyed by booking day: of the deals booked that day, how many
        -- eventually held / were accepted (with the FB/organic split), plus no-shows and
@@ -356,6 +401,7 @@ export class SnowflakeService {
          LEFT JOIN crt ON crt.deal_id = cd.ID
          LEFT JOIN src ON src.email = em.join_email
          WHERE st.NAME = 'Call Missed Several Times'
+           AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
        ),
        nscs AS (
          SELECT day, COUNT(*) AS no_show,
@@ -383,7 +429,7 @@ export class SnowflakeService {
          COALESCE(s.held_organic,0) AS held_organic
        FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN nscs ON f.day = nscs.day
        ORDER BY f.day DESC`,
-      [overridesJson(bookingOverrides), -days, -days, -days]
+      [overridesJson(bookingOverrides), -days, -days, -days, -days]
     );
 
     return rows.map((r) => ({
@@ -720,7 +766,8 @@ export class SnowflakeService {
        -- Include any deal that entered the Call 1 funnel: booked (BOOKING_COMPLETE, CRM
        -- creation day, Call 1 Scheduled event, or manual override), or (for deals with no
        -- booking signal at all) ever accepted / held. Keeps ACCEPTED reconciled with Daily Funnel.
-       WHERE COALESCE(o.booked_day, ebc.bc, crt.created_day, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1
+       WHERE (COALESCE(o.booked_day, ebc.bc, crt.created_day, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1)
+         AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
        ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day, de.held_day, de.accepted_day) DESC`,
       [overridesJson(bookingOverrides), -days, -days]
     );

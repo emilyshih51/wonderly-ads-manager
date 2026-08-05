@@ -55,9 +55,13 @@ describe('computeDailyMetrics', () => {
     );
 
     expect(m[0][0]).toBe(''); // group-header corner
+    // Every metric gets a group header — including Held and No show (the latter is easy to
+    // drop since it has no Cost/w-w column).
     expect(m[0]).toContain('Accepted');
-    expect(m[0]).toContain('Spend');
+    expect(m[0]).toContain('Held');
+    expect(m[0]).toContain('No show');
     expect(m[0]).toContain('Call 1 booked');
+    expect(m[0]).toContain('Spend');
     // Accepted is first, leads with a Cost column, and drops w/w (Cost · ALL · FB · Organic).
     expect(m[1].slice(0, 5)).toEqual(['Date', 'Cost', 'ALL', 'FB', 'Organic']);
     // Held (2nd metric, reversed-funnel order) leads with Cost (Cost · ALL · w/w · FB · Organic).

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DAILY_METRICS_FORMAT,
   buildDailyMetricsFormatRequests,
   weekBreakRows,
   type MetricFormat,
@@ -99,6 +100,23 @@ describe('buildDailyMetricsFormatRequests', () => {
     expect(types).toContain('CURRENCY');
     expect(types).toContain('NUMBER');
     expect(types).toContain('PERCENT');
+  });
+
+  it('emits a group-header merge for every metric in the real config (incl. No show)', () => {
+    const reqs = buildDailyMetricsFormatRequests(1, DAILY_METRICS_FORMAT);
+    const merges = reqs
+      .filter((r) => 'mergeCells' in r)
+      .map(
+        (r) => (r as any).mergeCells.range as { startColumnIndex: number; endColumnIndex: number }
+      );
+
+    // One merge per metric, contiguous and non-overlapping, starting at column B (index 1).
+    expect(merges).toHaveLength(DAILY_METRICS_FORMAT.length);
+    expect(merges[0].startColumnIndex).toBe(1);
+    merges.slice(1).forEach((m, i) => expect(m.startColumnIndex).toBe(merges[i].endColumnIndex));
+
+    // No show is 3rd (Accepted, Held, No show) and spans exactly 3 cols (ALL/FB/Organic).
+    expect(merges[2]).toMatchObject({ startColumnIndex: 10, endColumnIndex: 13 });
   });
 
   it('shades and underlines each weekly summary row found in the values matrix', () => {

@@ -37,9 +37,12 @@ interface Metric {
   noWow?: boolean;
 }
 
+// Reversed-funnel order: the outcome reads first (leftmost) and the inputs (CPC, Spend) sit
+// last, so the metrics that matter most are visible without scrolling right. Sequence is the
+// funnel walked backwards: Accepted → Held → No show → Call 1 booked → … → Page views → CPC → Spend.
 const METRICS: Metric[] = [
-  // Accepted is pulled to the front so the headline outcome reads first. Split by the
-  // deal's Call 1 source (organic = ALL − FB).
+  // Accepted is the headline outcome, so it leads. Split by the deal's Call 1 source
+  // (organic = ALL − FB).
   {
     label: 'Accepted',
     daily: (r) => r.accepted,
@@ -48,52 +51,6 @@ const METRICS: Metric[] = [
     hasCost: true,
     // Accepted runs 0–5 a day, so a day-vs-last-week % is just −100%/+400% noise. Drop it.
     noWow: true,
-  },
-  // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
-  { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
-  {
-    // 100% of spend and clicks are Facebook, so CPC's FB mirrors ALL; there is no
-    // organic ad spend to divide, so Organic stays blank (no accessor) rather than 0.
-    label: 'CPC',
-    daily: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
-    fb: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
-    numer: (r) => r.fbSpend,
-    denom: (r) => r.fbClicks,
-  },
-  {
-    label: 'Page views',
-    daily: (r) => r.pageView,
-    fb: (r) => r.pageViewFb,
-    organic: (r) => r.pageViewOrganic,
-    hasCost: true,
-  },
-  {
-    label: 'CTA',
-    daily: (r) => r.ctaClicked,
-    fb: (r) => r.ctaFb,
-    organic: (r) => r.ctaOrganic,
-    hasCost: true,
-  },
-  {
-    label: 'Partial',
-    daily: (r) => r.submitPartial,
-    fb: (r) => r.submitPartialFb,
-    organic: (r) => r.submitPartialOrganic,
-    hasCost: true,
-  },
-  {
-    label: 'Qualified',
-    daily: (r) => r.submitQualified,
-    fb: (r) => r.submitQualifiedFb,
-    organic: (r) => r.submitQualifiedOrganic,
-    hasCost: true,
-  },
-  {
-    label: 'Call 1 booked',
-    daily: (r) => r.bookedAll,
-    fb: (r) => r.bookedFb,
-    organic: (r) => r.bookedOrganic,
-    hasCost: true,
   },
   // Held split by the deal's Call 1 source (organic = ALL − FB).
   {
@@ -112,6 +69,52 @@ const METRICS: Metric[] = [
     organic: (r) => r.noShowOrganic,
     noWow: true,
   },
+  {
+    label: 'Call 1 booked',
+    daily: (r) => r.bookedAll,
+    fb: (r) => r.bookedFb,
+    organic: (r) => r.bookedOrganic,
+    hasCost: true,
+  },
+  {
+    label: 'Qualified',
+    daily: (r) => r.submitQualified,
+    fb: (r) => r.submitQualifiedFb,
+    organic: (r) => r.submitQualifiedOrganic,
+    hasCost: true,
+  },
+  {
+    label: 'Partial',
+    daily: (r) => r.submitPartial,
+    fb: (r) => r.submitPartialFb,
+    organic: (r) => r.submitPartialOrganic,
+    hasCost: true,
+  },
+  {
+    label: 'CTA',
+    daily: (r) => r.ctaClicked,
+    fb: (r) => r.ctaFb,
+    organic: (r) => r.ctaOrganic,
+    hasCost: true,
+  },
+  {
+    label: 'Page views',
+    daily: (r) => r.pageView,
+    fb: (r) => r.pageViewFb,
+    organic: (r) => r.pageViewOrganic,
+    hasCost: true,
+  },
+  {
+    // 100% of spend and clicks are Facebook, so CPC's FB mirrors ALL; there is no
+    // organic ad spend to divide, so Organic stays blank (no accessor) rather than 0.
+    label: 'CPC',
+    daily: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
+    fb: (r) => (r.fbClicks > 0 ? r.fbSpend / r.fbClicks : 0),
+    numer: (r) => r.fbSpend,
+    denom: (r) => r.fbClicks,
+  },
+  // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
+  { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
 ];
 
 function round2(n: number): number {

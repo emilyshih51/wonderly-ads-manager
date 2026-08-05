@@ -39,15 +39,15 @@ export interface MetricFormat {
  */
 export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Accepted', money: false, hasCost: true, noWow: true },
-  { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
-  { label: 'CPC', money: true, hideOrganic: true },
-  { label: 'Page views', money: false, hasCost: true },
-  { label: 'CTA', money: false, hasCost: true },
-  { label: 'Partial', money: false, hasCost: true },
-  { label: 'Qualified', money: false, hasCost: true },
-  { label: 'Call 1 booked', money: false, hasCost: true },
   { label: 'Held', money: false, hasCost: true },
   { label: 'No show', money: false, noWow: true },
+  { label: 'Call 1 booked', money: false, hasCost: true },
+  { label: 'Qualified', money: false, hasCost: true },
+  { label: 'Partial', money: false, hasCost: true },
+  { label: 'CTA', money: false, hasCost: true },
+  { label: 'Page views', money: false, hasCost: true },
+  { label: 'CPC', money: true, hideOrganic: true },
+  { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
 ];
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */

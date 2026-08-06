@@ -63,6 +63,19 @@ function excludedEmail(col: string): string {
   return `(${col} RLIKE '.*(${EXCLUDED_EMAIL_SUBSTRINGS}).*' OR ${col} IN (${exact}))`;
 }
 
+/**
+ * SQL boolean predicate — true when a CRM deal NAME is a QA test deal. The quote/contract
+ * pipeline generates deals named `QID-<n>-<hash>-<ts>-…-Deal` (~22 of them, some with null or
+ * shared gmail emails that the email filter misses); they're created and "accepted" the same
+ * day and never touch the marketing funnel, so they leak into the sales cohorts otherwise.
+ * `COALESCE(..., FALSE)` keeps null-named real deals.
+ *
+ * @param col - A deal-name SQL expression (e.g. `cd.NAME`)
+ */
+function excludedDealName(col: string): string {
+  return `COALESCE(LOWER(${col}) RLIKE '.*(qid-[0-9]).*', FALSE)`;
+}
+
 /** Data-team-owned view: one row per customer per day of funnel value + P&L. */
 const CUSTOMER_VALUE_DAILY =
   'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY';
@@ -368,6 +381,7 @@ export class SnowflakeService {
          LEFT JOIN src ON src.email = em.join_email
          WHERE d.booked_day IS NOT NULL
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
+           AND NOT ${excludedDealName('cd.NAME')}
        ),
        -- Cohort aggregate keyed by booking day: of the deals booked that day, how many
        -- eventually held / were accepted (with the FB/organic split), plus no-shows and
@@ -402,6 +416,7 @@ export class SnowflakeService {
          LEFT JOIN src ON src.email = em.join_email
          WHERE st.NAME = 'Call Missed Several Times'
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
+           AND NOT ${excludedDealName('cd.NAME')}
        ),
        nscs AS (
          SELECT day, COUNT(*) AS no_show,

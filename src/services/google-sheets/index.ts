@@ -94,19 +94,34 @@ export class GoogleSheetsService {
    * @throws {GoogleSheetsApiError} On any non-2xx response
    */
   private async request<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
-    const token = await this.client.getAccessToken();
-    const response = await fetch(`${SHEETS_BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        ...init.headers,
-        Authorization: `Bearer ${token.token}`,
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
-    });
+    // Google's Sheets API returns transient 5xx/429 under load (503 UNAVAILABLE, rate
+    // limits). One blip shouldn't fail the whole refresh, so retry those with exponential
+    // backoff; everything else (4xx like 403) throws immediately.
+    const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+    const MAX_ATTEMPTS = 4;
 
-    if (!response.ok) {
+    for (let attempt = 1; ; attempt++) {
+      const token = await this.client.getAccessToken();
+      const response = await fetch(`${SHEETS_BASE_URL}${path}`, {
+        ...init,
+        headers: {
+          ...init.headers,
+          Authorization: `Bearer ${token.token}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+
+      if (response.ok) return response.json() as Promise<T>;
+
       const body = await response.text();
+
+      if (RETRYABLE.has(response.status) && attempt < MAX_ATTEMPTS) {
+        // 0.5s, 1s, 2s between the 4 attempts.
+        await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+        continue;
+      }
+
       const hint =
         response.status === 403
           ? ' — is the sheet shared with the service account email as an Editor?'
@@ -117,8 +132,6 @@ export class GoogleSheetsService {
         response.status
       );
     }
-
-    return response.json() as Promise<T>;
   }
 
   /**

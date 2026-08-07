@@ -23,6 +23,25 @@ import type { DailyMarketingRow } from '@/lib/marketing-daily';
 const EVENTS_TABLE = 'AMPLITUDE.AMPLITUDE.EVENTS_766268';
 
 /**
+ * Wonderly's own contractor-acquisition pipeline in the dev CRM. The `CRM_PIPELINE_STAGES`
+ * table holds every team's pipeline (1000+ contractor job pipelines share stage names like
+ * "Call Missed Several Times"), so any stage lookup that scans all deals MUST scope to this
+ * pipeline or it pulls in contractor deals — e.g. no-show by name alone counts 545 deals, but
+ * 18 of those are contractor job deals in a same-named stage; scoped to this pipeline it's 527.
+ * The `pip_…` id is stable across stage renames (unlike NAME), which is why we anchor to it.
+ */
+const ACQUISITION_PIPELINE_ID = 'pip_019c0568f48a7a0c8d41d87efeafadd4';
+
+/**
+ * Stage `TYPE` for the no-show stage ("Call Missed Several Times") within the acquisition
+ * pipeline. `TYPE` is a semantic enum that survives stage renames, so keying on it (scoped to
+ * the pipeline, where it's unique) is more robust than matching the display NAME. The parallel
+ * meeting types are `meeting_scheduled` (Call 1 Scheduled) and `meeting_finished` (used by both
+ * Accepted and "Call 2 Scheduled (yet to pay)", so NOT unique — Accepted stays name-keyed).
+ */
+const NO_SHOW_STAGE_TYPE = 'meeting_no_show';
+
+/**
  * Timezone the daily buckets are cut on. Amplitude events land in UTC, but the
  * Amplitude UI (and how the team reads these numbers) is in the project's timezone.
  * Bucketing on UTC pushes a US-evening booking into the next calendar day, so the
@@ -430,7 +449,9 @@ export class SnowflakeService {
          LEFT JOIN email_bc ebc ON ebc.email = em.join_email
          LEFT JOIN crt ON crt.deal_id = cd.ID
          LEFT JOIN src ON src.email = em.join_email
-         WHERE st.NAME = 'Call Missed Several Times'
+         -- No-show keyed on the stable stage TYPE within Wonderly's acquisition pipeline, not the
+         -- display NAME (which can be renamed and is shared by 1000+ contractor job pipelines).
+         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}' AND st.TYPE = '${NO_SHOW_STAGE_TYPE}'
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
            AND NOT ${excludedDealName('cd.NAME')}
        ),
@@ -766,7 +787,8 @@ export class SnowflakeService {
          SELECT cd.ID AS deal_id
          FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
          JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
-         WHERE st.NAME = 'Call Missed Several Times'
+         -- No-show keyed on stable stage TYPE + acquisition pipeline (see getDailyMarketing).
+         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}' AND st.TYPE = '${NO_SHOW_STAGE_TYPE}'
        ),
        em AS (
          SELECT CONTACT_ID,

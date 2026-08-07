@@ -347,6 +347,28 @@ The sales side **also** drops QA test deals by name (`excludedDealName()`): the 
 - Libs are pure + unit-tested (vitest): `daily-metrics(-format)`, `daily-funnel`, `overview(-format)`, `call1-deals`, `succeeding`, `customer-pnl`, `definitions`, `marketing-daily`, `week-over-week`. The Snowflake SQL itself is validated ad-hoc against the live warehouse, not unit-tested.
 - When touching keying/definitions, verify against Snowflake before/after and keep `Definitions` tab (`src/lib/definitions.ts`) in sync.
 
+### Daily acquisition update (`/api/cron/acquisition-update`)
+
+Rebuilds the "Growth — acquisition update" readout from the [Cost per Succeeding Contractor spec](https://app.notion.com/p/3b278d7150b381d2b409e20c231138a5) every morning (Vercel cron, `50 12 * * *` UTC ≈ 8:50am ET) and publishes it two ways. Reads live (Meta + Snowflake) — it does **not** read the sheet.
+
+- **Notion:** a dated page (`Growth — acquisition update <date>`) inside a **`Growth report`** container page under the spec, so the spec gains one child instead of one per day. The container is found-or-created each run via `ensureChildPage` (idempotent — created on the first run, reused after).
+- **Slack:** a 5-line TL;DR to `SLACK_GROWTH_CHANNEL` (default `#emily-space`) — north-star vs goal, the funnel in one line, cohort + match rate, and a link to the Notion page. Keep it short on purpose; the tables and caveats live in Notion.
+
+- `src/lib/acquisition-update.ts` — pure + unit-tested: `cohortWindow`, `windowTotals`, `computeAcquisitionUpdate` (the four tables), `toSlackSummary`.
+- `SnowflakeService.getCampCohort(start, end)` — the CAMP half.
+- `src/services/notion/index.ts` — ~150-line Notion client (one endpoint, `POST /v1/pages`). Not the official SDK on purpose; swap to `@notionhq/client` if Notion usage grows.
+- Both publish steps are best-effort: a missing `NOTION_TOKEN` or a Slack failure degrades the run to "computed but not published" and the full readout still returns in the response body.
+
+**Key model decisions (all intentional):**
+
+- **Rolling lagged cohort:** contractors accepted in `[T−35d, T−14d)` — 3 weeks, held back 14 days so the booking-day cohort has converted. Slides daily, stays comparable. Don't shorten the lag to make the number "current" — it will just read high.
+- **`getCampCohort` "Succeeding" ≠ `getSucceedingContractors` "succeeding".** This one is CAMP's own `DEAL_SCORE_CLASSIFICATION` (Succeeding / Okay / Not Good / Failing) and counts a team that was **ever** classified `Succeeding` in any lifecycle week. `getSucceedingContractors` is P&L > 0 within 60/90 days and powers the sheet's own row. Two different questions — keep both.
+  - "Ever Succeeding" is what reconciles to the hand-built readout (14 vs its 15 on the July 1–21 cohort). "Currently Succeeding" gives ~5 — about a third.
+- **The cross-system join is the weak link.** The acquisition CRM and CAMP share no id, so `getCampCohort` joins deal primary-contact email → `BASE__TEAMS.WONDERLY__TEAM__ADMIN_EMAIL`. That lands ~75% (27/36 on July 1–21); the 9 misses have **no Wonderly account at all** (verified against prod Postgres — not a matching artifact). So `matchedToCamp` ships with every readout and **all CAMP counts are floors**. `STG__CUSTOMER_TO_WONDERLY_DEAL.DEAL_WONDERLY_PROD_EMAIL` would be the better key but is entirely null today — recheck it before adding email heuristics.
+- **Acquisition cost = total FB spend over the cohort window.** This deliberately does **not** reproduce the hand-built 2026-08-06 readout's `~$78,900` for July 1–21: actual spend those days is `$112,667` and the booking-day accepted count is 40 (not 35), so that readout's per-contractor attribution couldn't be reconstructed from Meta or Snowflake. The window-total basis is reproducible and matches `historical_cac`.
+- **Low-n guard:** below `MIN_SUCCEEDING = 5` the cost-per-succeeding cell reads `maturing — n/m` instead of a noisy dollar figure.
+- Caveats (match rate, attribution difference, cohort maturity, near-zero collected) are generated into the output — they are part of the readout, not commentary. Don't strip them.
+
 ### Read-only MCP server (`/api/mcp`)
 
 A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools for any MCP client (endpoint `POST /api/mcp/mcp`). **Read-only** — no writes, no ad changes, no sheet mutation. Node runtime, `maxDuration 60`.

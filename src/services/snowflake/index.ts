@@ -13,6 +13,7 @@
 
 import snowflake, { type Connection } from 'snowflake-sdk';
 
+import type { CampCohortCounts } from '@/lib/acquisition-update';
 import type { Call1DealRow } from '@/lib/call1-deals';
 import type { CustomerPnlRow } from '@/lib/customer-pnl';
 import type { SucceedingContractors } from '@/lib/succeeding';
@@ -86,6 +87,21 @@ const BASE_TEAMS = 'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.BASE__TEAMS';
 /** Actual delivered Meta spend per customer per day (the value view's AD_SPEND is budget). */
 const CUSTOMER_META_SPEND_DAILY =
   'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.FCT__CUSTOMER_META_SPEND_DAILY';
+
+/**
+ * Acquisition-side CRM deals mirrored into the warehouse — the only table carrying both the
+ * Wonderly sales deal and its contractor contact email, so it anchors the CAMP cohort join.
+ */
+const CUSTOMER_TO_WONDERLY_DEAL =
+  'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.STG__CUSTOMER_TO_WONDERLY_DEAL';
+
+/**
+ * CAMP's per-customer, per-week lifecycle fact — the "WoW Success" view. Carries
+ * `DEAL_SCORE_CLASSIFICATION` (Succeeding / Okay / Not Good / Failing) plus the weekly
+ * won-deal, booked and collected revenue-share amounts.
+ */
+const LIFECYCLE_WEEKLY =
+  'WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.FACT__CUSTOMER_FUNNEL_V2_LIFECYCLE_WEEKLY';
 
 interface SnowflakeConfig {
   account: string;
@@ -614,6 +630,88 @@ export class SnowflakeService {
       cohort60End: String(r.COHORT60_END ?? ''),
       cohort90Start: String(r.COHORT90_START ?? ''),
       cohort90End: String(r.COHORT90_END ?? ''),
+    };
+  }
+
+  /**
+   * CAMP-side outcomes for the contractors accepted in a window — the second half of the
+   * daily acquisition readout.
+   *
+   * Cohort membership comes from the acquisition CRM (`STG__CUSTOMER_TO_WONDERLY_DEAL`,
+   * pipeline stage `Accepted`), keyed by `DEAL_CREATED_TIME` — booking the Call 1 creates the
+   * deal, and that column has 100% coverage and a median 0-day gap from the booking event, so
+   * it is the reliable booking-day key.
+   *
+   * **The join is the weak link, by construction.** The acquisition CRM and CAMP share no id,
+   * so the cohort joins to a CAMP team on contractor email (deal primary contact ↔ team admin
+   * email). That lands ~75%; the misses are contractors who never created a Wonderly account,
+   * verified directly against prod Postgres. `matchedToCamp` therefore ships with the counts —
+   * every CAMP-side number is a floor, and the caller must not present them otherwise.
+   * (`DEAL_WONDERLY_PROD_EMAIL` exists on the source table and would be the better key, but is
+   * entirely unpopulated today — recheck it before adding more email-matching heuristics.)
+   *
+   * "Succeeding" here is CAMP's own `DEAL_SCORE_CLASSIFICATION` — a team counts if it was ever
+   * classified `Succeeding` in **any** lifecycle week, not merely the latest. That is what the
+   * hand-built readout measured; "currently Succeeding" yields roughly a third of the count.
+   * This is deliberately a different definition from `getSucceedingContractors` (P&L > 0), which
+   * powers the sheet's own cost-per-succeeding row. Keep them distinct.
+   *
+   * @param windowStart - Cohort window start, inclusive, `YYYY-MM-DD`
+   * @param windowEnd - Cohort window end, exclusive, `YYYY-MM-DD`
+   * @returns One set of counts for the cohort
+   */
+  async getCampCohort(windowStart: string, windowEnd: string): Promise<CampCohortCounts> {
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH cohort AS (
+         SELECT DEAL_ID, LOWER(DEAL_PRIMARY_CONTACT_EMAIL) AS email
+         FROM ${CUSTOMER_TO_WONDERLY_DEAL}
+         WHERE PIPELINE_STAGE_NAME = 'Accepted'
+           AND DEAL_CREATED_TIME >= ? AND DEAL_CREATED_TIME < ?
+           AND NOT ${excludedDealName('DEAL_NAME')}
+           AND NOT ${excludedEmail('LOWER(DEAL_PRIMARY_CONTACT_EMAIL)')}
+       ),
+       teams AS (
+         SELECT LOWER(WONDERLY__TEAM__ADMIN_EMAIL) AS email, WONDERLY__TEAM__ID AS team_id
+         FROM ${BASE_TEAMS}
+       ),
+       -- One row per team: "ever" flags across the team's whole lifecycle, not just the
+       -- latest week — a team that dipped out of Succeeding still counts as having succeeded.
+       life AS (
+         SELECT TEAM_ID,
+           MAX(IFF(DEAL_SCORE_CLASSIFICATION = 'Succeeding', 1, 0)) AS ever_succ,
+           MAX(IFF(DEAL_SCORE_CLASSIFICATION IN ('Succeeding','Okay'), 1, 0)) AS ever_okay,
+           MAX(AD_FIRST_RUN_DATE) AS ad_first_run,
+           SUM(DEAL_WON) AS deals_won,
+           SUM(BOOKED_OWED_USD) AS booked_owed,
+           SUM(COLLECTED_OWED_USD) AS collected_owed
+         FROM ${LIFECYCLE_WEEKLY}
+         GROUP BY TEAM_ID
+       )
+       SELECT COUNT(*) AS accepted,
+         COUNT(t.team_id) AS matched_to_camp,
+         COUNT(l.ad_first_run) AS launched_ads,
+         SUM(COALESCE(l.ever_succ, 0)) AS camp_succeeding,
+         SUM(COALESCE(l.ever_okay, 0)) AS camp_okay_or_succeeding,
+         SUM(IFF(COALESCE(l.deals_won, 0) > 0, 1, 0)) AS won_a_job,
+         SUM(IFF(COALESCE(l.booked_owed, 0) > 0, 1, 0)) AS revshare_booked,
+         SUM(IFF(COALESCE(l.collected_owed, 0) > 0, 1, 0)) AS revshare_collected
+       FROM cohort c
+       LEFT JOIN teams t ON t.email = c.email
+       LEFT JOIN life l ON l.TEAM_ID = t.team_id`,
+      [windowStart, windowEnd]
+    );
+
+    const r = rows[0] ?? {};
+
+    return {
+      accepted: num(r.ACCEPTED),
+      matchedToCamp: num(r.MATCHED_TO_CAMP),
+      launchedAds: num(r.LAUNCHED_ADS),
+      campSucceeding: num(r.CAMP_SUCCEEDING),
+      campOkayOrSucceeding: num(r.CAMP_OKAY_OR_SUCCEEDING),
+      wonAJob: num(r.WON_A_JOB),
+      revshareBooked: num(r.REVSHARE_BOOKED),
+      revshareCollected: num(r.REVSHARE_COLLECTED),
     };
   }
 

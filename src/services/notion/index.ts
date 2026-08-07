@@ -31,9 +31,26 @@ export interface NotionTable {
 /** One Notion block. Untyped by design — this file builds them, nothing else inspects them. */
 type NotionBlock = Record<string, unknown>;
 
-/** Wrap plain text as Notion's rich-text array. */
+/**
+ * Wrap text as Notion's rich-text array, honouring `**bold**` spans.
+ *
+ * Notion has no markdown parser on the API — a `**word**` sent as plain text renders with the
+ * asterisks visible. The readout leans on bold to make long plain-English explanations
+ * skimmable, so the minimum viable parser earns its keep here. Nothing else is interpreted.
+ */
 function richText(text: string): NotionBlock[] {
-  return [{ type: 'text', text: { content: text } }];
+  return text
+    .split(/(\*\*[^*]+\*\*)/g)
+    .filter((part) => part !== '')
+    .map((part) => {
+      const bold = part.startsWith('**') && part.endsWith('**') && part.length > 4;
+
+      return {
+        type: 'text',
+        text: { content: bold ? part.slice(2, -2) : part },
+        ...(bold && { annotations: { bold: true } }),
+      };
+    });
 }
 
 /** A paragraph block. */

@@ -147,15 +147,15 @@ describe('computeAcquisitionUpdate', () => {
 
     expect(update.costPerSucceeding).toBeNull();
     expect(update.meetsGoal).toBe(false);
-    expect(update.caveats[0]).toContain('below the');
+    expect(update.caveats[0]).toContain('once at least');
     expect(update.tables[0].rows[0][2]).toContain('maturing');
   });
 
-  it('reports the match rate and always carries the floor caveat', () => {
+  it('reports the match rate and always says the counts are a minimum', () => {
     const update = computeAcquisitionUpdate(base);
 
     expect(update.matchRate).toBeCloseTo(27 / 36);
-    expect(update.caveats.join(' ')).toContain('floor');
+    expect(update.caveats.join(' ')).toContain('minimum');
     expect(update.tables[1].rows[1][0]).toBe('Matched to a CAMP customer');
   });
 
@@ -163,11 +163,67 @@ describe('computeAcquisitionUpdate', () => {
     const titles = computeAcquisitionUpdate(base).tables.map((t) => t.title);
 
     expect(titles).toEqual([
-      'North-star metric',
-      'Cohort stage funnel',
-      'Acquisition metrics, week over week',
-      'Call 1 outcomes',
+      'What it costs us to find a contractor who works out',
+      'How this group of contractors is doing',
+      'What we spent last week to get contractors interested',
+      "What happened to last week's booked calls — so far",
     ]);
+  });
+
+  it('explains the calculation and its sources next to the north-star number', () => {
+    const northStar = computeAcquisitionUpdate(base).tables[0];
+
+    expect(northStar.headers).toContain('How we work it out');
+    expect(northStar.note).toContain('Facebook');
+    expect(northStar.note).toContain('CAMP');
+
+    // The explanation must show the actual arithmetic, not just name the inputs.
+    const explanation = northStar.rows[0][northStar.headers.indexOf('How we work it out')];
+
+    expect(explanation).toContain('$21,000');
+    expect(explanation).toContain('14');
+  });
+
+  it('explains how the cohort window moves and why it lags', () => {
+    const note = computeAcquisitionUpdate(base).tables[1].note ?? '';
+
+    // Yesterday's and tomorrow's windows, so "why did this change?" answers itself.
+    expect(note).toContain('2026-07-01');
+    expect(note).toContain('2026-07-03');
+    expect(note).toContain(`${COHORT_LAG_DAYS} days`);
+  });
+
+  it('names the exact dates each week-over-week column covers', () => {
+    const headers = computeAcquisitionUpdate(base).tables[2].headers;
+
+    expect(headers[1]).toContain('2026-07-30');
+    expect(headers[1]).toContain('2026-08-05');
+    expect(headers[2]).toContain('2026-07-23');
+    expect(headers[2]).toContain('2026-07-29');
+  });
+
+  it('warns that last week&apos;s call outcomes are not settled yet', () => {
+    const outcomes = computeAcquisitionUpdate(base).tables[3];
+
+    expect(outcomes.note).toContain('have not happened yet');
+  });
+
+  it('avoids internal jargon in reader-facing copy', () => {
+    const update = computeAcquisitionUpdate(base);
+
+    const prose = [
+      ...update.tables.map((t) => `${t.title} ${t.note ?? ''} ${t.headers.join(' ')}`),
+      ...update.tables.flatMap((t) => t.rows.map((r) => r.join(' '))),
+      ...update.caveats,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    // Terms a reader outside the growth team would not know. "CAMP" survives — it is the
+    // name of an internal tool, and the copy explains what it is.
+    for (const jargon of ['cohort', 'funnel', 'booking-day', 'attribution', 'denominator', 'roi']) {
+      expect(prose).not.toContain(jargon);
+    }
   });
 
   it('gives every table rows of exactly the header width', () => {
@@ -192,9 +248,14 @@ describe('computeAcquisitionUpdate', () => {
 
     const acquisition = computeAcquisitionUpdate({ ...base, rows }).tables[2];
 
-    expect(acquisition.rows[0]).toEqual(['Meta spend', '$700', '$350', '+100%']);
-    expect(acquisition.rows[1]).toEqual(['Call 1s booked', '70', '35', '+100%']);
-    expect(acquisition.rows[2]).toEqual(['Cost per Call 1 booked', '$10', '$10', '+0%']);
+    expect(acquisition.rows[0]).toEqual(['Money paid to Facebook', '$700', '$350', '+100%']);
+    expect(acquisition.rows[1]).toEqual([
+      'Contractors who booked a first call',
+      '70',
+      '35',
+      '+100%',
+    ]);
+    expect(acquisition.rows[2]).toEqual(['What each booked call cost us', '$10', '$10', '+0%']);
   });
 
   it('handles an empty cohort without dividing by zero', () => {
@@ -235,11 +296,11 @@ describe('toSlackSummary', () => {
     const summary = toSlackSummary(update, 'https://notion.so/page');
 
     expect(summary).toContain('Growth — acquisition update · 2026-08-06');
-    expect(summary).toContain('✅ within');
+    expect(summary).toContain('✅ under');
     expect(summary).toContain('https://notion.so/page');
-    expect(summary).toContain('floor');
-    expect(summary).toContain('36 accepted');
-    expect(summary).toContain('14 succeeding');
+    expect(summary).toContain('minimums');
+    expect(summary).toContain('36 contractors');
+    expect(summary).toContain('14 are doing well');
   });
 
   it('stays short enough to actually get read', () => {
@@ -256,7 +317,7 @@ describe('toSlackSummary', () => {
     expect(toSlackSummary(update, 'https://notion.so/page').split('\n')).toHaveLength(5);
   });
 
-  it('says maturing rather than printing a number below the minimum', () => {
+  it('explains why there is no number rather than printing a noisy one', () => {
     const update = computeAcquisitionUpdate({
       today: '2026-08-06',
       rows: [],
@@ -265,6 +326,6 @@ describe('toSlackSummary', () => {
       cohortEnd: '2026-07-23',
     });
 
-    expect(toSlackSummary(update)).toContain('maturing');
+    expect(toSlackSummary(update)).toContain('too few to divide by');
   });
 });

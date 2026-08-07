@@ -86,6 +86,8 @@ export interface AcquisitionUpdateInput {
 /** A rendered table: a header row plus body rows, all cells already strings. */
 export interface ReadoutTable {
   title: string;
+  /** Plain-language explanation shown above the table. Answers "why am I looking at this?". */
+  note?: string;
   headers: string[];
   rows: string[][];
 }
@@ -242,29 +244,40 @@ export function computeAcquisitionUpdate(input: AcquisitionUpdateInput): Acquisi
       : usd(costPerSucceeding);
 
   const northStar: ReadoutTable = {
-    title: 'North-star metric',
-    headers: ['North-star metric', 'Exact cohort', 'Current', 'Goal', 'Readout'],
+    title: 'What it costs us to find a contractor who works out',
+    note: `Three numbers come from three places. **How much we spent on ads** comes from Facebook's own billing for Wonderly's ad account. **Who signed up** comes from our sales system. **How they're doing now** comes from CAMP. Nothing here is typed in by hand.`,
+    headers: [
+      'What we are measuring',
+      'Which contractors',
+      'Today',
+      'Target',
+      'The sum',
+      'How we work it out',
+    ],
     rows: [
       [
-        'Estimated cost per CAMP-succeeding contractor',
-        `${camp.accepted} contractors ${cohortLabel}; CAMP checked ${today}`,
+        'What we spend to get one contractor who works out',
+        `The ${camp.accepted} contractors we took on ${cohortLabel}, checked ${today}`,
         succeedingCell,
-        `≤ ${usd(GOAL_COST_PER_SUCCEEDING)}`,
-        `${usd(cohortSpend)} acquisition cost ÷ ${camp.campSucceeding} CAMP-Succeeding`,
+        `${usd(GOAL_COST_PER_SUCCEEDING)} or less`,
+        `${usd(cohortSpend)} ÷ ${camp.campSucceeding}`,
+        `Add up every dollar we paid Facebook during the three weeks this group signed up (${usd(cohortSpend)}). Divide by how many of them CAMP now says are doing well (${camp.campSucceeding}). So each one that works out has cost us that much in ads.`,
       ],
       [
-        'Cost per accepted contractor',
-        `Same ${camp.accepted} contractors`,
+        'What we spend to sign up one contractor',
+        `The same ${camp.accepted} contractors`,
         costPerAccepted === null ? '—' : usd(costPerAccepted),
-        'Input to north-star cost',
-        `${usd(cohortSpend)} ÷ ${camp.accepted} accepted`,
+        'No target — it feeds the number above',
+        `${usd(cohortSpend)} ÷ ${camp.accepted}`,
+        `The same ad money (${usd(cohortSpend)}), but divided by everyone we took on (${camp.accepted}) instead of only the ones doing well. This is what it costs to get someone through the door, before we know whether they will succeed.`,
       ],
       [
-        'Strictly verified succeeding contractors',
-        `Same ${camp.accepted} contractors`,
+        'Contractors we can prove are succeeding',
+        `The same ${camp.accepted} contractors`,
         '0',
-        'Consistently generates $100K/month at ≥1.5× ROI',
-        `The ${camp.campSucceeding} CAMP-Succeeding customers have promising pipeline, but not yet proven economics`,
+        'Earning $100k a month, and $1.50 back for every $1 we spend',
+        'Counted by hand',
+        `This is the strictest possible test and nobody passes it yet — you need months of steady earnings to qualify. The ${camp.campSucceeding} above look promising, but "promising" is a forecast, not proof.`,
       ],
     ],
   };
@@ -275,65 +288,81 @@ export function computeAcquisitionUpdate(input: AcquisitionUpdateInput): Acquisi
   const ofLaunched = (n: number): string =>
     launched > 0 ? `${pct(n / launched)} of launched` : '—';
 
+  const yesterday = cohortWindow(addDays(today, -1));
+  const tomorrow = cohortWindow(addDays(today, 1));
+
   const stages: ReadoutTable = {
-    title: 'Cohort stage funnel',
+    title: 'How this group of contractors is doing',
+    note: [
+      `We follow one group at a time: everyone we took on during a three-week stretch. Today that group is **${cohortStart} to ${addDays(cohortEnd, -1)}**.`,
+      `**It shifts by one day, every day.** Yesterday's report followed ${yesterday.start} to ${addDays(yesterday.end, -1)}; tomorrow's will follow ${tomorrow.start} to ${addDays(tomorrow.end, -1)}. There is never a moment where we switch to a brand-new group — the three-week window simply slides along. Most of the people are the same from one day to the next: one day's worth of contractors joins at one end and drops off at the other.`,
+      `**Why it stops ${COHORT_LAG_DAYS} days before today:** a contractor we accepted last week has not had time to get their ads running, let alone win a job. Counting them would drag every number below down and make us look worse than we are. So we only look at people who have had at least ${COHORT_LAG_DAYS} days to get going.`,
+    ].join('\n\n'),
     headers: [
-      `${cohortLabel} cohort stage`,
+      'Stage',
       'Contractors',
-      '% of accepted',
-      'Relevant conversion',
-      'What it means',
+      'Share of the group',
+      'Share of those running ads',
+      'What this means',
     ],
     rows: [
-      ['Accepted', `${camp.accepted}`, '100%', '—', 'Starting cohort'],
+      [
+        'We took them on',
+        `${camp.accepted}`,
+        '100%',
+        '—',
+        'Everyone we accepted in those three weeks. Every row below is part of this group.',
+      ],
       [
         'Matched to a CAMP customer',
         `${camp.matchedToCamp}`,
         shareOf(camp.matchedToCamp, camp.accepted),
-        `${pct(matchRate)} of accepted`,
-        'Unmatched contractors have no Wonderly account — every count below is a floor',
+        '—',
+        `Our sales system and CAMP don't share an ID, so we link them by email address. ${camp.accepted - camp.matchedToCamp} never set up a Wonderly account, so there is nothing to look up. Every number below counts only the ${camp.matchedToCamp} we can see — the real figures can only be higher, never lower.`,
       ],
       [
-        'Confirmed started ads',
+        'Their ads are running',
         `${launched}`,
         shareOf(launched, camp.accepted),
-        `${shareOf(launched, camp.matchedToCamp)} of matched`,
-        `${camp.matchedToCamp - launched} matched but not confirmed launched`,
+        '—',
+        `We are actually spending money advertising for them. ${camp.matchedToCamp - launched} signed up but haven't got going yet.`,
       ],
       [
-        'CAMP Succeeding',
+        'CAMP says they are doing well',
         `${camp.campSucceeding}`,
         shareOf(camp.campSucceeding, camp.accepted),
         ofLaunched(camp.campSucceeding),
-        'Promising pipeline; not yet strict success',
+        'CAMP gives every contractor a health label. These have the best one. It is a forecast based on the jobs in their pipeline — not money we have actually received.',
       ],
       [
-        'CAMP Okay or Succeeding',
+        'CAMP says they are doing well or okay',
         `${camp.campOkayOrSucceeding}`,
         shareOf(camp.campOkayOrSucceeding, camp.accepted),
         ofLaunched(camp.campOkayOrSucceeding),
-        'Broader healthy-path measure',
+        'The same label, one notch looser. A useful way to see who is not struggling, even if they are not thriving.',
       ],
       [
-        'At least one job won',
+        'Won at least one job',
         `${camp.wonAJob}`,
         shareOf(camp.wonAJob, camp.accepted),
         ofLaunched(camp.wonAJob),
-        'Early customer revenue outcome',
+        'A homeowner actually signed a contract with them. This is the first point where something real has happened.',
       ],
       [
-        'Revenue share booked',
+        'We have billed them our share',
         `${camp.revshareBooked}`,
         shareOf(camp.revshareBooked, camp.accepted),
         ofLaunched(camp.revshareBooked),
-        'Wonderly revenue recorded, not collected',
+        'We take a cut of each job they win. We have sent the bill, but the money has not arrived.',
       ],
       [
-        'Revenue share collected',
+        'They have paid us our share',
         `${camp.revshareCollected}`,
         shareOf(camp.revshareCollected, camp.accepted),
         ofLaunched(camp.revshareCollected),
-        camp.revshareCollected === 0 ? 'No collected proof yet' : 'Real cash in the bank',
+        camp.revshareCollected === 0
+          ? 'Nobody yet. Contractors pay us roughly 15 and 60 days after a job is signed, so this stays at zero for months before it moves.'
+          : 'Money that has actually reached our bank account. This is the only number here that is certain.',
       ],
     ],
   };
@@ -345,23 +374,29 @@ export function computeAcquisitionUpdate(input: AcquisitionUpdateInput): Acquisi
   const prev7Cpc = costPerCall1(prev7);
 
   const acquisition: ReadoutTable = {
-    title: 'Acquisition metrics, week over week',
-    headers: ['Acquisition metric', 'Last 7 days', 'Previous week', 'WoW change'],
+    title: 'What we spent last week to get contractors interested',
+    note: `This is about **us advertising to contractors**, not contractors advertising to homeowners. It has nothing to do with the group above — it is simply the last full week compared with the week before, so we can see whether ads are getting cheaper or more expensive. Today is excluded because the day is not over.`,
+    headers: [
+      'What we are measuring',
+      `Last 7 days (${last7Start} to ${addDays(last7End, -1)})`,
+      `Week before (${prev7Start} to ${addDays(last7Start, -1)})`,
+      'Change',
+    ],
     rows: [
       [
-        'Meta spend',
+        'Money paid to Facebook',
         usd(last7.fbSpend),
         usd(prev7.fbSpend),
         wowChange(last7.fbSpend, prev7.fbSpend),
       ],
       [
-        'Call 1s booked',
+        'Contractors who booked a first call',
         `${last7.booked}`,
         `${prev7.booked}`,
         wowChange(last7.booked, prev7.booked),
       ],
       [
-        'Cost per Call 1 booked',
+        'What each booked call cost us',
         last7Cpc === null ? '—' : usd(last7Cpc),
         prev7Cpc === null ? '—' : usd(prev7Cpc),
         last7Cpc === null || prev7Cpc === null ? '—' : wowChange(last7Cpc, prev7Cpc),
@@ -384,48 +419,60 @@ export function computeAcquisitionUpdate(input: AcquisitionUpdateInput): Acquisi
   ];
 
   const outcomes: ReadoutTable = {
-    title: 'Call 1 outcomes',
+    title: "What happened to last week's booked calls — so far",
+    note: `⚠️ **Read the "so far" carefully.** These are calls booked in the last week, and most of them **have not happened yet** — people book a week or two ahead. So every row below is a part-finished story, and the percentages look far worse than reality. A booking from ${last7Start} might not have its call until late this month. The right way to read this table is "what do we know already", not "how did last week go". For settled numbers, look at the group in the second table, which has had ${COHORT_LAG_DAYS} days to finish.`,
     headers: [
-      `Call 1 outcome ${last7Start} – ${addDays(last7End, -1)}`,
-      'Current count',
-      'Current rate',
-      `Previous period (${prev7Start} – ${addDays(last7Start, -1)})`,
-      'Interpretation',
+      'What happened',
+      'How many so far',
+      "Share of last week's bookings",
+      `Same point for the week before (${prev7Start} to ${addDays(last7Start, -1)})`,
+      'What this means',
     ],
     rows: [
-      outcomeRow('Call 1s booked', last7.booked, prev7.booked, 'Cohort denominator'),
       outcomeRow(
-        'Held',
+        'Booked a first call with us',
+        last7.booked,
+        prev7.booked,
+        'Every row below is a slice of this number.'
+      ),
+      outcomeRow(
+        'The call actually happened',
         last7.held,
         prev7.held,
-        'The call happened — still converting for recent days'
+        'Low because most of these calls are still in the future — not because people stopped showing up.'
       ),
-      outcomeRow('No-show', last7.noShow, prev7.noShow, 'CRM stage "Call Missed Several Times"'),
       outcomeRow(
-        'Accepted',
+        'Booked, then never turned up',
+        last7.noShow,
+        prev7.noShow,
+        'They picked a time and did not show up. This is the single biggest place we lose people, and we paid for every one of these bookings.'
+      ),
+      outcomeRow(
+        'We took them on',
         last7.accepted,
         prev7.accepted,
-        'Booking-day cohort; climbs as it ages'
+        'Will keep climbing for weeks as the remaining calls happen. Almost meaningless this early.'
       ),
       outcomeRow(
-        'Lost / disqualified',
+        'Not a fit',
         last7.disqualifiedLost,
         prev7.disqualifiedLost,
-        'Closed out negative'
+        'Either we decided they were not right for us, or they walked away.'
       ),
     ],
   };
 
   const caveats = [
-    `Match rate: ${camp.matchedToCamp}/${camp.accepted} (${pct(matchRate)}) of accepted contractors join to a CAMP team. The acquisition CRM and CAMP share no id, so they join on email; the misses have no Wonderly account. Every CAMP count above is a floor.`,
-    `Acquisition cost is total Facebook spend across ${cohortStart} – ${addDays(cohortEnd, -1)}. This is reproducible but differs from the hand-built 2026-08-06 readout, which used a per-contractor attribution that could not be reconstructed from Meta or Snowflake.`,
-    'Booking-day cohorts keep converting for weeks. The window is already lagged 14 days, but the most recent acceptances may still be climbing.',
-    'Collected revenue share is near zero across every cohort so far — too early, not a negative signal.',
+    `**We can only see ${camp.matchedToCamp} of the ${camp.accepted} contractors.** Our sales system and CAMP were built separately and share no ID number, so the only way to connect a contractor across both is by their email address. That works for ${camp.matchedToCamp} of them. The other ${camp.accepted - camp.matchedToCamp} never created a Wonderly account, so there is genuinely nothing to look up — this is not a computer error. It means every CAMP number here is a **minimum**: the truth can only be better, never worse.`,
+    `**"What we spent" means all our Facebook advertising between ${cohortStart} and ${addDays(cohortEnd, -1)}.** We cannot tell which specific advert brought in which specific contractor, so we take everything we spent during the weeks they signed up and share it out across them. It is a fair average, not a precise per-person cost.`,
+    `**Yesterday's numbers were worked out a different way**, by hand, so they will not line up with these. Going forward every day uses the same method, so day-to-day comparisons are trustworthy even where comparisons with the old report are not.`,
+    `**Expect these numbers to drift upward.** Contractors take weeks to get going, win a job, and pay us. We already ignore anyone who signed up in the last ${COHORT_LAG_DAYS} days for that reason, but even the people in this group are not finished yet.`,
+    `**Almost nobody has paid us yet, and that is normal.** We bill a contractor about 15 days after they sign a job and again around 60 days. Anyone who signed up recently simply has not reached that point.`,
   ];
 
   if (camp.campSucceeding < MIN_SUCCEEDING) {
     caveats.unshift(
-      `Only ${camp.campSucceeding} scored succeeding (below the ${MIN_SUCCEEDING} minimum), so no cost-per-succeeding figure is shown — the denominator is too small to divide into.`
+      `**No cost figure this time.** Only ${camp.campSucceeding} contractors in this group are doing well, and dividing by such a small number gives a wild answer that swings hugely if even one person changes. We show a figure once at least ${MIN_SUCCEEDING} are succeeding.`
     );
   }
 
@@ -462,16 +509,16 @@ export function toSlackSummary(update: AcquisitionUpdate, notionUrl?: string): s
 
   const headline =
     update.costPerSucceeding === null
-      ? `*Cost per succeeding contractor:* maturing — only ${camp.campSucceeding}/${camp.matchedToCamp} scored succeeding`
-      : `*Cost per succeeding contractor:* ${usd(update.costPerSucceeding)} — ${
-          update.meetsGoal ? '✅ within' : '⚠️ over'
-        } the ${usd(GOAL_COST_PER_SUCCEEDING)} goal`;
+      ? `*Ad cost per contractor who works out:* not shown yet — only ${camp.campSucceeding} of ${camp.matchedToCamp} are doing well, too few to divide by`
+      : `*Ad cost per contractor who works out:* ${usd(update.costPerSucceeding)} — ${
+          update.meetsGoal ? '✅ under' : '⚠️ over'
+        } our ${usd(GOAL_COST_PER_SUCCEEDING)} target`;
 
   const lines = [
     `*Growth — acquisition update · ${update.today}*`,
     headline,
-    `${camp.accepted} accepted · ${camp.launchedAds} launched ads · ${camp.campSucceeding} succeeding · ${camp.wonAJob} won a job · ${camp.revshareCollected} collected`,
-    `${update.cohortLabel} · ${usd(update.cohortSpend)} Facebook spend · ${pct(update.matchRate)} matched to CAMP (counts are a floor)`,
+    `Of the ${camp.accepted} contractors we took on ${update.cohortLabel}: ${camp.launchedAds} have ads running, ${camp.campSucceeding} are doing well, ${camp.wonAJob} won a job, ${camp.revshareCollected} have paid us.`,
+    `We spent ${usd(update.cohortSpend)} on ads to get them. We can only track ${camp.matchedToCamp} of the ${camp.accepted} in CAMP, so these are minimums.`,
   ];
 
   if (notionUrl) lines.push(`📄 <${notionUrl}|Full readout>`);

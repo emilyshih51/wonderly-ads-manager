@@ -165,11 +165,14 @@ async function publishToNotion(
     ),
     ...update.tables.flatMap((t) => [
       heading(t.title),
+      // Each note is one or more paragraphs explaining what the table is and why it is framed
+      // this way — the review asked for the reasoning to sit next to the numbers, not below.
+      ...(t.note ?? '').split('\n\n').filter(Boolean).map(paragraph),
       tableBlock({ headers: t.headers, rows: t.rows }),
     ]),
-    heading('How to read this'),
+    heading('Things worth knowing before you trust these numbers'),
     paragraph(
-      `Generated automatically on ${update.today} from Meta spend, the acquisition CRM, and CAMP's lifecycle data. Numbers move day to day as the rolling cohort slides forward.`
+      `Built automatically on ${update.today}. Nothing here is typed in by hand, so it is consistent day to day — but it is only as good as what the two systems can see, and the points below are the places where that matters.`
     ),
     ...update.caveats.map((c) => bullet(c)),
   ];

@@ -1448,13 +1448,14 @@ export default function AutomationsPage() {
                   {config.action_type === 'promote' && (
                     <div>
                       <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
-                        {t('targetAdSet')}{' '}
+                        {t('targetAdSets')}{' '}
                         <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
                           {t('duplicateWinningAdsHere')}
                         </span>
                       </label>
                       <div className="mt-2">
                         <AdSetSearch
+                          multiple
                           value={config.target_adset_id}
                           displayName={config.target_adset_name}
                           onChange={(id, name) =>
@@ -1463,14 +1464,15 @@ export default function AutomationsPage() {
                           placeholder={t('searchForWinnersAdSet')}
                         />
                       </div>
+                      <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
+                        {t('targetAdSetMultiHint')}
+                      </p>
 
                       <label className="mt-4 flex cursor-pointer items-center gap-2.5">
                         <Switch
                           size="sm"
                           checked={config.pause_original}
-                          onCheckedChange={(checked) =>
-                            updateConfig({ pause_original: checked })
-                          }
+                          onCheckedChange={(checked) => updateConfig({ pause_original: checked })}
                         />
                         <span className="text-sm font-medium text-[var(--color-foreground)]">
                           {t('pauseOriginalWinner')}

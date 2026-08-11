@@ -281,6 +281,7 @@ export class SlackService {
       campaignName,
       customMessage,
       duplicatedAdId,
+      duplicatedCount,
       prefix = '',
       datePreset = 'today',
     } = notification;
@@ -340,7 +341,13 @@ export class SlackService {
         duplicatedAdId
       );
 
-      bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
+      if (duplicatedCount && duplicatedCount > 1) {
+        bodySections.push(
+          `Duplicated into ${duplicatedCount} target ad sets: <${dupLink}|View new ad>`
+        );
+      } else {
+        bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
+      }
     }
 
     const header = `${prefix}${actionEmoji} *[${brand}]* ${ruleName}`;

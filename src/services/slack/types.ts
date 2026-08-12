@@ -74,6 +74,11 @@ export interface AutomationNotification {
   customMessage?: string;
   /** Optional ID of a newly created duplicate ad (for promote actions). */
   duplicatedAdId?: string;
+  /**
+   * Optional number of target ad sets the winner was duplicated into. When
+   * greater than 1, the notification reflects the multi-target promotion.
+   */
+  duplicatedCount?: number;
   /** Optional prefix string (used in tests to identify test messages). */
   prefix?: string;
   /** Date preset used to evaluate the rule — drives the Ads Manager deep link date range. */

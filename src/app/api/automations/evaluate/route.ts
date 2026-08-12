@@ -288,6 +288,9 @@ interface EvaluateResult {
   dry_run?: boolean;
   warning?: string;
   duplicated_ad_id?: string;
+  duplicated_ad_ids?: string[];
+  target_adset_count?: number;
+  partial_failure?: Array<{ adset_id: string; error: string }>;
   marked_promoted?: boolean;
   slack_sent?: boolean;
   slack_channel?: string;
@@ -550,39 +553,87 @@ async function evaluateRule(
         if (actionCap) actionCap.executed++;
       } else if (actionType === 'promote') {
         // Default to pausing the original winner (legacy behaviour). Only skip
-        // the pause when pause_original is explicitly set to false.
+        // the pause when pause_original is explicitly set to false. The pause
+        // itself is applied below, once at least one duplication has succeeded,
+        // so a failed promotion never silently pauses a live winner.
         const pauseOriginal =
           actionConfig.pause_original !== false && actionConfig.pause_original !== 'false';
 
-        if (pauseOriginal) {
-          await meta.updateStatus(entityId, 'PAUSED');
-        }
+        // Support duplicating a winner into several target ad sets (across
+        // multiple campaigns). The config stores a comma-separated list; a
+        // single ID remains valid and produces a one-element list.
+        const targetAdSetIds = (actionConfig.target_adset_id ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
 
-        const targetAdSetId = actionConfig.target_adset_id;
+        if (targetAdSetIds.length > 0) {
+          const duplicatedIds: string[] = [];
+          const failedTargets: Array<{ adset_id: string; error: string }> = [];
 
-        if (targetAdSetId) {
-          const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
+          // Duplicate into each target ad set. A failure on one target must not
+          // abort the others, so failures are collected and reported.
+          for (const targetAdSetId of targetAdSetIds) {
+            try {
+              const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
 
-          actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
-          actionResult.duplicated_ad_id = duplicated.id;
+              duplicatedIds.push(duplicated.id);
+            } catch (dupError) {
+              logger.error('Failed to duplicate winner into target ad set', {
+                entityId,
+                entityName,
+                targetAdSetId,
+                error: String(dupError),
+              });
+              failedTargets.push({ adset_id: targetAdSetId, error: String(dupError) });
+            }
+          }
 
-          // Mark the original winner with the promoted prefix so it is visible
-          // in Ads Manager and skipped on future runs. A failure here must not
-          // fail the promotion itself, so it is logged and swallowed.
-          try {
-            await meta.updateName(entityId, addPromotedMarker(entityName));
-            actionResult.marked_promoted = true;
-          } catch (renameError) {
-            logger.warn('Failed to mark original ad as promoted', {
-              entityId,
-              entityName,
-              error: String(renameError),
-            });
+          if (duplicatedIds.length > 0) {
+            // Only pause the original once at least one duplication succeeded,
+            // so a total failure leaves the winner running.
+            if (pauseOriginal) {
+              await meta.updateStatus(entityId, 'PAUSED');
+            }
+
+            actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
+            actionResult.duplicated_ad_ids = duplicatedIds;
+            // Keep the single-value field for backward compatibility (e.g. Slack).
+            actionResult.duplicated_ad_id = duplicatedIds[0];
+            actionResult.target_adset_count = targetAdSetIds.length;
+
+            if (failedTargets.length > 0) {
+              actionResult.partial_failure = failedTargets;
+              actionResult.warning = `Duplicated into ${duplicatedIds.length} of ${targetAdSetIds.length} target ad sets`;
+            }
+
+            // Mark the original winner with the promoted prefix so it is visible
+            // in Ads Manager and skipped on future runs. A failure here must not
+            // fail the promotion itself, so it is logged and swallowed.
+            try {
+              await meta.updateName(entityId, addPromotedMarker(entityName));
+              actionResult.marked_promoted = true;
+            } catch (renameError) {
+              logger.warn('Failed to mark original ad as promoted', {
+                entityId,
+                entityName,
+                error: String(renameError),
+              });
+            }
+          } else {
+            // Every target duplication failed — leave the winner untouched.
+            actionResult.action = 'promotion_failed';
+            actionResult.partial_failure = failedTargets;
+            actionResult.warning = `Failed to duplicate into all ${targetAdSetIds.length} target ad sets`;
           }
         } else {
           actionResult.action = pauseOriginal
             ? 'paused (no target adset for duplication)'
             : 'no action (no target adset for duplication)';
+
+          if (pauseOriginal) {
+            await meta.updateStatus(entityId, 'PAUSED');
+          }
         }
 
         if (actionCap) actionCap.executed++;
@@ -674,6 +725,7 @@ async function evaluateRule(
                   ctr: metrics.ctr,
                 },
                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
+                duplicatedCount: actionResult.duplicated_ad_ids?.length,
                 // Use the campaign name from the insight row so multi-campaign rules
                 // show only the campaign that actually matched, not all configured campaigns.
                 campaignName:

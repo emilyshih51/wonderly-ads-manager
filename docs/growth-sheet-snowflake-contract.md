@@ -58,57 +58,62 @@ user's whole session, page view → submit → booking, or the identity bridge f
 
 ---
 
-## 2. Dev CRM tables — `AIRBYTE.WONDERLY_DEV.*` (Motion CRM via Airbyte)
+## 2. CRM tables — `AIRBYTE.CSM_OPS.*` (Motion CRM via Airbyte)
 
-These provide the current deal stage, the deal→contact→email bridge, and the deal-creation day
-(the reliable booking-day anchor). **Do not drop columns or change the sync.**
+**This is the live source (replaced `AIRBYTE.WONDERLY_DEV.*`).** It holds only Wonderly's own
+sales CRM — one pipeline, clean stages — so stage lookups are exact. These tables provide the
+current deal stage, the deal→contact→email bridge, the deal-creation day, and the loss reason.
+**Do not drop columns or change the sync.**
 
-| Table                 | Columns relied on                                                            |
-| --------------------- | ---------------------------------------------------------------------------- |
-| `CRM_DEALS`           | `ID`, `NAME`, `PIPELINE_STAGE_ID`, `PRIMARY_CONTACT_PERSON_ID`, `CREATED_AT` |
-| `CRM_PIPELINE_STAGES` | `ID`, `NAME` (the stage strings in section 3)                                |
-| `CRM_CONTACT_EMAILS`  | `CONTACT_ID`, `EMAIL`, `IS_PRIMARY`, `DELETED_AT`                            |
-| `CRM_CONTACTS`        | `ID` (deal → contact for name/identity)                                      |
+| Table                 | Columns relied on                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| `CRM_DEALS`           | `ID`, `NAME`, `PIPELINE_STAGE_ID`, `PRIMARY_CONTACT_PERSON_ID`, `CREATED_AT`, `LOSS_REASON_KEY` |
+| `CRM_PIPELINE_STAGES` | `ID`, `NAME`, `TYPE`, `PIPELINE_ID` (see section 3 — logic keys on `TYPE`)                      |
+| `CRM_CONTACT_EMAILS`  | `CONTACT_ID`, `EMAIL`, `IS_PRIMARY`, `DELETED_AT`                                               |
+| `CRM_CONTACTS`        | `ID`, `FIRST_NAME`, `LAST_NAME`, `PHONE_NUMBER` (deal → contact identity)                       |
 
-- `CRM_DEALS.CREATED_AT` = the booking-day anchor (100% coverage; booking a Call 1 creates the
-  deal). Keep it accurate — it drives which cohort a held/no-show/accepted deal lands in.
+- `CRM_DEALS.CREATED_AT` anchors the booking cohort for booked deals. `CRM_DEALS.LOSS_REASON_KEY`
+  separates real post-call losses from no-show/junk drops (it gates HELD — see section 3).
 - `CRM_CONTACT_EMAILS.EMAIL` (`IS_PRIMARY` preferred) = the deal's email, bridged to marketing.
 
 ---
 
-## 3. Pipeline stages — how they're keyed (name vs. type)
+## 3. Pipeline stages — keyed on `TYPE`, not name
 
-All acquisition-pipeline logic is scoped to **`PIPELINE_ID = pip_019c0568f48a7a0c8d41d87efeafadd4`**
-(Wonderly's own contractor-acquisition pipeline). `CRM_PIPELINE_STAGES` holds 1000+ _other_
-pipelines (every contractor's job pipeline) that reuse these stage names, so the scope is
-required — e.g. "Call Missed Several Times" matches 545 deals by name across all pipelines but
-only 527 in the acquisition pipeline (18 are contractor job deals). **Don't delete or rebuild
-this pipeline; its id is the anchor.**
+All logic keys on the stage **`TYPE`** (a stable enum), scoped to
+**`PIPELINE_ID = pip_019c0568f48a7a0c8d41d87efeafadd4`**. `TYPE` survives display renames, so a
+stage can be renamed freely — only changing its _type_ would break a metric. In CSM_OPS every
+type below is unique within the pipeline, so the mapping is exact:
 
-**No-show is keyed on stage `TYPE`, not name** — `TYPE = 'meeting_no_show'` (scoped to the
-pipeline). `TYPE` is a semantic enum that survives display renames, so "Call Missed Several
-Times" can be renamed freely; only changing its _type_ would break it.
+| Stage (current name) | `TYPE`                      | Used for                              |
+| -------------------- | --------------------------- | ------------------------------------- |
+| Call 1 Scheduled     | `meeting_scheduled`         | booked signal                         |
+| Rescheduled          | `rescheduled`               | booked signal (call not yet held)     |
+| No Show              | `meeting_no_show`           | **NO-SHOW**                           |
+| Pending Offer Out    | `quote_and_invoice_sent`    | **HELD** (offer made)                 |
+| Accepted             | `quote_signed` (closed_won) | **ACCEPTED** (terminal) + HELD        |
+| DQ                   | `disqualified`              | HELD _only if_ booked + a loss reason |
+| Lost                 | `lost`                      | HELD _only if_ booked + a loss reason |
 
-Everything else is still **name-matched** (their types are either generic `custom` or shared
-with another stage, so type isn't a safe key). Renaming any of these silently breaks the metric
-— coordinate before touching them. Case- and punctuation-sensitive:
+**Metric definitions (cohort-keyed by booking day):**
 
-- **Booked / booking signal:** `Call 1 Scheduled` (only referenced as the stage-change event
-  `to_stage_name`; the booked _count_ comes from `BOOKING_COMPLETE`, not this stage)
-- **Accepted milestone:** `Accepted` — ⚠️ there are **two** "Accepted" stages in the pipeline
-  (types `meeting_finished` and a leftover `custom`); name-matching catches both. `TYPE` can't be
-  used because `meeting_finished` is also "Call 2 Scheduled (yet to pay)".
-- **Held / post-call stages** (any of these = the call was held):
-  `Reviewing Contract`, `On-site Scheduled`, `Quote & Contract Sent`,
-  `Quote & Contract Signed`, `Won - Paid`, `Churned`,
-  `Disqualified or Lost`, `Disqualified Lead`, `DQ - Drip`
-- **Disqualified subset** (also counted as held): `Disqualified or Lost`, `Disqualified Lead`,
-  `DQ - Drip`
+- **NO-SHOW** = current stage type `meeting_no_show`.
+- **ACCEPTED** = current stage type `quote_signed` (Accepted is a terminal closed_won stage, so
+  current stage is authoritative).
+- **BOOKED** = a real Call-1 signal (marketing `BOOKING_COMPLETE`, the `Call 1 Scheduled`
+  stage-change event, or a manual override) **or** a current stage only booked deals reach
+  (`meeting_scheduled` / `rescheduled` / `meeting_no_show` / `quote_and_invoice_sent` /
+  `quote_signed`). DQ and Lost need an explicit booking signal — a deal can be disqualified
+  without ever booking.
+- **HELD** = a **booked** deal that either reached an offer/acceptance
+  (`quote_and_invoice_sent` / `quote_signed`) **or** is `disqualified` / `lost` **with a
+  `LOSS_REASON_KEY` set**. A loss reason means a human dispositioned the deal after a call; booked
+  DQ/Lost with _no_ reason are no-show fallout and are **not** counted as held. (This avoids
+  inflating held with no-show-then-DQ deals — held ≈ no-show, ~620 vs ~670 over the last 120d.)
 
-> Stable stage `TYPE`s available if you ever want to convert more (all unique within the
-> pipeline): `meeting_scheduled`, `meeting_no_show`, `on_site_scheduled`,
-> `quote_and_invoice_sent`, `quote_signed`, `lost`, `disqualified`. Avoid keying on
-> `meeting_finished`, `invoice_paid`, and `custom` — those are shared or generic.
+> The Amplitude `WONDERLY_SALES__DEAL__STAGE_CHANGE` events only reliably fire for `Call 1
+Scheduled` and `Accepted` (not No Show / DQ / Lost / Pending Offer), so they're used **only**
+> for the Call 1 Scheduled booking day. Every outcome is read from the CRM current stage.
 
 ---
 

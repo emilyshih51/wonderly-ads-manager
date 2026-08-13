@@ -23,23 +23,47 @@ import type { DailyMarketingRow } from '@/lib/marketing-daily';
 const EVENTS_TABLE = 'AMPLITUDE.AMPLITUDE.EVENTS_766268';
 
 /**
- * Wonderly's own contractor-acquisition pipeline in the dev CRM. The `CRM_PIPELINE_STAGES`
- * table holds every team's pipeline (1000+ contractor job pipelines share stage names like
- * "Call Missed Several Times"), so any stage lookup that scans all deals MUST scope to this
- * pipeline or it pulls in contractor deals — e.g. no-show by name alone counts 545 deals, but
- * 18 of those are contractor job deals in a same-named stage; scoped to this pipeline it's 527.
- * The `pip_…` id is stable across stage renames (unlike NAME), which is why we anchor to it.
+ * Wonderly's contractor-acquisition pipeline in the CSM Ops CRM (`AIRBYTE.CSM_OPS.*`). This
+ * schema holds only Wonderly's own sales CRM (one pipeline, 9 clean stages), unlike the retired
+ * `WONDERLY_DEV.*` which mixed in 1000+ contractor job pipelines. Every stage lookup still scopes
+ * to this pipeline id (stable across stage renames, unlike NAME) so a rename can't break a metric.
  */
 const ACQUISITION_PIPELINE_ID = 'pip_019c0568f48a7a0c8d41d87efeafadd4';
 
 /**
- * Stage `TYPE` for the no-show stage ("Call Missed Several Times") within the acquisition
- * pipeline. `TYPE` is a semantic enum that survives stage renames, so keying on it (scoped to
- * the pipeline, where it's unique) is more robust than matching the display NAME. The parallel
- * meeting types are `meeting_scheduled` (Call 1 Scheduled) and `meeting_finished` (used by both
- * Accepted and "Call 2 Scheduled (yet to pay)", so NOT unique — Accepted stays name-keyed).
+ * Sales stages are keyed on their semantic `TYPE` (a stable enum) rather than display NAME, which
+ * gets renamed. In the CSM_OPS pipeline every type is unique, so these are exact:
+ *   meeting_scheduled = Call 1 Scheduled · rescheduled = Rescheduled · meeting_no_show = No Show ·
+ *   quote_and_invoice_sent = Pending Offer Out · quote_signed = Accepted (closed_won) ·
+ *   disqualified = DQ · lost = Lost.
  */
 const NO_SHOW_STAGE_TYPE = 'meeting_no_show';
+const ACCEPTED_STAGE_TYPE = 'quote_signed';
+
+/**
+ * Stage types that only a *booked* deal reaches — used as a fallback "was booked" signal for
+ * deals with no marketing BOOKING_COMPLETE / Call 1 Scheduled event (e.g. outbound). DQ and Lost
+ * are deliberately excluded: a deal can be disqualified without ever booking a call, so those need
+ * an explicit booking signal to count.
+ */
+const BOOKED_STAGE_TYPES = [
+  'meeting_scheduled',
+  'rescheduled',
+  'meeting_no_show',
+  'quote_and_invoice_sent',
+  'quote_signed',
+];
+
+/** Post-call stages where the offer was made or accepted (unambiguously "held"). */
+const OFFER_STAGE_TYPES = ['quote_and_invoice_sent', 'quote_signed'];
+
+/** Terminal negative stages (DQ / Lost). Counted as "held" only when booked AND a loss reason is set. */
+const DQ_LOST_STAGE_TYPES = ['disqualified', 'lost'];
+
+/** Render a string array as a SQL IN-list literal, e.g. ['a','b'] → `'a','b'`. */
+function sqlIn(types: string[]): string {
+  return types.map((t) => `'${t}'`).join(',');
+}
 
 /**
  * Timezone the daily buckets are cut on. Amplitude events land in UTC, but the
@@ -291,20 +315,15 @@ export class SnowflakeService {
                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_organic
          FROM mkt GROUP BY day
        ),
-       -- One row per sales deal. ACCEPTED and HELD are COHORT metrics keyed to the deal's
-       -- booking day: for a given day's bookings, how many of those exact leads eventually
-       -- held their call / reached Accepted. Recent days read low until the cohort matures.
-       -- booked_day here is the Call 1 Scheduled event; the real booking day is resolved
-       -- in deal2 (first BOOKING_COMPLETE, else this, else override).
-       deal AS (
+       -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
+       -- day's bookings, how many eventually held / were accepted / no-showed (recent days read low
+       -- until the cohort matures). They're read from the CSM_OPS CRM current stage TYPE below.
+       -- The Amplitude stage-change events only reliably fire for Call 1 Scheduled and Accepted
+       -- (not No Show / DQ / Lost / Pending Offer), so we use them ONLY for the Call 1 Scheduled
+       -- booking day — a booking signal for deals that later moved off a booked-implying stage.
+       ev AS (
          SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
-           -- "Held" milestone: ever reaching a post-call stage means the Call 1 happened
-           -- (stays true even if the deal is later disqualified).
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
-                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN 1 ELSE 0 END) AS ever_held_event
+           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS ev_booked_day
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
@@ -315,17 +334,9 @@ export class SnowflakeService {
        em AS (
          SELECT CONTACT_ID,
            LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
-         FROM AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS
+         FROM AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS
          WHERE DELETED_AT IS NULL
          GROUP BY CONTACT_ID
-       ),
-       -- Deal → primary email, then email → first BOOKING_COMPLETE (the true booking
-       -- action). BOOKING_COMPLETE carries no email, so it's bridged through the
-       -- amplitude_ids that submitted the form under that email.
-       dealmail AS (
-         SELECT cd.ID AS deal_id, em.join_email AS email
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
-         JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
        ),
        sub_amp AS (
          SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, AMPLITUDE_ID
@@ -343,25 +354,11 @@ export class SnowflakeService {
        email_bc AS (
          SELECT s.email, MIN(b.bc) AS bc FROM sub_amp s JOIN bc_amp b ON b.AMPLITUDE_ID = s.AMPLITUDE_ID GROUP BY 1
        ),
-       -- CRM deal-creation day (100% coverage) — booking the Call 1 is what creates the deal,
-       -- so this is the booked day and is immune to the late re-book that can pollute the
-       -- Call 1 Scheduled event.
+       -- CRM deal-creation day. In CSM_OPS a deal is created for every lead (not just booked ones),
+       -- so created_day only anchors the booking cohort for deals already gated as booked below.
        crt AS (
          SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS
-       ),
-       -- Booked day per deal: the earliest booking signal — first BOOKING_COMPLETE (bridged
-       -- by email) or the CRM deal-creation day, whichever is earlier — falling back to the
-       -- Call 1 Scheduled event, unless the manual override tab supplies one (which wins).
-       deal2 AS (
-         SELECT d.deal_id,
-           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), d.booked_day) AS booked_day,
-           d.ever_accepted, d.ever_held_event
-         FROM deal d
-         LEFT JOIN ovr o ON o.deal_id = d.deal_id
-         LEFT JOIN crt ON crt.deal_id = d.deal_id
-         LEFT JOIN dealmail dm ON dm.deal_id = d.deal_id
-         LEFT JOIN email_bc ebc ON ebc.email = dm.email
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS
        ),
        -- Marketing source per email, from the form-submit events (same fallback chain
        -- as the call1_deals SOURCE column): event utm -> user utm -> initial utm ->
@@ -387,78 +384,60 @@ export class SnowflakeService {
          SELECT email, MAX_BY(source, CASE WHEN source IS NOT NULL THEN EVENT_TIME END) AS utm_source
          FROM src_raw GROUP BY 1
        ),
-       -- One row per deal with its stage-derived outcomes and a channel flag, so held,
-       -- accepted, and no-show can be split FB vs organic (organic = ALL − FB, i.e. every
-       -- deal whose Call 1 wasn't Facebook-attributed, including the unattributed ones).
+       -- One row per acquisition-pipeline CRM deal: current stage TYPE, loss reason, booking day,
+       -- booking signals, and a channel flag. Everything downstream keys on the stable stage TYPE
+       -- (rename-proof), scoped to Wonderly's own pipeline.
        ds AS (
-         SELECT d.booked_day AS day,
-           -- Accepted = ever fired the "Accepted" event (a milestone — stays true even if the
-           -- deal later churned / dropped), OR is currently in a post-acceptance stage that
-           -- skipped the event (Reviewing Contract / Quote sent / On-site / Signed / Won).
-           CASE WHEN d.ever_accepted = 1
-                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
-                THEN 1 ELSE 0 END AS accepted,
-           -- Held = the deal moved PAST "Call 1 Scheduled" to any real disposition (so the
-           -- call happened), whether that's positive or a disqualification. It is NOT held
-           -- if it's still sitting in "Call 1 Scheduled" (call not yet held / not updated)
-           -- or a no-show ("Call Missed Several Times"). Counted via a positive stage-change
-           -- event OR a current CRM stage that is past the scheduled call.
-           CASE WHEN d.ever_held_event = 1
-                OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
-                THEN 1 ELSE 0 END AS held,
-           CASE WHEN st.NAME = 'Call Missed Several Times' THEN 1 ELSE 0 END AS no_show,
-           CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS disqualified_lost,
-           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
-         FROM deal2 d
-         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID = d.deal_id
-         LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
-         LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
-         LEFT JOIN src ON src.email = em.join_email
-         WHERE d.booked_day IS NOT NULL
-           AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
-           AND NOT ${excludedDealName('cd.NAME')}
-       ),
-       -- Cohort aggregate keyed by booking day: of the deals booked that day, how many
-       -- eventually held / were accepted (with the FB/organic split), plus no-shows and
-       -- disqualifications.
-       s AS (
-         SELECT day,
-           SUM(held) AS held,
-           SUM(held * is_fb) AS held_fb,
-           SUM(held * (1 - is_fb)) AS held_organic,
-           SUM(accepted) AS accepted,
-           SUM(accepted * is_fb) AS accepted_fb,
-           SUM(accepted * (1 - is_fb)) AS accepted_organic,
-           SUM(disqualified_lost) AS disqualified_lost
-         FROM ds GROUP BY 1
-       ),
-       -- NO_SHOW is enumerated straight from CRM_DEALS (current stage "Call Missed Several
-       -- Times"), NOT the stage-change events: that transition fires no event, so the
-       -- event-based set (deal2/ds) misses ~75% of no-shows (~118 of ~469). Still COHORT-keyed
-       -- by booking day — each deal's marketing BOOKING_COMPLETE day (email bridge), else CRM
-       -- creation day, else a manual override — and split FB/organic by the same email→utm
-       -- bridge (unattributed → organic).
-       nsc AS (
-         SELECT cd.ID AS deal_id,
-           COALESCE(o.booked_day, ebc.bc, crt.created_day) AS day,
-           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
-         JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         SELECT
+           -- Booking day (cohort key): manual override, else the earlier of the BOOKING_COMPLETE
+           -- bridge and the CRM creation day, else the Call 1 Scheduled event.
+           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), ev.ev_booked_day) AS day,
+           st.TYPE AS stage_type,
+           NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
+           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
+           -- Booked = a genuine Call-1 signal (marketing BOOKING_COMPLETE, the Call 1 Scheduled
+           -- event, or a manual override) OR a current stage only booked deals reach. This gates
+           -- DQ/Lost so pre-call junk leads (no booking signal) never count as held.
+           CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR ev.ev_booked_day IS NOT NULL
+                     OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
+                THEN 1 ELSE 0 END AS booked
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
+           ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+         LEFT JOIN ev ON ev.deal_id = cd.ID
          LEFT JOIN ovr o ON o.deal_id = cd.ID
          LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
          LEFT JOIN email_bc ebc ON ebc.email = em.join_email
          LEFT JOIN crt ON crt.deal_id = cd.ID
          LEFT JOIN src ON src.email = em.join_email
-         -- No-show keyed on the stable stage TYPE within Wonderly's acquisition pipeline, not the
-         -- display NAME (which can be renamed and is shared by 1000+ contractor job pipelines).
-         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}' AND st.TYPE = '${NO_SHOW_STAGE_TYPE}'
+         WHERE cd.DELETED_AT IS NULL
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
            AND NOT ${excludedDealName('cd.NAME')}
        ),
-       nscs AS (
-         SELECT day, COUNT(*) AS no_show,
-           SUM(is_fb) AS no_show_fb, SUM(1 - is_fb) AS no_show_organic
-         FROM nsc WHERE day IS NOT NULL GROUP BY day
+       -- Cohort aggregate keyed by booking day (FB/organic split). Definitions:
+       --   NO-SHOW  = current stage No Show (meeting_no_show).
+       --   ACCEPTED = current stage Accepted (quote_signed — a terminal closed_won).
+       --   HELD     = booked deals that reached an offer / acceptance (Pending Offer Out, Accepted)
+       --              OR a DQ/Lost that carries a LOSS_REASON_KEY (a human post-call disposition).
+       --              Booked DQ/Lost with no loss reason are no-show fallout, NOT held.
+       s AS (
+         SELECT day,
+           SUM(held) AS held, SUM(held * is_fb) AS held_fb, SUM(held * (1 - is_fb)) AS held_organic,
+           SUM(accepted) AS accepted, SUM(accepted * is_fb) AS accepted_fb, SUM(accepted * (1 - is_fb)) AS accepted_organic,
+           SUM(no_show) AS no_show, SUM(no_show * is_fb) AS no_show_fb, SUM(no_show * (1 - is_fb)) AS no_show_organic,
+           SUM(disqualified_lost) AS disqualified_lost
+         FROM (
+           SELECT day, is_fb,
+             CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END AS accepted,
+             CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' THEN 1 ELSE 0 END AS no_show,
+             CASE WHEN booked = 1 AND (
+                        stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
+                        OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
+                      ) THEN 1 ELSE 0 END AS held,
+             CASE WHEN booked = 1 AND stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) THEN 1 ELSE 0 END AS disqualified_lost
+           FROM ds WHERE day IS NOT NULL
+         )
+         GROUP BY day
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -472,14 +451,14 @@ export class SnowflakeService {
          COALESCE(s.accepted,0) AS accepted,
          COALESCE(s.accepted_fb,0) AS accepted_fb,
          COALESCE(s.accepted_organic,0) AS accepted_organic,
-         COALESCE(nscs.no_show,0) AS no_show,
-         COALESCE(nscs.no_show_fb,0) AS no_show_fb,
-         COALESCE(nscs.no_show_organic,0) AS no_show_organic,
+         COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.no_show_fb,0) AS no_show_fb,
+         COALESCE(s.no_show_organic,0) AS no_show_organic,
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
          COALESCE(s.held_fb,0) AS held_fb,
          COALESCE(s.held_organic,0) AS held_organic
-       FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN nscs ON f.day = nscs.day
+       FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
       [overridesJson(bookingOverrides), -days, -days, -days, -days]
     );
@@ -605,8 +584,8 @@ export class SnowflakeService {
        ),
        em AS (
          SELECT cd.ID AS deal_id, LOWER(ce.EMAIL) AS email
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
-         JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS ce
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS ce
            ON ce.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID AND ce.IS_PRIMARY
        ),
        team AS (
@@ -777,25 +756,26 @@ export class SnowflakeService {
            AND EVENT_PROPERTIES:deal_id IS NOT NULL
          GROUP BY 1
        ),
-       -- Base deal set: the event-based deals UNION all deals currently in "Call Missed
-       -- Several Times". That stage fires no stage-change event, so ~75% of no-shows are
-       -- absent from the event set (de) — adding them here makes call1_deals' no-show match
-       -- Daily Metrics. Added deals have NULL de.* (held/accepted fall to current stage = 0).
+       -- Base deal set: the event-based deals UNION all deals currently in an outcome stage
+       -- (No Show / offer / accepted / DQ / Lost). Most of those fire no stage-change event, so
+       -- they'd be absent from the event set de — adding them keeps call1_deals reconciled with
+       -- Daily Metrics. Added deals have NULL de.* (event-only columns like HELD_DATE fall to '').
        funnel_deals AS (
          SELECT deal_id FROM de
          UNION
          SELECT cd.ID AS deal_id
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS cd
-         JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
-         -- No-show keyed on stable stage TYPE + acquisition pipeline (see getDailyMarketing).
-         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}' AND st.TYPE = '${NO_SHOW_STAGE_TYPE}'
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
+         -- Keyed on stable stage TYPE + acquisition pipeline (see getDailyMarketing).
+         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+           AND st.TYPE IN (${sqlIn([NO_SHOW_STAGE_TYPE, ...OFFER_STAGE_TYPES, ...DQ_LOST_STAGE_TYPES])})
        ),
        em AS (
          SELECT CONTACT_ID,
            MAX(CASE WHEN IS_PRIMARY THEN EMAIL END) AS primary_email,
            MAX(EMAIL) AS any_email,
            LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
-         FROM AIRBYTE.WONDERLY_DEV.CRM_CONTACT_EMAILS
+         FROM AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS
          WHERE DELETED_AT IS NULL
          GROUP BY CONTACT_ID
        ),
@@ -822,7 +802,7 @@ export class SnowflakeService {
        -- truest booked day, immune to the late re-book that can pollute Call 1 Scheduled.
        crt AS (
          SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
-         FROM AIRBYTE.WONDERLY_DEV.CRM_DEALS
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS
        ),
        -- Marketing source per email, from the form-submit events (which carry the
        -- email the person typed). The source can live in several places, so we fall
@@ -871,14 +851,17 @@ export class SnowflakeService {
          COALESCE(cd.NAME,'') AS DEAL_NAME,
          TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
-         CASE WHEN de.ever_held = 1
-              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid','Churned','Disqualified or Lost','Disqualified Lead','DQ - Drip')
+         -- Held / Accepted / No-show / DQ keyed on the CRM current stage TYPE, matching Daily
+         -- Metrics. Held = booked deal that reached an offer/acceptance OR a DQ/Lost carrying a
+         -- loss reason (a human post-call disposition); booked = a real Call-1 signal or a stage
+         -- only booked deals reach.
+         CASE WHEN (o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR de.booked_day IS NOT NULL OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)}))
+              AND (st.TYPE IN (${sqlIn(OFFER_STAGE_TYPES)})
+                   OR (st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND NULLIF(cd.LOSS_REASON_KEY,'') IS NOT NULL))
               THEN 1 ELSE 0 END AS HELD,
-         CASE WHEN de.ever_accepted = 1
-              OR st.NAME IN ('Accepted','Reviewing Contract','On-site Scheduled','Quote & Contract Sent','Quote & Contract Signed','Won - Paid')
-              THEN 1 ELSE 0 END AS ACCEPTED,
-         CASE WHEN st.NAME='Call Missed Several Times' THEN 1 ELSE 0 END AS NO_SHOW,
-         CASE WHEN st.NAME IN ('Disqualified or Lost','Disqualified Lead','DQ - Drip') THEN 1 ELSE 0 END AS DISQUALIFIED,
+         CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END AS ACCEPTED,
+         CASE WHEN st.TYPE = '${NO_SHOW_STAGE_TYPE}' THEN 1 ELSE 0 END AS NO_SHOW,
+         CASE WHEN st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) THEN 1 ELSE 0 END AS DISQUALIFIED,
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,
          COALESCE(ct.PHONE_NUMBER,'') AS PHONE,
@@ -891,9 +874,9 @@ export class SnowflakeService {
        FROM funnel_deals fd
        LEFT JOIN de ON de.deal_id = fd.deal_id
        LEFT JOIN ovr o ON o.deal_id = fd.deal_id
-       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_DEALS cd ON cd.ID=fd.deal_id
-       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
-       LEFT JOIN AIRBYTE.WONDERLY_DEV.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
+       LEFT JOIN AIRBYTE.CSM_OPS.CRM_DEALS cd ON cd.ID=fd.deal_id
+       LEFT JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
+       LEFT JOIN AIRBYTE.CSM_OPS.CRM_CONTACTS ct ON ct.ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN em ON em.CONTACT_ID=cd.PRIMARY_CONTACT_PERSON_ID
        LEFT JOIN crt ON crt.deal_id=fd.deal_id
        LEFT JOIN email_bc ebc ON ebc.email=em.join_email

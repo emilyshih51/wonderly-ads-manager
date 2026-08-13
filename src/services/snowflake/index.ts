@@ -388,6 +388,13 @@ export class SnowflakeService {
            -- When the deal entered its current stage — used to drop premature "No Show"s (a deal
            -- can't no-show a call that hasn't happened; calls are never booked same-day).
            CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date AS stage_entered_day,
+           -- Rank an Accepted deal among that contractor's Accepted deals (earliest first). CSM_OPS
+           -- can create a second phantom "Accepted" deal for an already-accepted contractor; only
+           -- rank 1 counts, so a contractor is accepted once (nulls keyed by deal id → always 1).
+           ROW_NUMBER() OVER (
+             PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, cd.ID) END
+             ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), cd.ID
+           ) AS accept_rn,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
            -- Booked = a genuine booking signal (marketing BOOKING_COMPLETE or a manual override) OR
            -- a current stage only booked deals reach. This gates DQ/Lost so pre-call junk leads
@@ -421,12 +428,15 @@ export class SnowflakeService {
            SUM(disqualified_lost) AS disqualified_lost
          FROM (
            SELECT day, is_fb,
-             CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END AS accepted,
+             -- Accepted once per contractor (rank-1 Accepted deal); duplicate phantom acceptances
+             -- for the same contractor are dropped.
+             CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
              -- No-show only counts once the call could have happened: drop deals that entered No
              -- Show the SAME day they booked (premature — calls are never booked same-day). Keep
              -- deals with an unknown stage-entered date (don't drop a legit no-show for a null ts).
              CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' AND (stage_entered_day IS NULL OR stage_entered_day > day) THEN 1 ELSE 0 END AS no_show,
-             CASE WHEN booked = 1 AND (
+             -- Held excludes duplicate acceptances too (a phantom re-accept isn't a separate call).
+             CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) AND (
                         stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
                         OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
                       ) THEN 1 ELSE 0 END AS held,
@@ -883,6 +893,15 @@ export class SnowflakeService {
            st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
            OR o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
          )
+       -- Drop duplicate phantom Accepted deals for a contractor already accepted (keep the
+       -- earliest); a re-created "Accepted" deal must not double-count. Matches Daily Metrics.
+       QUALIFY NOT (
+         st.TYPE = '${ACCEPTED_STAGE_TYPE}'
+         AND ROW_NUMBER() OVER (
+           PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, fd.deal_id) END
+           ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), fd.deal_id
+         ) > 1
+       )
        ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) DESC`,
       // Binds: overrides JSON, the -days window for funnel_deals, then for src_raw.
       [overridesJson(bookingOverrides), -days, -days]

@@ -20,11 +20,15 @@ only inputs **not** in Snowflake — they come from the Meta Marketing API (ad a
 | Qualified form | `MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED` |
 | Call 1 booked  | `MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE` |
 
-### 1b. Sales pipeline event (drives held / no-show / accepted / booking day)
+### 1b. Sales pipeline event (used only for the Call 1 Scheduled booking day)
 
 | Purpose                | `EVENT_TYPE`                         |
 | ---------------------- | ------------------------------------ |
 | Deal stage transitions | `WONDERLY_SALES__DEAL__STAGE_CHANGE` |
+
+Held / no-show / accepted are **not** read from this event anymore (it doesn't reliably fire for
+those stages) — they come from the CRM current stage (sections 2–3). The event supplies only the
+`Call 1 Scheduled` booking day.
 
 ### 1c. Properties that MUST keep firing on those events
 
@@ -48,13 +52,13 @@ user's whole session, page view → submit → booking, or the identity bridge f
 **On the sales stage-change event** (`WONDERLY_SALES__DEAL__STAGE_CHANGE`):
 
 - `EVENT_PROPERTIES:deal_id` — required; the key that joins to the CRM deal.
-- `EVENT_PROPERTIES:to_stage_name` — the destination stage; **must exactly match** the stage
-  names in section 3.
+- `EVENT_PROPERTIES:to_stage_name` — only the `Call 1 Scheduled` value is used (for the booking
+  day). Other outcomes are read from the CRM stage, so this event's other values don't matter.
 - `EVENT_TIME` — bucketed to `America/Los_Angeles` for the daily grain.
 
-> ⚠️ Known gap engineers should be aware of: the **"Call Missed Several Times"** transition
-> fires **no** stage-change event. No-shows are therefore read straight from the CRM (section 2),
-> not from this event. Keep that stage name stable in the CRM.
+> ⚠️ This event does **not** reliably fire for No Show / DQ / Lost / Pending Offer, which is
+> exactly why held / no-show / accepted are read from the CRM current stage (sections 2–3) and
+> keyed on the stable stage `TYPE` rather than these events or display names.
 
 ---
 

@@ -20,15 +20,11 @@ only inputs **not** in Snowflake — they come from the Meta Marketing API (ad a
 | Qualified form | `MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED` |
 | Call 1 booked  | `MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE` |
 
-### 1b. Sales pipeline event (used only for the Call 1 Scheduled booking day)
+### 1b. Sales pipeline event — no longer used
 
-| Purpose                | `EVENT_TYPE`                         |
-| ---------------------- | ------------------------------------ |
-| Deal stage transitions | `WONDERLY_SALES__DEAL__STAGE_CHANGE` |
-
-Held / no-show / accepted are **not** read from this event anymore (it doesn't reliably fire for
-those stages) — they come from the CRM current stage (sections 2–3). The event supplies only the
-`Call 1 Scheduled` booking day.
+The `WONDERLY_SALES__DEAL__STAGE_CHANGE` event is **not used at all** anymore. It fires for too
+few stages to be reliable, so held / no-show / accepted / booked and the acceptance date all come
+from the `AIRBYTE.CSM_OPS.*` CRM (sections 2–3). Nothing in the sheet depends on this event.
 
 ### 1c. Properties that MUST keep firing on those events
 
@@ -49,16 +45,8 @@ user's whole session, page view → submit → booking, or the identity bridge f
   `USER_PROPERTIES:utm_medium`, `USER_PROPERTIES:utm_content`,
   `USER_PROPERTIES:initial_referrer`, `USER_PROPERTIES:referrer`.
 
-**On the sales stage-change event** (`WONDERLY_SALES__DEAL__STAGE_CHANGE`):
-
-- `EVENT_PROPERTIES:deal_id` — required; the key that joins to the CRM deal.
-- `EVENT_PROPERTIES:to_stage_name` — only the `Call 1 Scheduled` value is used (for the booking
-  day). Other outcomes are read from the CRM stage, so this event's other values don't matter.
-- `EVENT_TIME` — bucketed to `America/Los_Angeles` for the daily grain.
-
-> ⚠️ This event does **not** reliably fire for No Show / DQ / Lost / Pending Offer, which is
-> exactly why held / no-show / accepted are read from the CRM current stage (sections 2–3) and
-> keyed on the stable stage `TYPE` rather than these events or display names.
+The sales stage-change event carries no required properties for the sheet — it isn't used (§1b).
+All sales outcomes come from the CRM (sections 2–3).
 
 ---
 
@@ -69,12 +57,12 @@ sales CRM — one pipeline, clean stages — so stage lookups are exact. These t
 current deal stage, the deal→contact→email bridge, the deal-creation day, and the loss reason.
 **Do not drop columns or change the sync.**
 
-| Table                 | Columns relied on                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| `CRM_DEALS`           | `ID`, `NAME`, `PIPELINE_STAGE_ID`, `PRIMARY_CONTACT_PERSON_ID`, `CREATED_AT`, `LOSS_REASON_KEY` |
-| `CRM_PIPELINE_STAGES` | `ID`, `NAME`, `TYPE`, `PIPELINE_ID` (see section 3 — logic keys on `TYPE`)                      |
-| `CRM_CONTACT_EMAILS`  | `CONTACT_ID`, `EMAIL`, `IS_PRIMARY`, `DELETED_AT`                                               |
-| `CRM_CONTACTS`        | `ID`, `FIRST_NAME`, `LAST_NAME`, `PHONE_NUMBER` (deal → contact identity)                       |
+| Table                 | Columns relied on                                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `CRM_DEALS`           | `ID`, `NAME`, `PIPELINE_STAGE_ID`, `PRIMARY_CONTACT_PERSON_ID`, `CREATED_AT`, `PIPELINE_STAGE_ENTERED_AT`, `LOSS_REASON_KEY` |
+| `CRM_PIPELINE_STAGES` | `ID`, `NAME`, `TYPE`, `PIPELINE_ID` (see section 3 — logic keys on `TYPE`)                                                   |
+| `CRM_CONTACT_EMAILS`  | `CONTACT_ID`, `EMAIL`, `IS_PRIMARY`, `DELETED_AT`                                                                            |
+| `CRM_CONTACTS`        | `ID`, `FIRST_NAME`, `LAST_NAME`, `PHONE_NUMBER` (deal → contact identity)                                                    |
 
 - `CRM_DEALS.CREATED_AT` anchors the booking cohort for booked deals. `CRM_DEALS.LOSS_REASON_KEY`
   separates real post-call losses from no-show/junk drops (it gates HELD — see section 3).
@@ -115,9 +103,11 @@ type below is unique within the pipeline, so the mapping is exact:
   DQ/Lost with _no_ reason are no-show fallout and are **not** counted as held. (This avoids
   inflating held with no-show-then-DQ deals — held ≈ no-show, ~620 vs ~670 over the last 120d.)
 
-> The Amplitude `WONDERLY_SALES__DEAL__STAGE_CHANGE` events only reliably fire for `Call 1
-Scheduled` and `Accepted` (not No Show / DQ / Lost / Pending Offer), so they're used **only**
-> for the Call 1 Scheduled booking day. Every outcome is read from the CRM current stage.
+> **Booking day** (the cohort key) = manual override, else the earlier of the marketing
+> `BOOKING_COMPLETE` bridge and the deal's `CREATED_AT`. The **acceptance date** (for the
+> succeeding-contractor P&L window) = `PIPELINE_STAGE_ENTERED_AT`, falling back to `CREATED_AT`
+> (the CRM has no dedicated accept date — `CLOSE_TIME` is empty). No Amplitude stage-change events
+> are involved anywhere.
 
 ---
 

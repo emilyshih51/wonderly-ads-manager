@@ -1,10 +1,11 @@
 /**
  * SnowflakeService — reads the daily marketing funnel from the Snowflake data share.
  *
- * Wonderly's Amplitude events land in `AMPLITUDE.AMPLITUDE.EVENTS_766268`, and the
- * sales pipeline in the same table under `WONDERLY_SALES__DEAL__STAGE_CHANGE`. This
- * service runs ONE aggregation query per cron run: Snowflake does the counting over
- * ~10M rows and returns ~35 daily rows, so the app never moves raw events around.
+ * Wonderly's Amplitude marketing-funnel events land in `AMPLITUDE.AMPLITUDE.EVENTS_766268`;
+ * sales outcomes (held / no-show / accepted) come from the `AIRBYTE.CSM_OPS.*` CRM current
+ * stage TYPE, not the Amplitude `WONDERLY_SALES__DEAL__STAGE_CHANGE` events (which fire for too
+ * few stages to be reliable). This service runs ONE aggregation query per cron run: Snowflake
+ * does the counting and returns ~35 daily rows, so the app never moves raw events around.
  *
  * Meta spend is NOT read here — it comes from the Meta Marketing API (the
  * Facebook → Fivetran connector that would land spend in Snowflake is dead). The
@@ -248,8 +249,8 @@ export class SnowflakeService {
    * session carried a Facebook signal — `utm_source` facebook/ig OR an `fbclid`
    * (harder to fool than utm alone); everything else is `organic`.
    *
-   * Sales stages come from `WONDERLY_SALES__DEAL__STAGE_CHANGE`; those are logged
-   * by the sales rep so they're counted as events (not distinct prospects).
+   * Sales outcomes (held / no-show / accepted) come from the CSM_OPS CRM current stage TYPE,
+   * cohort-keyed by booking day — not the Amplitude stage-change events.
    *
    * @param days - Trailing window to pull, e.g. 35
    * @param bookingOverrides - Manual deal_id → booked_day fills for deals missing the event
@@ -317,19 +318,9 @@ export class SnowflakeService {
        ),
        -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
        -- day's bookings, how many eventually held / were accepted / no-showed (recent days read low
-       -- until the cohort matures). They're read from the CSM_OPS CRM current stage TYPE below.
-       -- The Amplitude stage-change events only reliably fire for Call 1 Scheduled and Accepted
-       -- (not No Show / DQ / Lost / Pending Offer), so we use them ONLY for the Call 1 Scheduled
-       -- booking day — a booking signal for deals that later moved off a booked-implying stage.
-       ev AS (
-         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS ev_booked_day
-         FROM ${EVENTS_TABLE}
-         WHERE EVENT_TYPE = 'WONDERLY_SALES__DEAL__STAGE_CHANGE'
-           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
-           AND EVENT_PROPERTIES:deal_id IS NOT NULL
-         GROUP BY 1
-       ),
+       -- until the cohort matures). They're read entirely from the CSM_OPS CRM current stage TYPE
+       -- below — the Amplitude WONDERLY_SALES__DEAL__STAGE_CHANGE events are not used at all (they
+       -- fire for only a couple of stages, so they're unreliable for the funnel).
        -- Primary email per contact, to bridge a CRM deal back to its marketing source.
        em AS (
          SELECT CONTACT_ID,
@@ -390,21 +381,20 @@ export class SnowflakeService {
        ds AS (
          SELECT
            -- Booking day (cohort key): manual override, else the earlier of the BOOKING_COMPLETE
-           -- bridge and the CRM creation day, else the Call 1 Scheduled event.
-           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), ev.ev_booked_day) AS day,
+           -- bridge and the CRM creation day.
+           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) AS day,
            st.TYPE AS stage_type,
            NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
-           -- Booked = a genuine Call-1 signal (marketing BOOKING_COMPLETE, the Call 1 Scheduled
-           -- event, or a manual override) OR a current stage only booked deals reach. This gates
-           -- DQ/Lost so pre-call junk leads (no booking signal) never count as held.
-           CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR ev.ev_booked_day IS NOT NULL
+           -- Booked = a genuine booking signal (marketing BOOKING_COMPLETE or a manual override) OR
+           -- a current stage only booked deals reach. This gates DQ/Lost so pre-call junk leads
+           -- (no booking signal) never count as held.
+           CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
                      OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
                 THEN 1 ELSE 0 END AS booked
          FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
          JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
            ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
-         LEFT JOIN ev ON ev.deal_id = cd.ID
          LEFT JOIN ovr o ON o.deal_id = cd.ID
          LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
          LEFT JOIN email_bc ebc ON ebc.email = em.join_email
@@ -460,7 +450,8 @@ export class SnowflakeService {
          COALESCE(s.held_organic,0) AS held_organic
        FROM f LEFT JOIN s ON f.day = s.day
        ORDER BY f.day DESC`,
-      [overridesJson(bookingOverrides), -days, -days, -days, -days]
+      // Binds: overrides JSON, then the -days window for excluded_amps, mkt, src_raw.
+      [overridesJson(bookingOverrides), -days, -days, -days]
     );
 
     return rows.map((r) => ({
@@ -572,15 +563,20 @@ export class SnowflakeService {
    */
   async getSucceedingContractors(): Promise<SucceedingContractors> {
     const rows = await this.query<Record<string, unknown>>(
+      // Accepted deals + acceptance date from the CSM_OPS CRM (current stage type quote_signed —
+      // Accepted is a terminal closed_won). The acceptance date is when the deal entered the stage
+      // (PIPELINE_STAGE_ENTERED_AT), falling back to CREATED_AT — the CRM has no dedicated accept
+      // date (CLOSE_TIME is empty). The Amplitude stage-change events are not used.
       `WITH acc AS (
-         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted'
-                THEN CONVERT_TIMEZONE('UTC','${REPORT_TZ}',EVENT_TIME)::date END) AS accepted_date
-         FROM ${EVENTS_TABLE}
-         WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
-           AND EVENT_TIME >= DATEADD('day',-300,CURRENT_DATE)
-           AND EVENT_PROPERTIES:deal_id IS NOT NULL
-         GROUP BY 1 HAVING accepted_date IS NOT NULL
+         SELECT cd.ID AS deal_id,
+           COALESCE(
+             CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date,
+             CONVERT_TIMEZONE('${REPORT_TZ}', cd.CREATED_AT)::date
+           ) AS accepted_date
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
+           ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+         WHERE cd.DELETED_AT IS NULL AND st.TYPE = '${ACCEPTED_STAGE_TYPE}'
        ),
        em AS (
          SELECT cd.ID AS deal_id, LOWER(ce.EMAIL) AS email
@@ -739,36 +735,18 @@ export class SnowflakeService {
          SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
          FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
        ),
-       de AS (
-         SELECT EVENT_PROPERTIES:deal_id::string AS deal_id,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Call 1 Scheduled' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS booked_day,
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN 1 ELSE 0 END) AS ever_accepted,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string='Accepted' THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS accepted_day,
-           MAX(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
-                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN 1 ELSE 0 END) AS ever_held,
-           MIN(CASE WHEN EVENT_PROPERTIES:to_stage_name::string
-                IN ('Accepted','Quote & Contract Sent','On-site Scheduled','Quote & Contract Signed')
-                THEN CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date END) AS held_day
-         FROM ${EVENTS_TABLE}
-         WHERE EVENT_TYPE='WONDERLY_SALES__DEAL__STAGE_CHANGE'
-           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
-           AND EVENT_PROPERTIES:deal_id IS NOT NULL
-         GROUP BY 1
-       ),
-       -- Base deal set: the event-based deals UNION all deals currently in an outcome stage
-       -- (No Show / offer / accepted / DQ / Lost). Most of those fire no stage-change event, so
-       -- they'd be absent from the event set de — adding them keeps call1_deals reconciled with
-       -- Daily Metrics. Added deals have NULL de.* (event-only columns like HELD_DATE fall to '').
+       -- Base deal set: every acquisition-pipeline deal past the lead stages — i.e. currently in a
+       -- booked-implying or outcome stage (Call 1 Scheduled / Rescheduled / No Show / Pending Offer
+       -- / Accepted / DQ / Lost). Keyed on the stable stage TYPE. The Amplitude stage-change events
+       -- are not used at all (they don't reliably fire per stage).
        funnel_deals AS (
-         SELECT deal_id FROM de
-         UNION
          SELECT cd.ID AS deal_id
          FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
          JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st ON st.ID = cd.PIPELINE_STAGE_ID
-         -- Keyed on stable stage TYPE + acquisition pipeline (see getDailyMarketing).
-         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
-           AND st.TYPE IN (${sqlIn([NO_SHOW_STAGE_TYPE, ...OFFER_STAGE_TYPES, ...DQ_LOST_STAGE_TYPES])})
+         WHERE st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}' AND cd.DELETED_AT IS NULL
+           AND st.TYPE IN (${sqlIn([...BOOKED_STAGE_TYPES, ...DQ_LOST_STAGE_TYPES])})
+           -- Trailing window: keep deals created in the last N days (creation ≈ booking day).
+           AND cd.CREATED_AT >= DATEADD('day', ?, CURRENT_DATE)
        ),
        em AS (
          SELECT CONTACT_ID,
@@ -849,13 +827,13 @@ export class SnowflakeService {
        )
        SELECT fd.deal_id AS DEAL_ID,
          COALESCE(cd.NAME,'') AS DEAL_NAME,
-         TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day),'YYYY-MM-DD') AS BOOKED_DAY,
+         TO_CHAR(COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))),'YYYY-MM-DD') AS BOOKED_DAY,
          COALESCE(st.NAME,'') AS CURRENT_STAGE,
          -- Held / Accepted / No-show / DQ keyed on the CRM current stage TYPE, matching Daily
          -- Metrics. Held = booked deal that reached an offer/acceptance OR a DQ/Lost carrying a
-         -- loss reason (a human post-call disposition); booked = a real Call-1 signal or a stage
-         -- only booked deals reach.
-         CASE WHEN (o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR de.booked_day IS NOT NULL OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)}))
+         -- loss reason (a human post-call disposition); booked = a marketing booking signal or a
+         -- stage only booked deals reach.
+         CASE WHEN (o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)}))
               AND (st.TYPE IN (${sqlIn(OFFER_STAGE_TYPES)})
                    OR (st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND NULLIF(cd.LOSS_REASON_KEY,'') IS NOT NULL))
               THEN 1 ELSE 0 END AS HELD,
@@ -869,10 +847,11 @@ export class SnowflakeService {
          COALESCE(src.utm_source,'') AS SOURCE,
          COALESCE(src.campaign_id,'') AS CAMPAIGN_ID,
          COALESCE(src.ad_id,'') AS AD_ID,
-         COALESCE(TO_CHAR(de.held_day,'YYYY-MM-DD'),'') AS HELD_DATE,
-         COALESCE(TO_CHAR(de.accepted_day,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
+         -- Dates come from when the deal ENTERED its current stage (PIPELINE_STAGE_ENTERED_AT) —
+         -- the CRM has no stage history, so only the current stage's entry is known.
+         COALESCE(TO_CHAR(CASE WHEN st.TYPE IN (${sqlIn(OFFER_STAGE_TYPES)}) THEN CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date END,'YYYY-MM-DD'),'') AS HELD_DATE,
+         COALESCE(TO_CHAR(CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date END,'YYYY-MM-DD'),'') AS ACCEPTED_DATE
        FROM funnel_deals fd
-       LEFT JOIN de ON de.deal_id = fd.deal_id
        LEFT JOIN ovr o ON o.deal_id = fd.deal_id
        LEFT JOIN AIRBYTE.CSM_OPS.CRM_DEALS cd ON cd.ID=fd.deal_id
        LEFT JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st ON st.ID=cd.PIPELINE_STAGE_ID
@@ -881,12 +860,11 @@ export class SnowflakeService {
        LEFT JOIN crt ON crt.deal_id=fd.deal_id
        LEFT JOIN email_bc ebc ON ebc.email=em.join_email
        LEFT JOIN src ON src.email=em.join_email
-       -- Include any deal that entered the Call 1 funnel: booked (BOOKING_COMPLETE, CRM
-       -- creation day, Call 1 Scheduled event, or manual override), or (for deals with no
-       -- booking signal at all) ever accepted / held. Keeps ACCEPTED reconciled with Daily Funnel.
-       WHERE (COALESCE(o.booked_day, ebc.bc, crt.created_day, de.booked_day) IS NOT NULL OR de.ever_accepted = 1 OR de.ever_held = 1)
-         AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
-       ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc)), de.booked_day, de.held_day, de.accepted_day) DESC`,
+       -- funnel_deals already scopes to booked/outcome stages, so just apply the exclusions.
+       WHERE (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
+         AND NOT ${excludedDealName('cd.NAME')}
+       ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) DESC`,
+      // Binds: overrides JSON, the -days window for funnel_deals, then for src_raw.
       [overridesJson(bookingOverrides), -days, -days]
     );
 

@@ -81,16 +81,16 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'BOOKED_ALL / CALL1_BOOKED',
     'wonderly_daily / Daily Funnel',
-    'People who completed a booking — the single Call 1 number. Matches Amplitude.',
-    'Amplitude',
-    'Distinct users on MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE.',
+    'Deals that booked a Call 1 — the single Call 1 number, keyed by booking day.',
+    'CSM_OPS CRM',
+    'Count of CRM deals that booked a Call 1 (reached Call 1 Scheduled or beyond, or have a booking signal), ONE row per deal. NOT the Amplitude BOOKING_COMPLETE event — a rebooking after a no-show fires a second event and double-counts the same contractor; counting deals avoids that.',
   ],
   [
     'BOOKED_FB',
     'wonderly_daily',
-    'Bookings attributed to Facebook.',
-    'Amplitude',
-    'BOOKING_COMPLETE where utm_source is facebook/ig OR an fbclid is present.',
+    'Booked deals attributed to Facebook.',
+    'CSM_OPS CRM + Amplitude',
+    'Booked deal whose contact email bridges to a facebook/ig utm (or fbclid) marketing session; Organic = everything else (incl. outbound with no marketing session).',
   ],
   [
     'BOOKED_ORGANIC',

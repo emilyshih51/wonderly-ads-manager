@@ -308,12 +308,10 @@ export class SnowflakeService {
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
                 AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE' THEN AMPLITUDE_ID END) AS booked_all,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
-                AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_fb,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
-                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS booked_organic
+                AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic
+         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE anymore — a rebooking after a
+         -- no-show fires a second event, double-counting the same contractor. It's counted from the
+         -- CRM booked deals below (one deal per Call 1, so rebookings don't double-count).
          FROM mkt GROUP BY day
        ),
        -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
@@ -422,12 +420,16 @@ export class SnowflakeService {
        --              Booked DQ/Lost with no loss reason are no-show fallout, NOT held.
        s AS (
          SELECT day,
+           SUM(booked_cnt) AS booked, SUM(booked_cnt * is_fb) AS booked_fb, SUM(booked_cnt * (1 - is_fb)) AS booked_organic,
            SUM(held) AS held, SUM(held * is_fb) AS held_fb, SUM(held * (1 - is_fb)) AS held_organic,
            SUM(accepted) AS accepted, SUM(accepted * is_fb) AS accepted_fb, SUM(accepted * (1 - is_fb)) AS accepted_organic,
            SUM(no_show) AS no_show, SUM(no_show * is_fb) AS no_show_fb, SUM(no_show * (1 - is_fb)) AS no_show_organic,
            SUM(disqualified_lost) AS disqualified_lost
          FROM (
            SELECT day, is_fb,
+             -- CALL1_BOOKED = deals that booked a Call 1 (the booked universe), one row per deal so
+             -- a rebooking after a no-show doesn't double-count. Excludes phantom re-accept dupes.
+             CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) THEN 1 ELSE 0 END AS booked_cnt,
              -- Accepted once per contractor (rank-1 Accepted deal); duplicate phantom acceptances
              -- for the same contractor are dropped.
              CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
@@ -450,8 +452,11 @@ export class SnowflakeService {
          f.cta_clicked, f.cta_fb, f.cta_organic,
          f.submit_partial, f.partial_fb, f.partial_organic,
          f.submit_qualified, f.qualified_fb, f.qualified_organic,
-         f.booked_all, f.booked_fb, f.booked_organic,
-         -- CALL1_BOOKED mirrors the marketing BOOKING_COMPLETE event (matches Amplitude).
+         -- CALL1_BOOKED = CRM deals that booked a Call 1, keyed by booking day (deduped — one deal
+         -- per Call 1, so a rebooking after a no-show is not double-counted like the Amplitude event).
+         COALESCE(s.booked,0) AS booked_all,
+         COALESCE(s.booked_fb,0) AS booked_fb,
+         COALESCE(s.booked_organic,0) AS booked_organic,
          -- ACCEPTED / HELD are COHORT metrics: of THIS day's Call 1 bookings, how many
          -- eventually held / were accepted (so recent days read low until they mature).
          COALESCE(s.accepted,0) AS accepted,

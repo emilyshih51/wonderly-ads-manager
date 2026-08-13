@@ -1,0 +1,749 @@
+From 15a2fd94578adf0b5404b1b561e1287667c8da08 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 11 Aug 2026 22:20:10 +0000
+Subject: [PATCH] feat(automations): Promote winners into multiple target ad
+ sets
+
+The Promote action could only duplicate a winning ad into a single
+target ad set. This lets a rule fan a winner out to several ad sets
+across as many campaigns as you like.
+
+- AdSetSearch gains an optional `multiple` mode with chips + toggle
+  selection (mirrors CampaignSearch); single-select stays the default
+  so the trigger's ad-set filter is unchanged.
+- Promote action UI uses the multi-select picker; target_adset_id /
+  target_adset_name are stored comma-separated (backward compatible
+  with a single ID).
+- Evaluate route duplicates the winner into each target ad set,
+  tolerates partial failures, and only pauses the original once at
+  least one duplication succeeds.
+- Slack notification reflects the multi-target count.
+- Added i18n keys across all locales and config round-trip tests.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WCxaTyJA2qcWAfA8gzxMyY
+---
+ locales/de.json                             |   3 +
+ locales/en.json                             |   5 +-
+ locales/es.json                             |   3 +
+ locales/fr.json                             |   3 +
+ locales/ja.json                             |   3 +
+ locales/ko.json                             |   3 +
+ locales/pt.json                             |   3 +
+ locales/zh-TW.json                          |   3 +
+ locales/zh.json                             |   3 +
+ src/app/(dashboard)/automations/page.tsx    |  10 +-
+ src/app/api/automations/evaluate/route.ts   | 100 +++++++++----
+ src/components/automations/adset-search.tsx | 147 ++++++++++++++++----
+ src/lib/__tests__/automation-config.test.ts |  68 +++++++++
+ src/services/slack/index.ts                 |   9 +-
+ src/services/slack/types.ts                 |   5 +
+ 15 files changed, 309 insertions(+), 59 deletions(-)
+ create mode 100644 src/lib/__tests__/automation-config.test.ts
+
+diff --git a/locales/de.json b/locales/de.json
+index 855fb01..a5d2c15 100644
+--- a/locales/de.json
++++ b/locales/de.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "Nach Kampagnenname suchen...",
+     "leaveEmptyAllCampaigns": "Leer lassen, um auf alle Kampagnen anzuwenden",
+     "addMoreCampaigns": "Weitere Kampagne hinzufügen...",
++    "addMoreAdSets": "Weitere Anzeigengruppe hinzufügen...",
+     "selectedCampaigns": "{count, plural, one {# Kampagne} other {# Kampagnen}} ausgewählt",
+     "adSet": "Ad Set",
+     "searchByAdSet": "Nach einer bestimmten Ad Set suchen…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "Befördern (pausieren + duplizieren)",
+     "notify": "Benachrichtigen",
+     "targetAdSet": "Ziel-Anzeigengruppe",
++    "targetAdSets": "Ziel-Anzeigengruppen",
++    "targetAdSetMultiHint": "Gewinner-Anzeigen werden in jede ausgewählte Anzeigengruppe dupliziert – wähle Anzeigengruppen in beliebig vielen Kampagnen.",
+     "duplicateWinningAdsHere": "(Gewinner-Anzeigen hierhin duplizieren)",
+     "searchForWinnersAdSet": "Gewinner-Anzeigengruppe suchen...",
+     "slackChannel": "Kanal",
+diff --git a/locales/en.json b/locales/en.json
+index dddf8a3..d54b357 100644
+--- a/locales/en.json
++++ b/locales/en.json
+@@ -366,7 +366,7 @@
+     "activateAdAdSet": "Activate ad/ad set",
+     "sendSlackNotification": "Send Slack notification",
+     "pauseOriginalWinner": "Pause the original winning ad",
+-    "pauseOriginalWinnerHint": "When on, the winning ad is paused in its original campaign after being duplicated to the winners ad set. Turn off to keep it running in both places.",
++    "pauseOriginalWinnerHint": "When on, the winning ad is paused in its original campaign after being duplicated to the target ad sets. Turn off to keep it running everywhere.",
+     "plusSlack": "+ Slack",
+     "searchCampaigns": "Search campaigns...",
+     "searchAdSets": "Search ad sets...",
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "Search by campaign name...",
+     "leaveEmptyAllCampaigns": "Leave empty to apply to all campaigns",
+     "addMoreCampaigns": "Add another campaign...",
++    "addMoreAdSets": "Add another ad set...",
+     "selectedCampaigns": "{count, plural, one {# campaign} other {# campaigns}} selected",
+     "adSet": "Ad Set",
+     "searchByAdSet": "Search for a specific ad set…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "Promote (pause + duplicate)",
+     "notify": "Notify",
+     "targetAdSet": "Target Ad Set",
++    "targetAdSets": "Target Ad Sets",
++    "targetAdSetMultiHint": "Winning ads are duplicated into every selected ad set — pick ad sets across as many campaigns as you like.",
+     "duplicateWinningAdsHere": "(duplicate winning ads here)",
+     "searchForWinnersAdSet": "Search for winners ad set...",
+     "slackChannel": "Channel",
+diff --git a/locales/es.json b/locales/es.json
+index 72be5c7..61d8784 100644
+--- a/locales/es.json
++++ b/locales/es.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "Buscar por nombre de campaña...",
+     "leaveEmptyAllCampaigns": "Deje vacío para aplicar a todas las campañas",
+     "addMoreCampaigns": "Añadir otra campaña...",
++    "addMoreAdSets": "Añadir otro conjunto de anuncios...",
+     "selectedCampaigns": "{count, plural, one {# campaña} other {# campañas}} seleccionadas",
+     "adSet": "Conjunto de anuncios",
+     "searchByAdSet": "Buscar un conjunto de anuncios específico…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "Promover (pausar + duplicar)",
+     "notify": "Notificar",
+     "targetAdSet": "Conjunto de anuncios destino",
++    "targetAdSets": "Conjuntos de anuncios de destino",
++    "targetAdSetMultiHint": "Los anuncios ganadores se duplican en cada conjunto de anuncios seleccionado: elige conjuntos de anuncios en tantas campañas como quieras.",
+     "duplicateWinningAdsHere": "(duplicar anuncios ganadores aquí)",
+     "searchForWinnersAdSet": "Buscar conjunto de anuncios ganadores...",
+     "slackChannel": "Canal",
+diff --git a/locales/fr.json b/locales/fr.json
+index fdb0f99..05cce5e 100644
+--- a/locales/fr.json
++++ b/locales/fr.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "Rechercher par nom de campagne...",
+     "leaveEmptyAllCampaigns": "Laisser vide pour appliquer à toutes les campagnes",
+     "addMoreCampaigns": "Ajouter une autre campagne...",
++    "addMoreAdSets": "Ajouter un autre ensemble de publicités...",
+     "selectedCampaigns": "{count, plural, one {# campagne} other {# campagnes}} sélectionnées",
+     "adSet": "Ensemble de publicités",
+     "searchByAdSet": "Rechercher un ensemble de publicités…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "Promouvoir (pause + dupliquer)",
+     "notify": "Notifier",
+     "targetAdSet": "Ensemble de publicités cible",
++    "targetAdSets": "Ensembles de publicités cibles",
++    "targetAdSetMultiHint": "Les publicités gagnantes sont dupliquées dans chaque ensemble de publicités sélectionné — choisissez des ensembles dans autant de campagnes que vous le souhaitez.",
+     "duplicateWinningAdsHere": "(dupliquer les publicités gagnantes ici)",
+     "searchForWinnersAdSet": "Rechercher l'ensemble de publicités gagnantes...",
+     "slackChannel": "Canal",
+diff --git a/locales/ja.json b/locales/ja.json
+index d3aa3e4..69693f5 100644
+--- a/locales/ja.json
++++ b/locales/ja.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "キャンペーン名で検索...",
+     "leaveEmptyAllCampaigns": "空欄にするとすべてのキャンペーンに適用",
+     "addMoreCampaigns": "キャンペーンを追加...",
++    "addMoreAdSets": "別の広告セットを追加...",
+     "selectedCampaigns": "{count}件のキャンペーンを選択中",
+     "adSet": "広告セット",
+     "searchByAdSet": "特定の広告セットを検索…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "昇格（一時停止 + 複製）",
+     "notify": "通知",
+     "targetAdSet": "ターゲット広告セット",
++    "targetAdSets": "ターゲット広告セット",
++    "targetAdSetMultiHint": "勝ち広告は選択したすべての広告セットに複製されます。好きなだけ多くのキャンペーンの広告セットを選べます。",
+     "duplicateWinningAdsHere": "（優勝広告をここに複製）",
+     "searchForWinnersAdSet": "優勝広告セットを検索...",
+     "slackChannel": "チャンネル",
+diff --git a/locales/ko.json b/locales/ko.json
+index b338940..6c26a66 100644
+--- a/locales/ko.json
++++ b/locales/ko.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "캠페인 이름으로 검색...",
+     "leaveEmptyAllCampaigns": "모든 캠페인에 적용하려면 비워두세요",
+     "addMoreCampaigns": "캠페인 추가...",
++    "addMoreAdSets": "다른 광고 세트 추가...",
+     "selectedCampaigns": "{count}개 캠페인 선택됨",
+     "adSet": "광고 세트",
+     "searchByAdSet": "특정 광고 세트 검색…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "프로모션 (일시정지 + 복제)",
+     "notify": "알림",
+     "targetAdSet": "대상 광고 세트",
++    "targetAdSets": "대상 광고 세트",
++    "targetAdSetMultiHint": "우승 광고는 선택한 모든 광고 세트에 복제됩니다. 원하는 만큼 여러 캠페인의 광고 세트를 선택하세요.",
+     "duplicateWinningAdsHere": "(우수 광고를 여기로 복제)",
+     "searchForWinnersAdSet": "Winners 광고 세트 검색...",
+     "slackChannel": "채널",
+diff --git a/locales/pt.json b/locales/pt.json
+index ea55dd6..12c29a9 100644
+--- a/locales/pt.json
++++ b/locales/pt.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "Pesquisar por nome de campanha...",
+     "leaveEmptyAllCampaigns": "Deixe vazio para aplicar a todas as campanhas",
+     "addMoreCampaigns": "Adicionar outra campanha...",
++    "addMoreAdSets": "Adicionar outro conjunto de anúncios...",
+     "selectedCampaigns": "{count, plural, one {# campanha} other {# campanhas}} selecionadas",
+     "adSet": "Conjunto de anúncios",
+     "searchByAdSet": "Pesquisar um conjunto de anúncios específico…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "Promover (pausar + duplicar)",
+     "notify": "Notificar",
+     "targetAdSet": "Conjunto de anúncios destino",
++    "targetAdSets": "Conjuntos de anúncios de destino",
++    "targetAdSetMultiHint": "Os anúncios vencedores são duplicados em cada conjunto de anúncios selecionado — escolha conjuntos de anúncios em quantas campanhas quiser.",
+     "duplicateWinningAdsHere": "(duplicar anúncios vencedores aqui)",
+     "searchForWinnersAdSet": "Pesquisar conjunto de anúncios vencedores...",
+     "slackChannel": "Canal",
+diff --git a/locales/zh-TW.json b/locales/zh-TW.json
+index 3e2ee7b..ff2371c 100644
+--- a/locales/zh-TW.json
++++ b/locales/zh-TW.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "依廣告活動名稱搜尋...",
+     "leaveEmptyAllCampaigns": "留空則套用至所有廣告活動",
+     "addMoreCampaigns": "新增更多廣告活動...",
++    "addMoreAdSets": "新增另一個廣告組...",
+     "selectedCampaigns": "已選擇{count}個廣告活動",
+     "adSet": "廣告組",
+     "searchByAdSet": "搜尋特定廣告組…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "推廣（暫停 + 複製）",
+     "notify": "通知",
+     "targetAdSet": "目標廣告組合",
++    "targetAdSets": "目標廣告組",
++    "targetAdSetMultiHint": "獲勝廣告將複製到每個所選廣告組——你可以在任意數量的廣告活動中選擇廣告組。",
+     "duplicateWinningAdsHere": "（將優質廣告複製至此處）",
+     "searchForWinnersAdSet": "搜尋優質廣告組合...",
+     "slackChannel": "頻道",
+diff --git a/locales/zh.json b/locales/zh.json
+index 9dd7cde..e44f258 100644
+--- a/locales/zh.json
++++ b/locales/zh.json
+@@ -390,6 +390,7 @@
+     "searchByCampaign": "按广告系列名称搜索...",
+     "leaveEmptyAllCampaigns": "留空则应用于所有广告系列",
+     "addMoreCampaigns": "添加更多广告系列...",
++    "addMoreAdSets": "添加另一个广告组...",
+     "selectedCampaigns": "已选择{count}个广告系列",
+     "adSet": "广告组",
+     "searchByAdSet": "搜索特定广告组…",
+@@ -434,6 +435,8 @@
+     "promotePauseDuplicate": "推广（暂停 + 复制）",
+     "notify": "通知",
+     "targetAdSet": "目标广告组",
++    "targetAdSets": "目标广告组",
++    "targetAdSetMultiHint": "获胜广告将被复制到每个所选广告组——你可以在任意数量的广告系列中选择广告组。",
+     "duplicateWinningAdsHere": "（将优胜广告复制到此处）",
+     "searchForWinnersAdSet": "搜索优胜广告组...",
+     "slackChannel": "频道",
+diff --git a/src/app/(dashboard)/automations/page.tsx b/src/app/(dashboard)/automations/page.tsx
+index 5bbe32b..f8a68f4 100644
+--- a/src/app/(dashboard)/automations/page.tsx
++++ b/src/app/(dashboard)/automations/page.tsx
+@@ -1448,13 +1448,14 @@ export default function AutomationsPage() {
+                   {config.action_type === 'promote' && (
+                     <div>
+                       <label className="text-xs font-medium tracking-wider text-[var(--color-muted-foreground)] uppercase">
+-                        {t('targetAdSet')}{' '}
++                        {t('targetAdSets')}{' '}
+                         <span className="font-normal text-[var(--color-muted-foreground)] normal-case">
+                           {t('duplicateWinningAdsHere')}
+                         </span>
+                       </label>
+                       <div className="mt-2">
+                         <AdSetSearch
++                          multiple
+                           value={config.target_adset_id}
+                           displayName={config.target_adset_name}
+                           onChange={(id, name) =>
+@@ -1463,14 +1464,15 @@ export default function AutomationsPage() {
+                           placeholder={t('searchForWinnersAdSet')}
+                         />
+                       </div>
++                      <p className="mt-1.5 text-xs text-[var(--color-muted-foreground)]">
++                        {t('targetAdSetMultiHint')}
++                      </p>
+ 
+                       <label className="mt-4 flex cursor-pointer items-center gap-2.5">
+                         <Switch
+                           size="sm"
+                           checked={config.pause_original}
+-                          onCheckedChange={(checked) =>
+-                            updateConfig({ pause_original: checked })
+-                          }
++                          onCheckedChange={(checked) => updateConfig({ pause_original: checked })}
+                         />
+                         <span className="text-sm font-medium text-[var(--color-foreground)]">
+                           {t('pauseOriginalWinner')}
+diff --git a/src/app/api/automations/evaluate/route.ts b/src/app/api/automations/evaluate/route.ts
+index 1c18b49..caf0692 100644
+--- a/src/app/api/automations/evaluate/route.ts
++++ b/src/app/api/automations/evaluate/route.ts
+@@ -288,6 +288,9 @@ interface EvaluateResult {
+   dry_run?: boolean;
+   warning?: string;
+   duplicated_ad_id?: string;
++  duplicated_ad_ids?: string[];
++  target_adset_count?: number;
++  partial_failure?: Array<{ adset_id: string; error: string }>;
+   marked_promoted?: boolean;
+   slack_sent?: boolean;
+   slack_channel?: string;
+@@ -550,39 +553,87 @@ async function evaluateRule(
+         if (actionCap) actionCap.executed++;
+       } else if (actionType === 'promote') {
+         // Default to pausing the original winner (legacy behaviour). Only skip
+-        // the pause when pause_original is explicitly set to false.
++        // the pause when pause_original is explicitly set to false. The pause
++        // itself is applied below, once at least one duplication has succeeded,
++        // so a failed promotion never silently pauses a live winner.
+         const pauseOriginal =
+           actionConfig.pause_original !== false && actionConfig.pause_original !== 'false';
+ 
+-        if (pauseOriginal) {
+-          await meta.updateStatus(entityId, 'PAUSED');
+-        }
++        // Support duplicating a winner into several target ad sets (across
++        // multiple campaigns). The config stores a comma-separated list; a
++        // single ID remains valid and produces a one-element list.
++        const targetAdSetIds = (actionConfig.target_adset_id ?? '')
++          .split(',')
++          .map((s) => s.trim())
++          .filter(Boolean);
++
++        if (targetAdSetIds.length > 0) {
++          const duplicatedIds: string[] = [];
++          const failedTargets: Array<{ adset_id: string; error: string }> = [];
++
++          // Duplicate into each target ad set. A failure on one target must not
++          // abort the others, so failures are collected and reported.
++          for (const targetAdSetId of targetAdSetIds) {
++            try {
++              const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
++
++              duplicatedIds.push(duplicated.id);
++            } catch (dupError) {
++              logger.error('Failed to duplicate winner into target ad set', {
++                entityId,
++                entityName,
++                targetAdSetId,
++                error: String(dupError),
++              });
++              failedTargets.push({ adset_id: targetAdSetId, error: String(dupError) });
++            }
++          }
++
++          if (duplicatedIds.length > 0) {
++            // Only pause the original once at least one duplication succeeded,
++            // so a total failure leaves the winner running.
++            if (pauseOriginal) {
++              await meta.updateStatus(entityId, 'PAUSED');
++            }
++
++            actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
++            actionResult.duplicated_ad_ids = duplicatedIds;
++            // Keep the single-value field for backward compatibility (e.g. Slack).
++            actionResult.duplicated_ad_id = duplicatedIds[0];
++            actionResult.target_adset_count = targetAdSetIds.length;
+ 
+-        const targetAdSetId = actionConfig.target_adset_id;
+-
+-        if (targetAdSetId) {
+-          const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
+-
+-          actionResult.action = pauseOriginal ? 'promoted' : 'promoted (original kept active)';
+-          actionResult.duplicated_ad_id = duplicated.id;
+-
+-          // Mark the original winner with the promoted prefix so it is visible
+-          // in Ads Manager and skipped on future runs. A failure here must not
+-          // fail the promotion itself, so it is logged and swallowed.
+-          try {
+-            await meta.updateName(entityId, addPromotedMarker(entityName));
+-            actionResult.marked_promoted = true;
+-          } catch (renameError) {
+-            logger.warn('Failed to mark original ad as promoted', {
+-              entityId,
+-              entityName,
+-              error: String(renameError),
+-            });
++            if (failedTargets.length > 0) {
++              actionResult.partial_failure = failedTargets;
++              actionResult.warning = `Duplicated into ${duplicatedIds.length} of ${targetAdSetIds.length} target ad sets`;
++            }
++
++            // Mark the original winner with the promoted prefix so it is visible
++            // in Ads Manager and skipped on future runs. A failure here must not
++            // fail the promotion itself, so it is logged and swallowed.
++            try {
++              await meta.updateName(entityId, addPromotedMarker(entityName));
++              actionResult.marked_promoted = true;
++            } catch (renameError) {
++              logger.warn('Failed to mark original ad as promoted', {
++                entityId,
++                entityName,
++                error: String(renameError),
++              });
++            }
++          } else {
++            // Every target duplication failed — leave the winner untouched.
++            actionResult.action = 'promotion_failed';
++            actionResult.partial_failure = failedTargets;
++            actionResult.warning = `Failed to duplicate into all ${targetAdSetIds.length} target ad sets`;
+           }
+         } else {
+           actionResult.action = pauseOriginal
+             ? 'paused (no target adset for duplication)'
+             : 'no action (no target adset for duplication)';
++
++          if (pauseOriginal) {
++            await meta.updateStatus(entityId, 'PAUSED');
++          }
+         }
+ 
+         if (actionCap) actionCap.executed++;
+@@ -674,6 +725,7 @@ async function evaluateRule(
+                   ctr: metrics.ctr,
+                 },
+                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
++                duplicatedCount: actionResult.duplicated_ad_ids?.length,
+                 // Use the campaign name from the insight row so multi-campaign rules
+                 // show only the campaign that actually matched, not all configured campaigns.
+                 campaignName:
+diff --git a/src/components/automations/adset-search.tsx b/src/components/automations/adset-search.tsx
+index 8e1fa6a..303df59 100644
+--- a/src/components/automations/adset-search.tsx
++++ b/src/components/automations/adset-search.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+ 
+-import { useCallback, useEffect, useState, useRef } from 'react';
++import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+ import { Search, X, Loader2, Check } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { useTranslations } from 'next-intl';
+@@ -13,12 +13,26 @@ interface AdSet {
+   campaign_name?: string;
+ }
+ 
++/** A single selected ad set entry (id + display name). */
++interface SelectedAdSet {
++  id: string;
++  name: string;
++}
++
+ interface AdSetSearchProps {
++  /** Selected ad set ID. In `multiple` mode this is a comma-separated list. */
+   value: string;
++  /** Selected ad set display name. In `multiple` mode this is a comma-separated list. */
+   displayName: string;
+   campaignId?: string;
+   onChange: (id: string, name: string) => void;
+   placeholder?: string;
++  /**
++   * When true, allow selecting several ad sets. Selections render as chips and
++   * the value/displayName become comma-separated lists. Defaults to false
++   * (single-select) so existing single-target usages are unchanged.
++   */
++  multiple?: boolean;
+ }
+ 
+ export function AdSetSearch({
+@@ -27,6 +41,7 @@ export function AdSetSearch({
+   campaignId,
+   onChange,
+   placeholder,
++  multiple = false,
+ }: AdSetSearchProps) {
+   const t = useTranslations('automations');
+   const [open, setOpen] = useState(false);
+@@ -36,6 +51,22 @@ export function AdSetSearch({
+   const debounceRef = useRef<NodeJS.Timeout>(null);
+   const containerRef = useRef<HTMLDivElement>(null);
+ 
++  /** Parse comma-separated values into a structured array (multi-select mode). */
++  const selected: SelectedAdSet[] = useMemo(() => {
++    if (!value) return [];
++
++    const ids = value
++      .split(',')
++      .map((s) => s.trim())
++      .filter(Boolean);
++    const names = displayName.split(',').map((s) => s.trim());
++
++    return ids.map((id, i) => ({ id, name: names[i] || id }));
++  }, [value, displayName]);
++
++  /** Set of selected IDs for quick lookup. */
++  const selectedIds = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
++
+   useEffect(() => {
+     const handleClick = (e: MouseEvent) => {
+       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+@@ -80,19 +111,74 @@ export function AdSetSearch({
+     if (results.length === 0) searchAdSets(query);
+   };
+ 
++  /** Select a single ad set (single-select mode). */
++  const selectSingle = (a: AdSet) => {
++    onChange(a.id, a.name);
++    setQuery(a.name);
++    setOpen(false);
++  };
++
++  /** Toggle an ad set in the selection (multi-select mode). */
++  const toggleAdSet = (a: AdSet) => {
++    let next: SelectedAdSet[];
++
++    if (selectedIds.has(a.id)) {
++      next = selected.filter((s) => s.id !== a.id);
++    } else {
++      next = [...selected, { id: a.id, name: a.name }];
++    }
++
++    onChange(next.map((s) => s.id).join(','), next.map((s) => s.name).join(','));
++    // Keep dropdown open for multi-select and clear the query for the next search.
++    setQuery('');
++    setOpen(true);
++  };
++
++  /** Remove a single chip (multi-select mode). */
++  const removeAdSet = (id: string) => {
++    const next = selected.filter((s) => s.id !== id);
++
++    onChange(next.map((s) => s.id).join(','), next.map((s) => s.name).join(','));
++  };
++
++  const hasSelection = multiple ? selected.length > 0 : !!value;
++
+   return (
+     <div ref={containerRef} className="relative">
++      {/* Selected ad set chips (multi-select mode only) */}
++      {multiple && selected.length > 0 && (
++        <div className="mb-2 flex flex-wrap gap-1.5">
++          {selected.map((s) => (
++            <span
++              key={s.id}
++              className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
++            >
++              <span className="max-w-[180px] truncate">{s.name}</span>
++              <button
++                type="button"
++                onClick={() => removeAdSet(s.id)}
++                className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-blue-200 dark:hover:bg-blue-800"
++              >
++                <X className="h-3 w-3" />
++              </button>
++            </span>
++          ))}
++        </div>
++      )}
++
+       <div className="relative">
+         <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--color-muted-foreground)]" />
+         <input
+           type="text"
+-          value={open ? query : displayName || query}
++          value={multiple ? query : open ? query : displayName || query}
+           onChange={(e) => handleInputChange(e.target.value)}
+           onFocus={handleFocus}
+-          placeholder={placeholder || t('searchAdSets')}
++          placeholder={
++            multiple && selected.length > 0 ? t('addMoreAdSets') : placeholder || t('searchAdSets')
++          }
+           className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] pr-8 pl-9 text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none"
+         />
+-        {value && (
++        {hasSelection && (
+           <Button
+             variant="ghost"
+             size="icon"
+@@ -107,7 +193,10 @@ export function AdSetSearch({
+         )}
+       </div>
+       {open && (
+-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg">
++        <div
++          onMouseDown={(e) => e.stopPropagation()}
++          className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-lg"
++        >
+           {loading ? (
+             <div className="flex items-center justify-center py-4">
+               <Loader2 className="h-4 w-4 animate-spin text-[var(--color-muted-foreground)]" />
+@@ -117,30 +206,30 @@ export function AdSetSearch({
+               {t('noAdSetsFound')}
+             </div>
+           ) : (
+-            results.map((a) => (
+-              <Button
+-                key={a.id}
+-                variant="ghost"
+-                size="sm"
+-                onClick={() => {
+-                  onChange(a.id, a.name);
+-                  setQuery(a.name);
+-                  setOpen(false);
+-                }}
+-                className={`h-auto w-full justify-between border-b border-[var(--color-border)] px-4 py-2.5 last:border-0 ${
+-                  a.id === value ? 'bg-blue-500/10' : ''
+-                }`}
+-              >
+-                <div className="min-w-0 flex-1 text-left">
+-                  <p className="truncate text-sm text-[var(--color-foreground)]">{a.name}</p>
+-                  <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+-                    {a.status}
+-                    {a.campaign_name ? ` · ${a.campaign_name}` : ''}
+-                  </p>
+-                </div>
+-                {a.id === value && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
+-              </Button>
+-            ))
++            results.map((a) => {
++              const isSelected = multiple ? selectedIds.has(a.id) : a.id === value;
++
++              return (
++                <Button
++                  key={a.id}
++                  variant="ghost"
++                  size="sm"
++                  onClick={() => (multiple ? toggleAdSet(a) : selectSingle(a))}
++                  className={`h-auto w-full justify-between border-b border-[var(--color-border)] px-4 py-2.5 last:border-0 ${
++                    isSelected ? 'bg-blue-500/10' : ''
++                  }`}
++                >
++                  <div className="min-w-0 flex-1 text-left">
++                    <p className="truncate text-sm text-[var(--color-foreground)]">{a.name}</p>
++                    <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
++                      {a.status}
++                      {a.campaign_name ? ` · ${a.campaign_name}` : ''}
++                    </p>
++                  </div>
++                  {isSelected && <Check className="ml-2 h-4 w-4 flex-shrink-0 text-blue-600" />}
++                </Button>
++              );
++            })
+           )}
+         </div>
+       )}
+diff --git a/src/lib/__tests__/automation-config.test.ts b/src/lib/__tests__/automation-config.test.ts
+new file mode 100644
+index 0000000..d295323
+--- /dev/null
++++ b/src/lib/__tests__/automation-config.test.ts
+@@ -0,0 +1,68 @@
++import { describe, it, expect } from 'vitest';
++import { configToNodes, nodesToConfig, type RuleConfig } from '@/lib/automation-config';
++
++/** Minimal valid promote config with multiple comma-separated target ad sets. */
++function makePromoteConfig(overrides: Partial<RuleConfig> = {}): RuleConfig {
++  return {
++    entity_type: 'ad',
++    campaign_id: 'camp-1',
++    campaign_name: 'Prospecting',
++    adset_filter: 'all',
++    adset_name: '',
++    schedule: 'hourly',
++    date_preset: 'last_7d',
++    conditions: [{ id: 'c1', metric: 'cost_per_result', operator: '<=', threshold: '200' }],
++    action_type: 'promote',
++    target_adset_id: 'adset-a,adset-b,adset-c',
++    target_adset_name: 'Winners US,Winners CA,Winners UK',
++    pause_original: false,
++    also_notify_slack: true,
++    slack_channel: '#ad-promotion',
++    slack_message: '',
++    ...overrides,
++  };
++}
++
++describe('automation-config promote multi-target serialization', () => {
++  it('preserves comma-separated target ad sets through config → nodes → config', () => {
++    const config = makePromoteConfig();
++    const { nodes } = configToNodes(config);
++    const roundTripped = nodesToConfig(nodes);
++
++    expect(roundTripped.target_adset_id).toBe('adset-a,adset-b,adset-c');
++    expect(roundTripped.target_adset_name).toBe('Winners US,Winners CA,Winners UK');
++    expect(roundTripped.action_type).toBe('promote');
++    expect(roundTripped.pause_original).toBe(false);
++  });
++
++  it('stores the target ad sets on the action node config', () => {
++    const { nodes } = configToNodes(makePromoteConfig());
++    const action = nodes.find((n) => n.type === 'action');
++
++    expect(action?.data.config.target_adset_id).toBe('adset-a,adset-b,adset-c');
++  });
++
++  it('splits a comma-separated target list into individual ad set IDs', () => {
++    const { nodes } = configToNodes(makePromoteConfig());
++    const action = nodes.find((n) => n.type === 'action');
++    const ids = String(action?.data.config.target_adset_id ?? '')
++      .split(',')
++      .map((s) => s.trim())
++      .filter(Boolean);
++
++    expect(ids).toEqual(['adset-a', 'adset-b', 'adset-c']);
++  });
++
++  it('remains backward compatible with a single target ad set', () => {
++    const config = makePromoteConfig({
++      target_adset_id: 'adset-only',
++      target_adset_name: 'Winners',
++    });
++    const roundTripped = nodesToConfig(configToNodes(config).nodes);
++
++    expect(roundTripped.target_adset_id).toBe('adset-only');
++    const ids = roundTripped.target_adset_id.split(',').filter(Boolean);
++
++    expect(ids).toHaveLength(1);
++  });
++});
+diff --git a/src/services/slack/index.ts b/src/services/slack/index.ts
+index 4e89308..9b1abc7 100644
+--- a/src/services/slack/index.ts
++++ b/src/services/slack/index.ts
+@@ -281,6 +281,7 @@ export class SlackService {
+       campaignName,
+       customMessage,
+       duplicatedAdId,
++      duplicatedCount,
+       prefix = '',
+       datePreset = 'today',
+     } = notification;
+@@ -340,7 +341,13 @@ export class SlackService {
+         duplicatedAdId
+       );
+ 
+-      bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
++      if (duplicatedCount && duplicatedCount > 1) {
++        bodySections.push(
++          `Duplicated into ${duplicatedCount} target ad sets: <${dupLink}|View new ad>`
++        );
++      } else {
++        bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
++      }
+     }
+ 
+     const header = `${prefix}${actionEmoji} *[${brand}]* ${ruleName}`;
+diff --git a/src/services/slack/types.ts b/src/services/slack/types.ts
+index 6a09080..b95b230 100644
+--- a/src/services/slack/types.ts
++++ b/src/services/slack/types.ts
+@@ -74,6 +74,11 @@ export interface AutomationNotification {
+   customMessage?: string;
+   /** Optional ID of a newly created duplicate ad (for promote actions). */
+   duplicatedAdId?: string;
++  /**
++   * Optional number of target ad sets the winner was duplicated into. When
++   * greater than 1, the notification reflects the multi-target promotion.
++   */
++  duplicatedCount?: number;
+   /** Optional prefix string (used in tests to identify test messages). */
+   prefix?: string;
+   /** Date preset used to evaluate the rule — drives the Ads Manager deep link date range. */
+-- 
+2.43.0
+

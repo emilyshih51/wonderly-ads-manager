@@ -92,11 +92,10 @@ type below is unique within the pipeline, so the mapping is exact:
 - **NO-SHOW** = current stage type `meeting_no_show`.
 - **ACCEPTED** = current stage type `quote_signed` (Accepted is a terminal closed_won stage, so
   current stage is authoritative).
-- **BOOKED** = a real Call-1 signal (marketing `BOOKING_COMPLETE`, the `Call 1 Scheduled`
-  stage-change event, or a manual override) **or** a current stage only booked deals reach
-  (`meeting_scheduled` / `rescheduled` / `meeting_no_show` / `quote_and_invoice_sent` /
-  `quote_signed`). DQ and Lost need an explicit booking signal — a deal can be disqualified
-  without ever booking.
+- **BOOKED** = a real booking signal (marketing `BOOKING_COMPLETE` or a manual override) **or** a
+  current stage only booked deals reach (`meeting_scheduled` / `rescheduled` / `meeting_no_show` /
+  `quote_and_invoice_sent` / `quote_signed`). DQ and Lost need an explicit booking signal — a deal
+  can be disqualified without ever booking.
 - **HELD** = a **booked** deal that either reached an offer/acceptance
   (`quote_and_invoice_sent` / `quote_signed`) **or** is `disqualified` / `lost` **with a
   `LOSS_REASON_KEY` set**. A loss reason means a human dispositioned the deal after a call; booked

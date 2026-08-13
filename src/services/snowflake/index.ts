@@ -385,6 +385,9 @@ export class SnowflakeService {
            COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) AS day,
            st.TYPE AS stage_type,
            NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
+           -- When the deal entered its current stage — used to drop premature "No Show"s (a deal
+           -- can't no-show a call that hasn't happened; calls are never booked same-day).
+           CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date AS stage_entered_day,
            CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
            -- Booked = a genuine booking signal (marketing BOOKING_COMPLETE or a manual override) OR
            -- a current stage only booked deals reach. This gates DQ/Lost so pre-call junk leads
@@ -419,7 +422,10 @@ export class SnowflakeService {
          FROM (
            SELECT day, is_fb,
              CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END AS accepted,
-             CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' THEN 1 ELSE 0 END AS no_show,
+             -- No-show only counts once the call could have happened: drop deals that entered No
+             -- Show the SAME day they booked (premature — calls are never booked same-day). Keep
+             -- deals with an unknown stage-entered date (don't drop a legit no-show for a null ts).
+             CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' AND (stage_entered_day IS NULL OR stage_entered_day > day) THEN 1 ELSE 0 END AS no_show,
              CASE WHEN booked = 1 AND (
                         stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
                         OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
@@ -838,7 +844,13 @@ export class SnowflakeService {
                    OR (st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND NULLIF(cd.LOSS_REASON_KEY,'') IS NOT NULL))
               THEN 1 ELSE 0 END AS HELD,
          CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END AS ACCEPTED,
-         CASE WHEN st.TYPE = '${NO_SHOW_STAGE_TYPE}' THEN 1 ELSE 0 END AS NO_SHOW,
+         -- No-show only when the deal entered No Show on a LATER day than it booked (same-day
+         -- entries are premature — calls are never booked same-day); nulls are kept. Matches Daily Metrics.
+         CASE WHEN st.TYPE = '${NO_SHOW_STAGE_TYPE}'
+              AND (cd.PIPELINE_STAGE_ENTERED_AT IS NULL
+                   OR CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date
+                      > COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))))
+              THEN 1 ELSE 0 END AS NO_SHOW,
          CASE WHEN st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) THEN 1 ELSE 0 END AS DISQUALIFIED,
          COALESCE(cd.ESTIMATED_AMOUNT,0) AS EST_AMOUNT,
          TRIM(COALESCE(ct.FIRST_NAME,'') || ' ' || COALESCE(ct.LAST_NAME,'')) AS CONTACT_NAME,

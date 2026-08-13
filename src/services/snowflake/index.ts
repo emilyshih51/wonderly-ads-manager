@@ -860,15 +860,16 @@ export class SnowflakeService {
        LEFT JOIN crt ON crt.deal_id=fd.deal_id
        LEFT JOIN email_bc ebc ON ebc.email=em.join_email
        LEFT JOIN src ON src.email=em.join_email
-       -- Keep only genuinely BOOKED deals (this is a Call-1 audit): a booked-implying stage, or a
-       -- DQ/Lost that actually reached a call — a marketing BOOKING_COMPLETE, a manual override, or
-       -- a loss reason (post-call disposition). This drops the thousands of pre-call junk leads
-       -- that get auto-DQ'd without ever booking a Call 1.
+       -- Keep only genuinely BOOKED deals (this is a Call-1 audit): a booked-implying stage
+       -- (Call 1 Scheduled / Rescheduled / No Show / Pending Offer / Accepted — only booked deals
+       -- reach these) OR a real booking signal (marketing BOOKING_COMPLETE, or a manual override).
+       -- DQ/Lost only qualify via a booking signal — a loss reason alone is NOT proof of booking
+       -- (a rep can DQ a lead with a reason that never booked a Call 1), so it's excluded here.
        WHERE (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
          AND NOT ${excludedDealName('cd.NAME')}
          AND (
            st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
-           OR o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL OR NULLIF(cd.LOSS_REASON_KEY,'') IS NOT NULL
+           OR o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
          )
        ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) DESC`,
       // Binds: overrides JSON, the -days window for funnel_deals, then for src_raw.

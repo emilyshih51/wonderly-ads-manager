@@ -393,7 +393,19 @@ export class SnowflakeService {
              PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, cd.ID) END
              ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), cd.ID
            ) AS accept_rn,
-           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
+           -- Channel (FB vs organic). Prefer the deal's OWN attribution written into
+           -- METADATA.attribution at creation (utm_source/acquisition_channel/fbclid — populated on
+           -- new deals from ~Aug 2026 on); fall back to the email→marketing-session bridge for older
+           -- deals that predate it. FB = a facebook/ig source or an fbclid; else organic.
+           CASE
+             WHEN TRY_PARSE_JSON(cd.METADATA):attribution:utm_source IS NOT NULL
+                  OR TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel IS NOT NULL
+               THEN CASE WHEN LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:utm_source::string) IN ('facebook','ig')
+                          OR LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel::string) IN ('facebook','ig')
+                          OR TRY_PARSE_JSON(cd.METADATA):attribution:fbclid IS NOT NULL
+                         THEN 1 ELSE 0 END
+             ELSE CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END
+           END AS is_fb,
            -- Booked = a genuine booking signal (marketing BOOKING_COMPLETE or a manual override) OR
            -- a current stage only booked deals reach. This gates DQ/Lost so pre-call junk leads
            -- (no booking signal) never count as held.

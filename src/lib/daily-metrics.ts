@@ -76,6 +76,16 @@ const METRICS: Metric[] = [
     organic: (r) => r.bookedOrganic,
     hasCost: true,
   },
+  // Avg days from booking to the scheduled Call 1 — sits right after Call 1 booked. A weighted
+  // mean (Σ lead-days ÷ Σ bookings), so it's a ratio metric like CPC, but with no channel split
+  // (FB/Organic stay blank) and no w/w.
+  {
+    label: 'Days to call',
+    daily: (r) => (r.leadBookings > 0 ? r.leadDaysSum / r.leadBookings : 0),
+    numer: (r) => r.leadDaysSum,
+    denom: (r) => r.leadBookings,
+    noWow: true,
+  },
   {
     label: 'Qualified',
     daily: (r) => r.submitQualified,
@@ -115,16 +125,6 @@ const METRICS: Metric[] = [
   },
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
-  // Avg days from booking to the scheduled Call 1. A weighted mean (Σ lead-days ÷ Σ bookings),
-  // so it's a ratio metric like CPC — but with no channel split (FB/Organic stay blank) and no
-  // w/w. Appended last so it doesn't shift any existing column position.
-  {
-    label: 'Days to call',
-    daily: (r) => (r.leadBookings > 0 ? r.leadDaysSum / r.leadBookings : 0),
-    numer: (r) => r.leadDaysSum,
-    denom: (r) => r.leadBookings,
-    noWow: true,
-  },
 ];
 
 function round2(n: number): number {

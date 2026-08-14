@@ -79,19 +79,20 @@ describe('computeDailyMetrics', () => {
       '2026-07-28'
     );
 
-    // Spend is now the last metric (reversed funnel), so Spend ALL is column AQ (index 42).
-    // 7d avg = AVERAGE of the last 7 *completed* daily rows, listed explicitly because weekly
-    // summary rows sit between them (rows 8/16/24). Today (2026-07-28, row 6) skipped → row 7.
-    expect(m[2][42]).toBe('=IFERROR(AVERAGE(AQ7,AQ9,AQ10,AQ11,AQ12,AQ13,AQ14),0)');
+    // Spend is the last metric; with "Days to call" inserted after Call 1 booked (+3 cols),
+    // Spend ALL is column AT (index 45). 7d avg = AVERAGE of the last 7 *completed* daily rows,
+    // listed explicitly because weekly summary rows sit between them (rows 8/16/24). Today
+    // (2026-07-28, row 6) skipped → row 7.
+    expect(m[2][45]).toBe('=IFERROR(AVERAGE(AT7,AT9,AT10,AT11,AT12,AT13,AT14),0)');
     // MTD is a live window: 1st of this month (EOMONTH(TODAY(),-1)+1) through TODAY(). The
     // SUMIFS range spans to row 24 (the block's last row) — weekly rows are text in col A,
     // so the date criteria skip them.
-    expect(String(m[3][42])).toContain('SUMIFS(AQ$6:AQ$24');
-    expect(String(m[3][42])).toContain('">="&(EOMONTH(TODAY(),-1)+1)');
-    expect(String(m[3][42])).toContain('"<="&TODAY()');
+    expect(String(m[3][45])).toContain('SUMIFS(AT$6:AT$24');
+    expect(String(m[3][45])).toContain('">="&(EOMONTH(TODAY(),-1)+1)');
+    expect(String(m[3][45])).toContain('"<="&TODAY()');
     // Prev Month = all of last month: EOMONTH(TODAY(),-2)+1 through EOMONTH(TODAY(),-1).
-    expect(String(m[4][42])).toContain('">="&(EOMONTH(TODAY(),-2)+1)');
-    expect(String(m[4][42])).toContain('"<="&EOMONTH(TODAY(),-1)');
+    expect(String(m[4][45])).toContain('">="&(EOMONTH(TODAY(),-2)+1)');
+    expect(String(m[4][45])).toContain('"<="&EOMONTH(TODAY(),-1)');
   });
 
   it('shows daily w/w as the day vs the same weekday last week', () => {
@@ -99,9 +100,9 @@ describe('computeDailyMetrics', () => {
     const rows = days((i) => ({ fbSpend: i === 0 ? 100 : i === 7 ? 80 : 90 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // First daily row is m[5]; Spend ALL is col 42 (AQ), its w/w is col 43.
-    expect(m[5][42]).toBe(100);
-    expect(m[5][43]).toBe(0.25);
+    // First daily row is m[5]; Spend ALL is col 45 (AT), its w/w is col 46.
+    expect(m[5][45]).toBe(100);
+    expect(m[5][46]).toBe(0.25);
   });
 
   it('leaves w/w blank when there is no week-ago row', () => {
@@ -110,19 +111,19 @@ describe('computeDailyMetrics', () => {
     // The very last row is now a weekly summary; grab the oldest *daily* row (a real date).
     const lastDaily = [...m].reverse().find((r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r[0])))!;
 
-    expect(lastDaily[43]).toBe(''); // Spend w/w (col 43)
+    expect(lastDaily[46]).toBe(''); // Spend w/w (col 46)
   });
 
   it('averages CPC in the 7d summary and blanks its Organic column', () => {
     const rows = days(() => ({ fbSpend: 200, fbClicks: 100 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Reversed funnel: CPC is 2nd-from-last — Accepted(1-4) Held(5-9) No show(10-12)
-    // Call1(13-17) Qualified(18-22) Partial(23-27) CTA(28-32) Page views(33-37), then CPC:
-    // ALL 38 (AM), FB 40 (AO), Organic 41 (AP). 7d avg lists completed rows (weekly skipped).
-    expect(m[2][38]).toBe('=IFERROR(AVERAGE(AM7,AM9,AM10,AM11,AM12,AM13,AM14),0)'); // ALL 7d avg
-    expect(m[2][40]).toBe('=IFERROR(AVERAGE(AO7,AO9,AO10,AO11,AO12,AO13,AO14),0)'); // FB mirrors ALL
-    expect(m[2][41]).toBe(''); // no organic ad spend → blank
+    // Reversed funnel with Days to call inserted after Call 1 booked: Accepted(1-4) Held(5-9)
+    // No show(10-12) Call1(13-17) Days to call(18-20) Qualified(21-25) Partial(26-30) CTA(31-35)
+    // Page views(36-40), then CPC: ALL 41 (AP), FB 43 (AR), Organic 44 (AS).
+    expect(m[2][41]).toBe('=IFERROR(AVERAGE(AP7,AP9,AP10,AP11,AP12,AP13,AP14),0)'); // ALL 7d avg
+    expect(m[2][43]).toBe('=IFERROR(AVERAGE(AR7,AR9,AR10,AR11,AR12,AR13,AR14),0)'); // FB mirrors ALL
+    expect(m[2][44]).toBe(''); // no organic ad spend → blank
   });
 
   it('splits the funnel steps into FB/Organic and costs per ALL action', () => {
@@ -134,14 +135,14 @@ describe('computeDailyMetrics', () => {
     }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Page views is 8th in the reversed funnel: Cost=33 (AH), ALL=34 (AI), FB=36 (AK),
-    // Organic=37 (AL).
+    // Page views (after the +3 Days-to-call shift): Cost=36 (AK), ALL=37 (AL), FB=39 (AN),
+    // Organic=40 (AO).
     const firstDaily = m[5];
 
-    expect(firstDaily[33]).toBe(100); // Cost = 1000 FB spend / 10 ALL views (not FB 7)
-    expect(firstDaily[34]).toBe(10); // ALL
-    expect(firstDaily[36]).toBe(7); // FB
-    expect(firstDaily[37]).toBe(3); // Organic
+    expect(firstDaily[36]).toBe(100); // Cost = 1000 FB spend / 10 ALL views (not FB 7)
+    expect(firstDaily[37]).toBe(10); // ALL
+    expect(firstDaily[39]).toBe(7); // FB
+    expect(firstDaily[40]).toBe(3); // Organic
   });
 
   it('adds a weekly summary row at the bottom of each 7-day block', () => {
@@ -156,9 +157,9 @@ describe('computeDailyMetrics', () => {
 
     const fullWeek = weekly.find((r) => r[0] === 'Week of 2026-07-20')!;
 
-    expect(fullWeek[42]).toBe(700); // Spend ALL = 7 × 100 (sum, col AQ)
-    expect(fullWeek[43]).toBe(''); // Spend w/w left blank on weekly rows
-    expect(fullWeek[14]).toBe(14); // Call 1 booked ALL = 7 × 2 (col O)
+    expect(fullWeek[45]).toBe(700); // Spend ALL = 7 × 100 (sum, col AT)
+    expect(fullWeek[46]).toBe(''); // Spend w/w left blank on weekly rows
+    expect(fullWeek[14]).toBe(14); // Call 1 booked ALL = 7 × 2 (col O, before the shift)
     expect(fullWeek[13]).toBe(50); // Call 1 booked Cost = 700 spend ÷ 14 booked (col N)
   });
 
@@ -166,10 +167,10 @@ describe('computeDailyMetrics', () => {
     const rows = days(() => ({ pageView: 10, pageViewFb: 7, fbSpend: 1000 }));
     const m = computeDailyMetrics(rows, '2026-07-28');
 
-    // Page views Cost (col 33, AH): Σ Spend ALL (AQ, all FB) ÷ Σ Page views ALL (AI), over
+    // Page views Cost (col 36, AK): Σ Spend ALL (AT, all FB) ÷ Σ Page views ALL (AL), over
     // the explicit completed-day rows (weekly summary rows skipped).
-    expect(m[2][33]).toBe(
-      '=IFERROR(SUM(AQ7,AQ9,AQ10,AQ11,AQ12,AQ13,AQ14)/SUM(AI7,AI9,AI10,AI11,AI12,AI13,AI14),0)'
+    expect(m[2][36]).toBe(
+      '=IFERROR(SUM(AT7,AT9,AT10,AT11,AT12,AT13,AT14)/SUM(AL7,AL9,AL10,AL11,AL12,AL13,AL14),0)'
     );
   });
 });

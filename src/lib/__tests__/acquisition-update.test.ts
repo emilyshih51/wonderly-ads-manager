@@ -46,6 +46,8 @@ function row(date: string, over: Partial<MarketingDailyRow> = {}): MarketingDail
     held: 0,
     heldFb: 0,
     heldOrganic: 0,
+    leadDaysSum: 0,
+    leadBookings: 0,
     ...over,
   };
 }

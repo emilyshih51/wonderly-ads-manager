@@ -311,6 +311,8 @@ A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cro
   - `WONDERLY_DATA.DERIVED__CUSTOMER_FUNNEL.*` (prod) — `INT__CUSTOMER_FUNNEL_V2_CUSTOMER_VALUE_DAILY` (EV_OWED_USD), `BASE__TEAMS` (admin email, subscription), `FCT__CUSTOMER_META_SPEND_DAILY` (actual delivered Meta spend, not budget).
 - Timezone: all daily buckets cut on `America/Los_Angeles` (matches Amplitude UI).
 
+- **Days to call** (lead time) = for the bookings made each day, the average days from booking to the scheduled Call 1 (`event_start − created_at`). From `AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES` (`lead` CTE in getDailyMarketing), stored as `leadDaysSum` + `leadBookings` so a window average is Σsum ÷ Σbookings (booking-weighted). Excludes canceled/rescheduled (a reschedule moves `event_start`) and clamps 0–120 days. Rendered as a ratio metric (like CPC) in Daily Metrics — no channel split, no w/w. Leads book ~4 days out (median 4).
+
 ### Tabs the cron writes
 
 `wonderly_daily` (raw, merged+backfilled), `Daily Funnel`, `Daily Metrics` (Motion-style grid; Accepted group is first), `Overview` (KPI dashboard — includes cost per accepted 7d & 30d), `historical_cac` (monthly + all-time cost per accepted, cohort-keyed), `customer_pnl`, `call1_deals` (per-deal audit), `Definitions` (glossary), `meta` (freshness). Input tab `booking_overrides` is **read-only to the cron**. `call1_summary` was removed (redundant; cron deletes it each run).

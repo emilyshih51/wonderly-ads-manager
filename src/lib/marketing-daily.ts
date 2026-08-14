@@ -66,6 +66,14 @@ export interface DailyMarketingRow {
   heldFb: number;
   /** Held deals not attributed to Facebook (= held − heldFb). */
   heldOrganic: number;
+  /**
+   * Lead time to Call 1: Σ (scheduled call date − booking date), in days, over the bookings
+   * made that day. Paired with `leadBookings` so a window average is Σsum ÷ Σbookings (a
+   * booking-weighted mean), not a mean-of-daily-means. From `BOOKING_LINK_INVITEES`.
+   */
+  leadDaysSum: number;
+  /** Count of bookings made that day (the denominator for `leadDaysSum`). */
+  leadBookings: number;
 }
 
 /**
@@ -104,6 +112,9 @@ export const RAW_TAB_HEADERS = [
   // existing column index; older rows without these cells just read 0 until refetched.
   'NO_SHOW_FB',
   'NO_SHOW_ORGANIC',
+  // Lead-time to Call 1 (booking-day cohort), appended last for the same positional reason.
+  'LEAD_DAYS_SUM',
+  'LEAD_BOOKINGS',
 ] as const;
 
 /** One fully joined day, ready to write to the Blended tab. */
@@ -168,6 +179,8 @@ export function joinMarketingDaily(
         held: m?.held ?? 0,
         heldFb: m?.heldFb ?? 0,
         heldOrganic: m?.heldOrganic ?? 0,
+        leadDaysSum: m?.leadDaysSum ?? 0,
+        leadBookings: m?.leadBookings ?? 0,
       };
     });
 }
@@ -208,6 +221,8 @@ export function toSheetValues(rows: MarketingDailyRow[]): (string | number)[][] 
     r.heldOrganic,
     r.noShowFb,
     r.noShowOrganic,
+    r.leadDaysSum,
+    r.leadBookings,
   ]);
 }
 

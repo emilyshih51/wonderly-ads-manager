@@ -115,6 +115,16 @@ const METRICS: Metric[] = [
   },
   // Spend is 100% Facebook — FB mirrors ALL, Organic is zero by definition.
   { label: 'Spend', daily: (r) => r.fbSpend, fb: (r) => r.fbSpend, organic: () => 0 },
+  // Avg days from booking to the scheduled Call 1. A weighted mean (Σ lead-days ÷ Σ bookings),
+  // so it's a ratio metric like CPC — but with no channel split (FB/Organic stay blank) and no
+  // w/w. Appended last so it doesn't shift any existing column position.
+  {
+    label: 'Days to call',
+    daily: (r) => (r.leadBookings > 0 ? r.leadDaysSum / r.leadBookings : 0),
+    numer: (r) => r.leadDaysSum,
+    denom: (r) => r.leadBookings,
+    noWow: true,
+  },
 ];
 
 function round2(n: number): number {
@@ -177,7 +187,7 @@ function weeklyRow(members: MarketingDailyRow[]): (string | number)[] {
       const denom = members.reduce((s, r) => s + denomFn(r), 0);
 
       allV = denom > 0 ? round2(members.reduce((s, r) => s + numerFn(r), 0) / denom) : 0;
-      fbV = allV; // FB mirrors ALL — 100% of spend/clicks are Facebook
+      fbV = m.fb ? allV : ''; // CPC's FB mirrors ALL (100% FB); a no-split ratio (Days to call) stays blank
       orgV = ''; // no organic ad spend to divide
     } else {
       const fbFn = m.fb;

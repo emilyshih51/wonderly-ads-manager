@@ -48,6 +48,8 @@ export const DAILY_METRICS_FORMAT: MetricFormat[] = [
   { label: 'Page views', money: false, hasCost: true },
   { label: 'CPC', money: true, hideOrganic: true },
   { label: 'Spend', money: true, wholeDollars: true, hideOrganic: true },
+  // Avg days from booking to the call — a plain number, no channel split, no w/w.
+  { label: 'Days to call', money: false, noWow: true, hideFb: true, hideOrganic: true },
 ];
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */

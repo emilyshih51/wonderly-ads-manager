@@ -32,6 +32,8 @@ function row(o: Partial<MarketingDailyRow> = {}): MarketingDailyRow {
     held: 0,
     heldFb: 0,
     heldOrganic: 0,
+    leadDaysSum: 0,
+    leadBookings: 0,
     fbSpend: 0,
     fbImpressions: 0,
     fbClicks: 0,

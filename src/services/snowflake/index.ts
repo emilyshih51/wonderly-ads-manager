@@ -458,6 +458,20 @@ export class SnowflakeService {
            FROM ds WHERE day IS NOT NULL
          )
          GROUP BY day
+       ),
+       -- Lead time to Call 1: for the bookings made each day, Σ(scheduled call date − booking day)
+       -- and the booking count, so a window average is Σsum ÷ Σbookings. From the booking-link
+       -- invitees; excludes canceled and rescheduled (a reschedule moves EVENT_START to the new
+       -- time), and clamps to 0..120 days to drop placeholder/recurring events.
+       lead AS (
+         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS day,
+           SUM(DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date)) AS lead_days_sum,
+           COUNT(*) AS lead_bookings
+         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES
+         WHERE DELETED_AT IS NULL AND NOT IS_CANCELED AND NOT IS_RESCHEDULED
+           AND (INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(INVITEE_EMAIL)')})
+           AND DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date) BETWEEN 0 AND 120
+         GROUP BY 1
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
@@ -480,8 +494,10 @@ export class SnowflakeService {
          COALESCE(s.disqualified_lost,0) AS disqualified_lost,
          COALESCE(s.held,0) AS held,
          COALESCE(s.held_fb,0) AS held_fb,
-         COALESCE(s.held_organic,0) AS held_organic
-       FROM f LEFT JOIN s ON f.day = s.day
+         COALESCE(s.held_organic,0) AS held_organic,
+         COALESCE(lead.lead_days_sum,0) AS lead_days_sum,
+         COALESCE(lead.lead_bookings,0) AS lead_bookings
+       FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN lead ON f.day = lead.day
        ORDER BY f.day DESC`,
       // Binds: overrides JSON, then the -days window for excluded_amps, mkt, src_raw.
       [overridesJson(bookingOverrides), -days, -days, -days]
@@ -514,6 +530,8 @@ export class SnowflakeService {
       held: num(r.HELD),
       heldFb: num(r.HELD_FB),
       heldOrganic: num(r.HELD_ORGANIC),
+      leadDaysSum: num(r.LEAD_DAYS_SUM),
+      leadBookings: num(r.LEAD_BOOKINGS),
     }));
   }
 

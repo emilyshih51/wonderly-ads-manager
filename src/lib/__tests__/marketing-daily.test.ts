@@ -43,6 +43,8 @@ function mkt(date: string, o: Partial<DailyMarketingRow> = {}): DailyMarketingRo
     held: 0,
     heldFb: 0,
     heldOrganic: 0,
+    leadDaysSum: 0,
+    leadBookings: 0,
     ...o,
   };
 }
@@ -147,6 +149,8 @@ describe('toSheetValues', () => {
       0, // HELD_ORGANIC
       1, // NO_SHOW_FB (appended)
       1, // NO_SHOW_ORGANIC (appended)
+      0, // LEAD_DAYS_SUM (appended)
+      0, // LEAD_BOOKINGS (appended)
     ]);
     expect(values[0]).toHaveLength(RAW_TAB_HEADERS.length);
   });

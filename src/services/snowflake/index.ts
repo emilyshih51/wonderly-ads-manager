@@ -309,9 +309,8 @@ export class SnowflakeService {
                 AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic
-         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE anymore — a rebooking after a
-         -- no-show fires a second event, double-counting the same contractor. It's counted from the
-         -- CRM booked deals below (one deal per Call 1, so rebookings don't double-count).
+         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE (that event misfires and
+         -- under-reports ~half the bookings) — it comes from BOOKING_LINK_INVITEES (the lead CTE).
          FROM mkt GROUP BY day
        ),
        -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
@@ -432,16 +431,12 @@ export class SnowflakeService {
        --              Booked DQ/Lost with no loss reason are no-show fallout, NOT held.
        s AS (
          SELECT day,
-           SUM(booked_cnt) AS booked, SUM(booked_cnt * is_fb) AS booked_fb, SUM(booked_cnt * (1 - is_fb)) AS booked_organic,
            SUM(held) AS held, SUM(held * is_fb) AS held_fb, SUM(held * (1 - is_fb)) AS held_organic,
            SUM(accepted) AS accepted, SUM(accepted * is_fb) AS accepted_fb, SUM(accepted * (1 - is_fb)) AS accepted_organic,
            SUM(no_show) AS no_show, SUM(no_show * is_fb) AS no_show_fb, SUM(no_show * (1 - is_fb)) AS no_show_organic,
            SUM(disqualified_lost) AS disqualified_lost
          FROM (
            SELECT day, is_fb,
-             -- CALL1_BOOKED = deals that booked a Call 1 (the booked universe), one row per deal so
-             -- a rebooking after a no-show doesn't double-count. Excludes phantom re-accept dupes.
-             CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) THEN 1 ELSE 0 END AS booked_cnt,
              -- Accepted once per contractor (rank-1 Accepted deal); duplicate phantom acceptances
              -- for the same contractor are dropped.
              CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
@@ -459,30 +454,40 @@ export class SnowflakeService {
          )
          GROUP BY day
        ),
-       -- Lead time to Call 1: for the bookings made each day, Σ(scheduled call date − booking day)
-       -- and the booking count, so a window average is Σsum ÷ Σbookings. From the booking-link
-       -- invitees; excludes canceled and rescheduled (a reschedule moves EVENT_START to the new
-       -- time), and clamps to 0..120 days to drop placeholder/recurring events.
+       -- One row per real Call 1 booking, from the booking-link invitees (the source of truth —
+       -- each row is a booking on the calendar). Non-canceled only. FB vs organic is bridged from
+       -- the invitee's email → marketing session; days_out is the lead time to the scheduled call.
+       bli AS (
+         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date AS day,
+           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
+           b.IS_RESCHEDULED AS resched,
+           DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', b.EVENT_START)::date) AS days_out
+         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
+         LEFT JOIN src ON src.email = LOWER(b.INVITEE_EMAIL)
+         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED
+           AND (b.INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')})
+       ),
+       -- CALL1_BOOKED = count of real bookings per day (NOT the Amplitude event, which misfires and
+       -- under-reports ~half, and NOT the fuzzy CRM-deal keying). Lead time (Days to call) reuses the
+       -- same rows: Σ(call date − booking day) ÷ bookings, excluding rescheduled (their EVENT_START
+       -- moved) and clamped to 0..120 days.
        lead AS (
-         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS day,
-           SUM(DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date)) AS lead_days_sum,
-           COUNT(*) AS lead_bookings
-         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES
-         WHERE DELETED_AT IS NULL AND NOT IS_CANCELED AND NOT IS_RESCHEDULED
-           AND (INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(INVITEE_EMAIL)')})
-           AND DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date) BETWEEN 0 AND 120
-         GROUP BY 1
+         SELECT day,
+           COUNT(*) AS booked, SUM(is_fb) AS booked_fb, SUM(1 - is_fb) AS booked_organic,
+           SUM(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN days_out END) AS lead_days_sum,
+           COUNT(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN 1 END) AS lead_bookings
+         FROM bli GROUP BY day
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
          f.cta_clicked, f.cta_fb, f.cta_organic,
          f.submit_partial, f.partial_fb, f.partial_organic,
          f.submit_qualified, f.qualified_fb, f.qualified_organic,
-         -- CALL1_BOOKED = CRM deals that booked a Call 1, keyed by booking day (deduped — one deal
-         -- per Call 1, so a rebooking after a no-show is not double-counted like the Amplitude event).
-         COALESCE(s.booked,0) AS booked_all,
-         COALESCE(s.booked_fb,0) AS booked_fb,
-         COALESCE(s.booked_organic,0) AS booked_organic,
+         -- CALL1_BOOKED = count of real bookings from BOOKING_LINK_INVITEES, keyed by the actual
+         -- booking day (the source of truth — Amplitude's event under-reports ~half).
+         COALESCE(lead.booked,0) AS booked_all,
+         COALESCE(lead.booked_fb,0) AS booked_fb,
+         COALESCE(lead.booked_organic,0) AS booked_organic,
          -- ACCEPTED / HELD are COHORT metrics: of THIS day's Call 1 bookings, how many
          -- eventually held / were accepted (so recent days read low until they mature).
          COALESCE(s.accepted,0) AS accepted,

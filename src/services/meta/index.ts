@@ -33,6 +33,7 @@ import {
   type MetaVideoUploadResponse,
   type MetaAdAccountInfo,
 } from './types';
+import type { MetaCampaignSpend } from '@/lib/campaign-performance';
 import type { MetaDailySpend } from '@/lib/marketing-daily';
 import type { MetaCampaign, MetaAdSet, MetaAd, MetaInsightsRow, UserSession } from '@/types';
 
@@ -802,6 +803,35 @@ export class MetaService {
       spend: Number(row.spend ?? 0),
       impressions: Number(row.impressions ?? 0),
       clicks: Number(row.inline_link_clicks ?? 0),
+    }));
+  }
+
+  /**
+   * Total spend per campaign over a date range (`level=campaign`), for cost-per-outcome
+   * dashboards. One row per campaign that delivered in the window, carrying its current
+   * display name — a better name source than {@link getCampaigns} because it covers any
+   * campaign with spend, including archived ones.
+   *
+   * @param since - Start date, `YYYY-MM-DD`
+   * @param until - End date, `YYYY-MM-DD`
+   * @returns One row per campaign: id, name, and window spend
+   */
+  async getCampaignSpendForDateRange(since: string, until: string): Promise<MetaCampaignSpend[]> {
+    const response = await this.request<{
+      data?: Array<{ campaign_id?: string; campaign_name?: string; spend?: string }>;
+    }>(`/act_${this.adAccountId}/insights`, {
+      params: {
+        fields: 'campaign_id,campaign_name,spend',
+        time_range: JSON.stringify({ since, until }),
+        level: 'campaign',
+        limit: '500',
+      },
+    });
+
+    return (response.data ?? []).map((row) => ({
+      campaignId: String(row.campaign_id ?? ''),
+      campaignName: String(row.campaign_name ?? ''),
+      spend: Number(row.spend ?? 0),
     }));
   }
 

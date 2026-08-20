@@ -42,6 +42,8 @@ export interface Call1DealRow {
   source: string;
   /** Meta campaign id (utm_medium) that drove this lead, from the ad's click URL. Blank if organic/unattributed. */
   campaignId: string;
+  /** Human-readable Meta campaign name for `campaignId`, resolved from the Meta API. Blank if organic/unattributed or the id no longer maps to a campaign. */
+  campaignName: string;
   /** Meta ad id (utm_content) that drove this lead, from the ad's click URL. Blank if organic/unattributed. */
   adId: string;
   /** `YYYY-MM-DD` the Call 1 was first held (first post-call event). Blank if held only via current stage or never. */
@@ -66,6 +68,7 @@ export const CALL1_DEALS_HEADERS = [
   'EMAIL',
   'SOURCE',
   'CAMPAIGN_ID',
+  'CAMPAIGN_NAME',
   'AD_ID',
   'HELD_DATE',
   'ACCEPTED_DATE',
@@ -92,8 +95,28 @@ export function toCall1DealsValues(rows: Call1DealRow[]): (string | number)[][] 
     r.email,
     r.source,
     r.campaignId,
+    r.campaignName,
     r.adId,
     r.heldDate,
     r.acceptedDate,
   ]);
+}
+
+/**
+ * Fill each deal's `campaignName` from a Meta campaign-id → name map. Deals whose
+ * `campaignId` is blank or unknown keep an empty name (rendered as organic/unattributed
+ * downstream). Pure — returns new rows, does not mutate the input.
+ *
+ * @param rows - Deal rows carrying `campaignId`
+ * @param nameById - Map of Meta campaign id → campaign name
+ * @returns New rows with `campaignName` populated where the id resolves
+ */
+export function withCampaignNames(
+  rows: Call1DealRow[],
+  nameById: Map<string, string>
+): Call1DealRow[] {
+  return rows.map((r) => ({
+    ...r,
+    campaignName: r.campaignId ? (nameById.get(r.campaignId) ?? '') : '',
+  }));
 }

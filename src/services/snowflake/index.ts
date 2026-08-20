@@ -962,6 +962,8 @@ export class SnowflakeService {
       email: String(r.EMAIL ?? ''),
       source: String(r.SOURCE ?? ''),
       campaignId: String(r.CAMPAIGN_ID ?? ''),
+      // Resolved from the Meta API in the cron (Snowflake only has the id).
+      campaignName: '',
       adId: String(r.AD_ID ?? ''),
       heldDate: String(r.HELD_DATE ?? ''),
       acceptedDate: String(r.ACCEPTED_DATE ?? ''),

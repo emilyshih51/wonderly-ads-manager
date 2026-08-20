@@ -296,11 +296,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'From the form-submit event, matched by email; falls back utm → user-property utm → referrer → fbclid. Blank = unattributed.',
   ],
   [
-    'CAMPAIGN_ID / AD_ID',
+    'CAMPAIGN_ID / CAMPAIGN_NAME / AD_ID',
     'call1_deals',
-    'The Meta campaign and ad that drove the lead — so you can see which ad produces the most qualified/accepted deals.',
-    'Amplitude → CRM',
-    'utm_medium = campaign.id, utm_content = ad.id, set on the ad’s click URL and carried on the lead-submission / booking events; matched to the deal by email, taking the most recent numeric (paid) id. Blank for organic/unattributed.',
+    'The Meta campaign and ad that drove the lead — so you can see which campaign/ad produces the most qualified/accepted deals.',
+    'Amplitude → CRM + Meta',
+    'utm_medium = campaign.id, utm_content = ad.id, set on the ad’s click URL and carried on the lead-submission / booking events; matched to the deal by email, taking the most recent numeric (paid) id. CAMPAIGN_NAME is that id resolved to its Meta display name. Blank for organic/unattributed.',
   ],
   [
     'ACCEPTED_DATE',
@@ -308,6 +308,29 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Day the deal first reached “Accepted”.',
     'CRM',
     'Starts the 60/90-day succeeding clock. Blank if never accepted.',
+  ],
+
+  // --- Campaign Performance (per-campaign dashboard) ----------------------
+  [
+    'CAMPAIGN',
+    'Campaign Performance',
+    'One row per Meta campaign (plus an organic/unattributed bucket and a Total).',
+    'call1_deals + Meta',
+    'Campaign display name, resolved from the campaign id on each deal. Campaigns with spend but no deals still appear (so wasted spend is visible).',
+  ],
+  [
+    'CALL1_BOOKED / HELD / ACCEPTED',
+    'Campaign Performance',
+    'How many Call 1s that campaign booked, and how many held / were accepted.',
+    'call1_deals',
+    'Counted from the deal rows attributed to the campaign (booking-day cohort, same as Daily Metrics). ACCEPT_RATE = accepted ÷ booked.',
+  ],
+  [
+    'SPEND / COST_PER_ACCEPTED',
+    'Campaign Performance',
+    'Meta spend for the campaign since May 1, and cost to acquire an accepted contractor.',
+    'Meta + call1_deals',
+    'Campaign-level spend ÷ accepted from that campaign. Booking-day cohort, so recent campaigns read high until they mature (like historical_cac); blank when there’s spend but no acceptances yet.',
   ],
 
   // --- booking_overrides (manual input) -----------------------------------

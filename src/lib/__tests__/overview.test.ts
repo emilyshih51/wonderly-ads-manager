@@ -57,6 +57,7 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     email: '',
     source: 'facebook',
     campaignId: '',
+    campaignName: '',
     adId: '',
     heldDate: '',
     acceptedDate: '',

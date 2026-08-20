@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { toCall1DealsValues, CALL1_DEALS_HEADERS, type Call1DealRow } from '@/lib/call1-deals';
+import {
+  CALL1_DEALS_HEADERS,
+  toCall1DealsValues,
+  withCampaignNames,
+  type Call1DealRow,
+} from '@/lib/call1-deals';
 
 function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
   return {
@@ -18,6 +23,7 @@ function deal(o: Partial<Call1DealRow> = {}): Call1DealRow {
     email: 'jane@example.com',
     source: 'facebook',
     campaignId: '',
+    campaignName: '',
     adId: '',
     heldDate: '',
     acceptedDate: '',
@@ -42,6 +48,7 @@ describe('toCall1DealsValues', () => {
         email: 'harrison@dewittbuilding.com',
         source: 'facebook',
         campaignId: '120242022304100408',
+        campaignName: 'Roofing — Prospecting',
         adId: '120246607811180408',
         acceptedDate: '2026-07-24',
       }),
@@ -62,11 +69,27 @@ describe('toCall1DealsValues', () => {
       'harrison@dewittbuilding.com',
       'facebook',
       '120242022304100408', // CAMPAIGN_ID
+      'Roofing — Prospecting', // CAMPAIGN_NAME
       '120246607811180408', // AD_ID
       '', // HELD_DATE
       '2026-07-24', // ACCEPTED_DATE
     ]);
     expect(values[0]).toHaveLength(CALL1_DEALS_HEADERS.length);
+  });
+
+  it('withCampaignNames resolves the id to a name, leaving unknown/blank ids empty', () => {
+    const named = withCampaignNames(
+      [
+        deal({ dealId: 'a', campaignId: '111' }),
+        deal({ dealId: 'b', campaignId: '999' }), // not in the map
+        deal({ dealId: 'c', campaignId: '' }), // organic
+      ],
+      new Map([['111', 'Roofing — Prospecting']])
+    );
+
+    expect(named[0].campaignName).toBe('Roofing — Prospecting');
+    expect(named[1].campaignName).toBe('');
+    expect(named[2].campaignName).toBe('');
   });
 
   it('emits a row for a non-booked accepted deal (blank BOOKED_DAY)', () => {

@@ -15,7 +15,13 @@
 
 import { NextResponse } from 'next/server';
 
-import { CALL1_DEALS_HEADERS, toCall1DealsValues } from '@/lib/call1-deals';
+import { CALL1_DEALS_HEADERS, toCall1DealsValues, withCampaignNames } from '@/lib/call1-deals';
+import {
+  CAMPAIGN_PERFORMANCE_HEADERS,
+  buildCampaignPerformanceFormatRequests,
+  computeCampaignPerformance,
+  toCampaignPerformanceValues,
+} from '@/lib/campaign-performance';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import {
   HISTORICAL_CAC_HEADERS,
@@ -73,6 +79,9 @@ const CUSTOMER_PNL_DAYS = 90;
 
 /** Deal-level Call 1 fact table (audit trail behind the acceptance rates). */
 const CALL1_DEALS_TAB = 'call1_deals';
+
+/** Per-campaign booked/held/accepted + spend + cost-per-accepted dashboard. */
+const CAMPAIGN_PERFORMANCE_TAB = 'Campaign Performance';
 
 /** Retired tab — deleted each run so it can't linger with stale data. */
 const CALL1_SUMMARY_TAB = 'call1_summary';
@@ -193,13 +202,65 @@ export async function GET(request: Request) {
       return primary >= BACKFILL_START;
     });
 
+    // Resolve each deal's Meta campaign id → name, and pull per-campaign spend, for the
+    // campaign-name column and the Campaign Performance dashboard. Both Meta reads are
+    // best-effort: on failure, names fall back to the raw id and spend to 0 — the deal
+    // data still writes.
+    const [campaignList, campaignSpend] = await Promise.all([
+      meta.getCampaigns().catch((e) => {
+        logger.error('getCampaigns failed (names fall back to id)', e);
+
+        return { data: [] };
+      }),
+      meta.getCampaignSpendForDateRange(BACKFILL_START, today).catch((e) => {
+        logger.error('getCampaignSpendForDateRange failed (spend treated as 0)', e);
+
+        return [];
+      }),
+    ]);
+
+    // Name map: campaign-level insights first (covers archived campaigns with spend), then
+    // the campaign list as a fallback for campaigns that produced deals but had no spend.
+    const campaignNameById = new Map<string, string>();
+
+    for (const c of campaignSpend) {
+      if (c.campaignId) campaignNameById.set(c.campaignId, c.campaignName);
+    }
+
+    for (const c of campaignList.data) {
+      if (c.id && !campaignNameById.has(c.id)) campaignNameById.set(c.id, c.name);
+    }
+
+    const namedCall1Deals = withCampaignNames(call1Deals, campaignNameById);
+
     await sheets.ensureTab(sheetId, CALL1_DEALS_TAB);
     await sheets.replaceRows(
       sheetId,
       CALL1_DEALS_TAB,
       [...CALL1_DEALS_HEADERS],
-      toCall1DealsValues(call1Deals)
+      toCall1DealsValues(namedCall1Deals)
     );
+
+    // Campaign Performance: per-campaign booked → held → accepted, spend, and cost per
+    // accepted (booking-day cohort, same maturation caveat as historical_cac).
+    const campaignPerf = computeCampaignPerformance(namedCall1Deals, campaignSpend);
+    const campaignPerfValues = toCampaignPerformanceValues(campaignPerf);
+
+    await sheets.ensureTab(sheetId, CAMPAIGN_PERFORMANCE_TAB);
+    await sheets.replaceRows(
+      sheetId,
+      CAMPAIGN_PERFORMANCE_TAB,
+      [...CAMPAIGN_PERFORMANCE_HEADERS],
+      campaignPerfValues
+    );
+
+    try {
+      await sheets.formatTab(sheetId, CAMPAIGN_PERFORMANCE_TAB, (gid) =>
+        buildCampaignPerformanceFormatRequests(gid, campaignPerfValues.length)
+      );
+    } catch (formatError) {
+      logger.error('Campaign Performance formatting failed (values still written)', formatError);
+    }
 
     // call1_summary was retired — its metrics live in Overview, Daily Funnel, and Daily
     // Metrics. Delete the leftover tab (idempotent once it's gone).

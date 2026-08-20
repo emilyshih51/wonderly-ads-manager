@@ -1,0 +1,151 @@
+From 35c31fa65441c2540524c8fa16d9c1714e6bee84 Mon Sep 17 00:00:00 2001
+From: emilyshih51 <emily@usemotion.com>
+Date: Mon, 17 Aug 2026 10:55:21 -0400
+Subject: [PATCH] fix(marketing): Source Call 1 booked from
+ BOOKING_LINK_INVITEES (real bookings)
+
+The Amplitude BOOKING_COMPLETE event under-reports ~half the bookings (8/10: 38 real
+vs 16 in Amplitude), and the CRM-deal keying read low (fuzzy LEAST(event,created) day
++ dedupe). Switch to the actual booking records: count non-canceled BOOKING_LINK_INVITEES
+rows keyed by CREATED_AT (bli/lead CTEs), FB/organic bridged from invitee email. Booked
+now matches the calendar (Sun 8/9 = 33, not 17/18). Lead-time reuses the same rows.
+---
+ CLAUDE.md                       |  2 +-
+ src/lib/definitions.ts          | 12 ++++----
+ src/services/snowflake/index.ts | 53 ++++++++++++++++++---------------
+ 3 files changed, 36 insertions(+), 31 deletions(-)
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 139f085..a1387fd 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -325,7 +325,7 @@ A Google Sheet refreshed by the cron `GET /api/cron/marketing-daily` (Vercel cro
+ - **Summary windows are live formulas:** MTD = `>= EOMONTH(TODAY(),-1)+1 … <= TODAY()`; Prev Month = all of last month via `EOMONTH`. They self-advance (not baked-in dates). 7d avg uses the last 7 _completed_ days (skips today's partial).
+ - **All sales stages key on the CRM `TYPE` (stable enum), scoped to `ACQUISITION_PIPELINE_ID = pip_019c0568…`**, read from the `AIRBYTE.CSM_OPS` CRM current stage — NOT the display NAME (renames don't break metrics) and NOT the Amplitude stage-change events (they only reliably fire for Call 1 Scheduled + Accepted, so they're used **only** for the Call 1 Scheduled booking day). The CSM_OPS pipeline has 9 stages, each `TYPE` unique: `meeting_scheduled` (Call 1 Scheduled), `rescheduled`, `meeting_no_show` (No Show), `quote_and_invoice_sent` (Pending Offer Out), `quote_signed` (Accepted, closed_won), `disqualified` (DQ), `lost` (Lost). Everything is cohort-keyed by booking day (override, else earlier of BOOKING_COMPLETE email bridge / CRM `CREATED_AT`, else Call 1 Scheduled event), split FB/organic via email→utm. All live in the unified `ds`/`s` CTEs (the old `deal2`/`nsc`/`nscs` split is gone).
+ - **BOOKED gate** = a real Call-1 signal (marketing `BOOKING_COMPLETE`, the `Call 1 Scheduled` event, or an override) OR a current stage only booked deals reach (`meeting_scheduled`/`rescheduled`/`meeting_no_show`/`quote_and_invoice_sent`/`quote_signed`). DQ/Lost need an explicit booking signal — a deal can be DQ'd without ever booking (CSM_OPS creates a deal for every lead, so `CREATED_AT` alone no longer implies booked).
+-- **CALL1_BOOKED** (the headline "Call 1 booked" metric) = **count of booked deals from CSM_OPS** (the BOOKED gate above), one row per deal, keyed by booking day — NOT the Amplitude `BOOKING_COMPLETE` event. A rebooking after a no-show fires a second `BOOKING_COMPLETE`, double-counting the same contractor; counting deals dedupes it. Excludes phantom re-accept dupes (`accept_rn>1`). It now includes outbound bookings (no marketing session → organic), so it can slightly exceed qualified some days. The rest of the marketing funnel (page view → qualified) is still Amplitude `MARKETING_SITE__*`.
++- **CALL1_BOOKED** (the headline "Call 1 booked" metric) = **count of real bookings from `AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES`** (one row per actual Call 1 on the calendar, non-canceled), keyed by the booking's `CREATED_AT` day — the `bli`/`lead` CTEs in getDailyMarketing. NOT the Amplitude `BOOKING_COMPLETE` event (it misfires and under-reports ~half — e.g. 8/10 had 38 real bookings but Amplitude logged 16) and NOT the old CRM-deal keying (which read low via a fuzzy `LEAST(booking-event, deal-created)` day). FB/organic is bridged from the invitee email → marketing session (`src`). The rest of the marketing funnel (page view → qualified) is still Amplitude `MARKETING_SITE__*`.
+ - **NO_SHOW** = current stage type `meeting_no_show`, **excluding same-day dispositions** — a no-show only counts when the deal entered No Show on a LATER day than it booked (`PIPELINE_STAGE_ENTERED_AT > booked_day`; nulls kept). Calls are never booked same-day, so a deal moved to No Show the same day it booked is premature CRM data, not a real no-show (~98 dropped since May). **HELD** = a booked deal that reached an offer/acceptance (`quote_and_invoice_sent`/`quote_signed`) OR is `disqualified`/`lost` **with a `LOSS_REASON_KEY` set** (a human post-call disposition; booked DQ/Lost with no reason are no-show fallout, NOT held — this keeps held ≈ no-show instead of inflating it). **ACCEPTED** = current stage type `quote_signed` (terminal closed_won; current stage is authoritative), **deduped by contractor email** — CSM_OPS can create a second phantom "Accepted" deal for an already-accepted contractor (created straight into Accepted; `accept_rn>1` dropped), so only the earliest counts (both held and call1_deals drop the dupes too). \*\*Do NOT source held/no-show from the prod `DERIVED__CUSTOMER_FUNNEL` meeting model — that's the \_customers'\* funnel (contractors↔homeowners), a disjoint population.\*\* Over the last 120d: ~172 accepted, ~622 held, ~672 no-show. Engineer-facing reference: `docs/growth-sheet-snowflake-contract.md`.
+ - **HELD/ACCEPTED are COHORT-keyed by booking day** (of the deals booked that day, how many eventually held/accepted) everywhere — Daily Metrics, Daily Funnel, historical_cac, AND the Overview (headline cost-per-accepted 7d/30d + week-over-week HELD/ACCEPTED). Recent windows read low/$0 until the cohort matures; the 30d and historical_cac are the matured figures. The rest of the funnel (page views → booked) is flow-keyed by event date. Keep the Overview consistent with Daily Metrics — don't flow-key held/accepted there.
+ - **booked_day derivation** (per deal, in `deal2`/getCall1Deals): the **earliest booking signal** — first `BOOKING_COMPLETE` (bridged email→amplitude_id, since the event carries no email) or the **CRM deal-creation day** (`CRM_DEALS.CREATED_AT`; booking the Call 1 creates the deal), whichever is earlier — falling back to the `Call 1 Scheduled` stage event, with the `booking_overrides` tab winning over all. CREATED_AT has **100% coverage** and matches BOOKING_COMPLETE (median 0 days), so every deal gets a booked day (no deal needs a manual override anymore). The `Call 1 Scheduled` event alone is unreliable — it's often a late re-book (created day / booking_complete is earlier in ~209 deals). `booking_overrides` remains available to correct any specific deal.
+diff --git a/src/lib/definitions.ts b/src/lib/definitions.ts
+index c947f53..c3e8d58 100644
+--- a/src/lib/definitions.ts
++++ b/src/lib/definitions.ts
+@@ -81,16 +81,16 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
+   [
+     'BOOKED_ALL / CALL1_BOOKED',
+     'wonderly_daily / Daily Funnel',
+-    'Deals that booked a Call 1 — the single Call 1 number, keyed by booking day.',
+-    'CSM_OPS CRM',
+-    'Count of CRM deals that booked a Call 1 (reached Call 1 Scheduled or beyond, or have a booking signal), ONE row per deal. NOT the Amplitude BOOKING_COMPLETE event — a rebooking after a no-show fires a second event and double-counts the same contractor; counting deals avoids that.',
++    'Real Call 1s booked that day — the single Call 1 number.',
++    'CSM_OPS BOOKING_LINK_INVITEES',
++    'Count of actual bookings on the calendar (non-canceled), keyed by the booking CREATED_AT day. NOT the Amplitude BOOKING_COMPLETE event (it misfires and under-reports ~half) and NOT the CRM-deal keying (reads low).',
+   ],
+   [
+     'BOOKED_FB',
+     'wonderly_daily',
+-    'Booked deals attributed to Facebook.',
+-    'CSM_OPS CRM + Amplitude',
+-    'Booked deal whose contact email bridges to a facebook/ig utm (or fbclid) marketing session; Organic = everything else (incl. outbound with no marketing session).',
++    'Booked Call 1s attributed to Facebook.',
++    'CSM_OPS + Amplitude',
++    'Booking whose invitee email bridges to a facebook/ig utm (or fbclid) marketing session; Organic = everything else.',
+   ],
+   [
+     'BOOKED_ORGANIC',
+diff --git a/src/services/snowflake/index.ts b/src/services/snowflake/index.ts
+index 65fe259..e429fef 100644
+--- a/src/services/snowflake/index.ts
++++ b/src/services/snowflake/index.ts
+@@ -309,9 +309,8 @@ export class SnowflakeService {
+                 AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
+            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic
+-         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE anymore — a rebooking after a
+-         -- no-show fires a second event, double-counting the same contractor. It's counted from the
+-         -- CRM booked deals below (one deal per Call 1, so rebookings don't double-count).
++         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE (that event misfires and
++         -- under-reports ~half the bookings) — it comes from BOOKING_LINK_INVITEES (the lead CTE).
+          FROM mkt GROUP BY day
+        ),
+        -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
+@@ -432,16 +431,12 @@ export class SnowflakeService {
+        --              Booked DQ/Lost with no loss reason are no-show fallout, NOT held.
+        s AS (
+          SELECT day,
+-           SUM(booked_cnt) AS booked, SUM(booked_cnt * is_fb) AS booked_fb, SUM(booked_cnt * (1 - is_fb)) AS booked_organic,
+            SUM(held) AS held, SUM(held * is_fb) AS held_fb, SUM(held * (1 - is_fb)) AS held_organic,
+            SUM(accepted) AS accepted, SUM(accepted * is_fb) AS accepted_fb, SUM(accepted * (1 - is_fb)) AS accepted_organic,
+            SUM(no_show) AS no_show, SUM(no_show * is_fb) AS no_show_fb, SUM(no_show * (1 - is_fb)) AS no_show_organic,
+            SUM(disqualified_lost) AS disqualified_lost
+          FROM (
+            SELECT day, is_fb,
+-             -- CALL1_BOOKED = deals that booked a Call 1 (the booked universe), one row per deal so
+-             -- a rebooking after a no-show doesn't double-count. Excludes phantom re-accept dupes.
+-             CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) THEN 1 ELSE 0 END AS booked_cnt,
+              -- Accepted once per contractor (rank-1 Accepted deal); duplicate phantom acceptances
+              -- for the same contractor are dropped.
+              CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
+@@ -459,30 +454,40 @@ export class SnowflakeService {
+          )
+          GROUP BY day
+        ),
+-       -- Lead time to Call 1: for the bookings made each day, Σ(scheduled call date − booking day)
+-       -- and the booking count, so a window average is Σsum ÷ Σbookings. From the booking-link
+-       -- invitees; excludes canceled and rescheduled (a reschedule moves EVENT_START to the new
+-       -- time), and clamps to 0..120 days to drop placeholder/recurring events.
++       -- One row per real Call 1 booking, from the booking-link invitees (the source of truth —
++       -- each row is a booking on the calendar). Non-canceled only. FB vs organic is bridged from
++       -- the invitee's email → marketing session; days_out is the lead time to the scheduled call.
++       bli AS (
++         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date AS day,
++           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
++           b.IS_RESCHEDULED AS resched,
++           DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', b.EVENT_START)::date) AS days_out
++         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
++         LEFT JOIN src ON src.email = LOWER(b.INVITEE_EMAIL)
++         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED
++           AND (b.INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')})
++       ),
++       -- CALL1_BOOKED = count of real bookings per day (NOT the Amplitude event, which misfires and
++       -- under-reports ~half, and NOT the fuzzy CRM-deal keying). Lead time (Days to call) reuses the
++       -- same rows: Σ(call date − booking day) ÷ bookings, excluding rescheduled (their EVENT_START
++       -- moved) and clamped to 0..120 days.
+        lead AS (
+-         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS day,
+-           SUM(DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date)) AS lead_days_sum,
+-           COUNT(*) AS lead_bookings
+-         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES
+-         WHERE DELETED_AT IS NULL AND NOT IS_CANCELED AND NOT IS_RESCHEDULED
+-           AND (INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(INVITEE_EMAIL)')})
+-           AND DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', EVENT_START)::date) BETWEEN 0 AND 120
+-         GROUP BY 1
++         SELECT day,
++           COUNT(*) AS booked, SUM(is_fb) AS booked_fb, SUM(1 - is_fb) AS booked_organic,
++           SUM(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN days_out END) AS lead_days_sum,
++           COUNT(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN 1 END) AS lead_bookings
++         FROM bli GROUP BY day
+        )
+        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
+          f.page_view, f.page_view_fb, f.page_view_organic,
+          f.cta_clicked, f.cta_fb, f.cta_organic,
+          f.submit_partial, f.partial_fb, f.partial_organic,
+          f.submit_qualified, f.qualified_fb, f.qualified_organic,
+-         -- CALL1_BOOKED = CRM deals that booked a Call 1, keyed by booking day (deduped — one deal
+-         -- per Call 1, so a rebooking after a no-show is not double-counted like the Amplitude event).
+-         COALESCE(s.booked,0) AS booked_all,
+-         COALESCE(s.booked_fb,0) AS booked_fb,
+-         COALESCE(s.booked_organic,0) AS booked_organic,
++         -- CALL1_BOOKED = count of real bookings from BOOKING_LINK_INVITEES, keyed by the actual
++         -- booking day (the source of truth — Amplitude's event under-reports ~half).
++         COALESCE(lead.booked,0) AS booked_all,
++         COALESCE(lead.booked_fb,0) AS booked_fb,
++         COALESCE(lead.booked_organic,0) AS booked_organic,
+          -- ACCEPTED / HELD are COHORT metrics: of THIS day's Call 1 bookings, how many
+          -- eventually held / were accepted (so recent days read low until they mature).
+          COALESCE(s.accepted,0) AS accepted,
+-- 
+2.34.1
+

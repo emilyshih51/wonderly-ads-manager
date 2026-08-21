@@ -8,10 +8,12 @@
  * costs are derived here. The cron writes the result to the `daily_funnel` tab.
  *
  * Funnel: FB spend → visits → CTA → partial form → qualified form → Call 1 booked
- * (the BOOKING_COMPLETE count) → held → accepted, with no-show shown alongside held as the
- * other disposition of a booked call. Held, no-show, and accepted are cohort metrics — of
- * that day's Call 1 bookings, how many eventually held / no-showed / were accepted — and
- * convert against the Call 1 booked count, so recent days read low until the cohort matures.
+ * (a qualified lead who booked, so it's a subset of Qualified) → held → accepted, with
+ * no-show shown alongside held as the other disposition of a booked call. Held, no-show, and
+ * accepted are cohort metrics read from the CRM deal stages (of that booking-day cohort, how
+ * many eventually held / no-showed / were accepted) — tracked independently of the Call 1
+ * booked definition, so no deal is lost — and convert against the Call 1 booked count, so
+ * recent days read low until the cohort matures.
  */
 
 import type { MarketingDailyRow } from '@/lib/marketing-daily';

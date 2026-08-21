@@ -81,9 +81,9 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'BOOKED_ALL / CALL1_BOOKED',
     'wonderly_daily / Daily Funnel',
-    'Real Call 1s booked that day — the single Call 1 number.',
-    'CSM_OPS BOOKING_LINK_INVITEES',
-    'Count of actual bookings on the calendar (non-canceled), keyed by the booking CREATED_AT day. NOT the Amplitude BOOKING_COMPLETE event (it misfires and under-reports ~half) and NOT the CRM-deal keying (reads low).',
+    'Marketing-qualified leads who booked a Call 1 — the single Call 1 number.',
+    'Amplitude qualified + CSM_OPS BOOKING_LINK_INVITEES',
+    'A lead who submitted the qualification form AND booked (non-canceled) on the calendar, counted on the day they qualified — so Call 1 booked is always a subset of Qualified, and matches Meta / Amplitude. Excludes rep-assisted / re-engaged bookings that never qualified (those inflate the raw calendar count ~2x). Not the Amplitude BOOKING_COMPLETE event (it misfires).',
   ],
   [
     'BOOKED_FB',

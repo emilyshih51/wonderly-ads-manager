@@ -309,8 +309,8 @@ export class SnowflakeService {
                 AND (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_fb,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
                 AND NOT (src IN ('facebook','ig') OR fbclid IS NOT NULL) THEN AMPLITUDE_ID END) AS qualified_organic
-         -- CALL1_BOOKED is NOT read from Amplitude BOOKING_COMPLETE (that event misfires and
-         -- under-reports ~half the bookings) — it comes from BOOKING_LINK_INVITEES (the lead CTE).
+         -- CALL1_BOOKED is computed in the lead CTE below (marketing-qualified leads who booked,
+         -- keyed to the qualified day) — not from Amplitude BOOKING_COMPLETE (which misfires).
          FROM mkt GROUP BY day
        ),
        -- ACCEPTED / HELD / NO-SHOW are COHORT metrics keyed to the deal's booking day: of a given
@@ -454,37 +454,61 @@ export class SnowflakeService {
          )
          GROUP BY day
        ),
-       -- One row per real Call 1 booking, from the booking-link invitees (the source of truth —
-       -- each row is a booking on the calendar). Non-canceled only. FB vs organic is bridged from
-       -- the invitee's email → marketing session; days_out is the lead time to the scheduled call.
-       bli AS (
-         SELECT CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date AS day,
-           CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END AS is_fb,
-           b.IS_RESCHEDULED AS resched,
-           DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date, CONVERT_TIMEZONE('${REPORT_TZ}', b.EVENT_START)::date) AS days_out
-         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
-         LEFT JOIN src ON src.email = LOWER(b.INVITEE_EMAIL)
-         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED
-           AND (b.INVITEE_EMAIL IS NULL OR NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')})
+       -- CALL1_BOOKED = a MARKETING-QUALIFIED lead who booked, keyed to the day they qualified
+       -- (not the raw calendar-booking day). This keeps Call 1 booked a subset of Qualified — the
+       -- funnel can never book more than it qualified — and matches Meta / Amplitude (both count only
+       -- marketing-site bookings). The raw BOOKING_LINK_INVITEES count is ~2x higher because it also
+       -- includes rep-assisted / re-engaged bookings that never went through the qualification form;
+       -- those are real Call 1s but not marketing-funnel bookings, so they don't belong here.
+       -- One row per qualified email: the qualified day + FB/organic from the qualify event's utm.
+       qual AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email,
+           MIN(CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date) AS qualified_day,
+           MAX_BY(
+             CASE
+               WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string, USER_PROPERTIES:utm_source::string,
+                                   USER_PROPERTIES:initial_utm_source::string)) IN ('facebook','ig')
+                 OR USER_PROPERTIES:initial_referrer::string ILIKE '%facebook%'
+                 OR USER_PROPERTIES:referrer::string ILIKE '%facebook%'
+                 OR EVENT_PROPERTIES:fbclid IS NOT NULL THEN 1 ELSE 0 END,
+             EVENT_TIME
+           ) AS is_fb
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1
        ),
-       -- CALL1_BOOKED = count of real bookings per day (NOT the Amplitude event, which misfires and
-       -- under-reports ~half, and NOT the fuzzy CRM-deal keying). Lead time (Days to call) reuses the
-       -- same rows: Σ(call date − booking day) ÷ bookings, excluding rescheduled (their EVENT_START
-       -- moved) and clamped to 0..120 days.
+       -- Each qualified lead's first real booking (non-canceled), for the "did they book" gate and
+       -- the Days-to-call lead time. days_out = scheduled-call date − booking day of that first booking.
+       bk AS (
+         SELECT LOWER(b.INVITEE_EMAIL) AS email,
+           MIN_BY(DATEDIFF('day', CONVERT_TIMEZONE('${REPORT_TZ}', b.CREATED_AT)::date,
+                           CONVERT_TIMEZONE('${REPORT_TZ}', b.EVENT_START)::date), b.CREATED_AT) AS days_out,
+           MIN_BY(b.IS_RESCHEDULED, b.CREATED_AT) AS resched
+         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
+         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED AND b.INVITEE_EMAIL IS NOT NULL
+           AND NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')}
+         GROUP BY 1
+       ),
+       -- Count qualified-and-booked leads by qualified day (FB/organic from the qualify event).
+       -- Days to call reuses the same cohort: Σ(call date − booking day) ÷ bookings, excluding
+       -- rescheduled (their EVENT_START moved) and clamped to 0..120 days.
        lead AS (
-         SELECT day,
-           COUNT(*) AS booked, SUM(is_fb) AS booked_fb, SUM(1 - is_fb) AS booked_organic,
-           SUM(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN days_out END) AS lead_days_sum,
-           COUNT(CASE WHEN NOT resched AND days_out BETWEEN 0 AND 120 THEN 1 END) AS lead_bookings
-         FROM bli GROUP BY day
+         SELECT q.qualified_day AS day,
+           COUNT(*) AS booked, SUM(q.is_fb) AS booked_fb, SUM(1 - q.is_fb) AS booked_organic,
+           SUM(CASE WHEN NOT bk.resched AND bk.days_out BETWEEN 0 AND 120 THEN bk.days_out END) AS lead_days_sum,
+           COUNT(CASE WHEN NOT bk.resched AND bk.days_out BETWEEN 0 AND 120 THEN 1 END) AS lead_bookings
+         FROM qual q JOIN bk ON bk.email = q.email
+         GROUP BY q.qualified_day
        )
        SELECT TO_CHAR(f.day,'YYYY-MM-DD') AS DATE,
          f.page_view, f.page_view_fb, f.page_view_organic,
          f.cta_clicked, f.cta_fb, f.cta_organic,
          f.submit_partial, f.partial_fb, f.partial_organic,
          f.submit_qualified, f.qualified_fb, f.qualified_organic,
-         -- CALL1_BOOKED = count of real bookings from BOOKING_LINK_INVITEES, keyed by the actual
-         -- booking day (the source of truth — Amplitude's event under-reports ~half).
+         -- CALL1_BOOKED = marketing-qualified leads who booked, keyed to their qualified day (a
+         -- subset of that day's Qualified; matches Meta/Amplitude, unlike the raw calendar count).
          COALESCE(lead.booked,0) AS booked_all,
          COALESCE(lead.booked_fb,0) AS booked_fb,
          COALESCE(lead.booked_organic,0) AS booked_organic,
@@ -504,8 +528,8 @@ export class SnowflakeService {
          COALESCE(lead.lead_bookings,0) AS lead_bookings
        FROM f LEFT JOIN s ON f.day = s.day LEFT JOIN lead ON f.day = lead.day
        ORDER BY f.day DESC`,
-      // Binds: overrides JSON, then the -days window for excluded_amps, mkt, src_raw.
-      [overridesJson(bookingOverrides), -days, -days, -days]
+      // Binds: overrides JSON, then the -days window for excluded_amps, mkt, src_raw, qual.
+      [overridesJson(bookingOverrides), -days, -days, -days, -days]
     );
 
     return rows.map((r) => ({

@@ -360,6 +360,50 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'Paying customers only (subscription active/past_due). EV take = EV_OWED; AD_SPEND = actual delivered Meta spend (not the value view budget); PNL = EV − actual spend. Matches the Customer Funnel tool. EV is forward-looking, so daily PnL is lumpy and won’t tie to the dollar.',
   ],
 
+  // --- SEO / channel tabs -------------------------------------------------
+  [
+    'CHANNEL',
+    'SEO Funnel',
+    'Which acquisition channel a visit, lead or deal is attributed to: Organic search (SEO), AI search, Direct, Referral, Other campaign, or Facebook (paid).',
+    'Amplitude + CRM',
+    'First-match ladder: fb = the session carried a Facebook signal (utm_source facebook/ig or an fbclid) — byte-identical to the FB/Organic split on wonderly_daily, so the channels sum back to it. Everything else is judged on FIRST TOUCH (initial_utm_source / initial_referrer): ai = an LLM referrer (ChatGPT, Perplexity, Claude, Gemini, Copilot); seo = a search-engine referrer with no campaign utm; other = some other campaign utm; direct = no referrer at all (or an internal wonderly.com hop); referral = any other external domain. First touch on purpose — an SEO visitor who returns by typing the URL is still SEO, which last-touch would misfile as Direct.',
+  ],
+  [
+    'SEO_SESSIONS',
+    'SEO Funnel, SEO Pages',
+    'People whose first touch was an organic search result.',
+    'Amplitude',
+    'Distinct users on MARKETING_SITE__PAGE__VIEW whose CHANNEL is seo. A person is counted once per day, not once per visit.',
+  ],
+  [
+    'SEO_CALL1_BOOKED / SEO_HELD / SEO_ACCEPTED',
+    'SEO Funnel',
+    "Organic search's Call 1 bookings, calls that actually happened, and accepted contractors.",
+    'Amplitude + CSM_OPS CRM',
+    'Identical rules to the blended tabs, with the channel added: booked = a marketing-qualified lead who booked, keyed to their QUALIFIED day (so it stays a subset of Qualified); held / accepted are COHORT metrics keyed to the deal booking day, read from the CRM current stage TYPE. Recent days read low until the cohort matures.',
+  ],
+  [
+    'SEO_SESSION_TO_ACCEPTED',
+    'SEO Funnel, SEO Pages',
+    'End-to-end organic conversion: accepted contractors ÷ organic sessions.',
+    'Derived',
+    'The Total row uses ratio of totals (Σ accepted ÷ Σ sessions), not an average of daily rates. Because accepted lags the session that caused it, this reads low on recent days.',
+  ],
+  [
+    'PATH',
+    'SEO Pages',
+    'The organic landing page a person arrived on, credited with their whole funnel.',
+    'Amplitude',
+    "First-touch: the path of that person's EARLIEST page view in the window (MIN_BY on EVENT_TIME). Someone who lands on /pricing, reads three more pages and books is a /pricing conversion — it measures what the page won from the search result. Pages under 10 sessions fold into '(other pages)' unless they produced a booking.",
+  ],
+  [
+    'No cost-per columns on the SEO tabs',
+    'SEO Funnel, SEO Pages',
+    'Deliberate omission — SEO carries no media cost to divide by.',
+    'n/a',
+    "Cost per stage = FB spend ÷ actions, which is meaningless for a channel with no spend. SEO's unit of investment is the PAGE, which is what SEO Pages reports. Paid economics stay on Daily Funnel and Campaign Performance.",
+  ],
+
   // --- meta ---------------------------------------------------------------
   [
     'LAST_REFRESHED_PT',

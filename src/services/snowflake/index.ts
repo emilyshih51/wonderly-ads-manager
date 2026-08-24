@@ -17,6 +17,9 @@ import snowflake, { type Connection } from 'snowflake-sdk';
 import type { CampCohortCounts } from '@/lib/acquisition-update';
 import type { Call1DealRow } from '@/lib/call1-deals';
 import type { CustomerPnlRow } from '@/lib/customer-pnl';
+import { toChannel } from '@/lib/channel';
+import type { ChannelFunnelRow } from '@/lib/seo-funnel';
+import type { SeoPageRow } from '@/lib/seo-pages';
 import type { SucceedingContractors } from '@/lib/succeeding';
 import type { DailyMarketingRow } from '@/lib/marketing-daily';
 
@@ -74,6 +77,42 @@ function sqlIn(types: string[]): string {
  * makes every day line up with Amplitude. Change this if the project timezone changes.
  */
 const REPORT_TZ = 'America/Los_Angeles';
+
+/**
+ * Search-engine referrer domains that mean "organic search". Matched against
+ * `initial_referrer`, so a visitor is credited to SEO on the referrer of their FIRST visit.
+ * The trailing dot on the bare engines (`google\.`) keeps `googleusercontent`-style
+ * hosts and Google-owned ad redirectors from matching by accident.
+ */
+const SEARCH_ENGINE_REFERRERS =
+  'google\\.|bing\\.|duckduckgo|yahoo\\.|ecosia|brave\\.|yandex|baidu\\.|startpage';
+
+/** LLM surfaces that send referral traffic — the "AI search" channel. */
+const AI_SURFACES = 'chatgpt|perplexity|claude\\.ai|gemini\\.google|copilot|you\\.com';
+
+/**
+ * Acquisition channel for one marketing event, as a SQL CASE expression over the event's
+ * own columns. Referenced by `getChannelFunnel` and `getSeoLandingPages`; both must use the
+ * identical ladder or the two SEO tabs disagree with each other.
+ *
+ * The `fb` branch is byte-identical to the `is_fb` rule in `getDailyMarketing`, which is what
+ * makes the remaining channels an exact partition of the existing `*_ORGANIC` columns. Every
+ * other branch reads FIRST-TOUCH properties (`initial_*`, Amplitude `$setOnce`) so a returning
+ * SEO visitor isn't silently reclassified as direct. See `src/lib/channel.ts` for the ladder
+ * in prose.
+ */
+const CHANNEL_SQL = `CASE
+  WHEN LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) IN ('facebook','ig')
+    OR EVENT_PROPERTIES:fbclid IS NOT NULL THEN 'fb'
+  WHEN LOWER(COALESCE(USER_PROPERTIES:initial_utm_source::string,'')) RLIKE '.*(${AI_SURFACES}).*'
+    OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*(${AI_SURFACES}).*' THEN 'ai'
+  WHEN COALESCE(USER_PROPERTIES:initial_utm_source::string,'') = ''
+    AND LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*(${SEARCH_ENGINE_REFERRERS}).*' THEN 'seo'
+  WHEN COALESCE(USER_PROPERTIES:initial_utm_source::string,'') <> '' THEN 'other'
+  WHEN LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) IN ('','null')
+    OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*wonderly\\.(com|life).*' THEN 'direct'
+  ELSE 'referral'
+END`;
 
 /**
  * Amplitude exclusion cohorts replicated in SQL so the sheet matches the Amplitude charts,
@@ -561,6 +600,324 @@ export class SnowflakeService {
       heldOrganic: num(r.HELD_ORGANIC),
       leadDaysSum: num(r.LEAD_DAYS_SUM),
       leadBookings: num(r.LEAD_BOOKINGS),
+    }));
+  }
+
+  /**
+   * Daily marketing funnel split by ACQUISITION CHANNEL — the SEO view of the same funnel
+   * `getDailyMarketing` reports FB-vs-everything-else.
+   *
+   * Reuses every definition from `getDailyMarketing` verbatim (exclusion cohorts, the
+   * marketing-qualified booking rule, the CSM_OPS held / no-show / accepted stage types,
+   * the booking-day cohort key) and only adds the channel dimension, so the per-channel
+   * counts sum back to the blended ones. In particular `channel = 'fb'` uses the identical
+   * `utm_source IN (facebook, ig) OR fbclid IS NOT NULL` session rule, which makes the
+   * remaining channels an exact partition of today's `*_ORGANIC` columns.
+   *
+   * Keying matches the blended tab: sessions / CTA / partial / qualified are FLOW metrics on
+   * the event day; CALL1_BOOKED is keyed to the lead's QUALIFIED day (so it stays a subset of
+   * Qualified); HELD / NO_SHOW / ACCEPTED are COHORT metrics keyed to the deal's booking day,
+   * so recent days read low until the cohort matures.
+   *
+   * @param days - Trailing window to pull, e.g. 120
+   * @param bookingOverrides - Manual deal_id → booked_day fills for deals missing the event
+   * @returns One row per (day, channel) that has any activity, newest day first
+   */
+  async getChannelFunnel(
+    days: number,
+    bookingOverrides: BookingOverride[] = []
+  ): Promise<ChannelFunnelRow[]> {
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH ovr AS (
+         SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
+         FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
+       ),
+       excluded_amps AS (
+         SELECT DISTINCT AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND ${excludedEmail('LOWER(COALESCE(USER_PROPERTIES:email::string, EVENT_PROPERTIES:email::string))')}
+       ),
+       mkt AS (
+         SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID,
+           ${CHANNEL_SQL} AS channel
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
+       ),
+       -- Flow metrics: unique people per stage per day per channel.
+       f AS (
+         SELECT day, channel,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS sessions,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' THEN AMPLITUDE_ID END) AS cta,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN AMPLITUDE_ID END) AS partial,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN AMPLITUDE_ID END) AS qualified
+         FROM mkt GROUP BY day, channel
+       ),
+       em AS (
+         SELECT CONTACT_ID,
+           LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
+         FROM AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS
+         WHERE DELETED_AT IS NULL
+         GROUP BY CONTACT_ID
+       ),
+       sub_amp AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+         GROUP BY 1, 2
+       ),
+       bc_amp AS (
+         SELECT AMPLITUDE_ID, MIN(CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date) AS bc
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
+         GROUP BY 1
+       ),
+       email_bc AS (
+         SELECT s.email, MIN(b.bc) AS bc FROM sub_amp s JOIN bc_amp b ON b.AMPLITUDE_ID = s.AMPLITUDE_ID GROUP BY 1
+       ),
+       crt AS (
+         SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS
+       ),
+       -- Channel per email, from that person's form-submit events (latest submit wins, same
+       -- precedence as the blended query's SOURCE column, widened to the full channel ladder).
+       src_raw AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, EVENT_TIME, ${CHANNEL_SQL} AS channel
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+       ),
+       src AS (
+         SELECT email, MAX_BY(channel, EVENT_TIME) AS channel FROM src_raw GROUP BY 1
+       ),
+       -- One row per acquisition-pipeline deal, with its booking-day cohort key and channel.
+       -- Deals whose METADATA carries their own attribution use it (populated from ~Aug 2026);
+       -- everything else falls back to the email -> marketing-session bridge above. A deal we
+       -- cannot attribute at all is dropped rather than silently credited to a channel.
+       ds AS (
+         SELECT
+           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) AS day,
+           COALESCE(
+             CASE
+               WHEN LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:utm_source::string) IN ('facebook','ig')
+                 OR LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel::string) IN ('facebook','ig')
+                 OR TRY_PARSE_JSON(cd.METADATA):attribution:fbclid IS NOT NULL THEN 'fb'
+             END,
+             src.channel
+           ) AS channel,
+           st.TYPE AS stage_type,
+           NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
+           CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date AS stage_entered_day,
+           ROW_NUMBER() OVER (
+             PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, cd.ID) END
+             ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), cd.ID
+           ) AS accept_rn,
+           CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
+                     OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
+                THEN 1 ELSE 0 END AS booked
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
+           ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+         LEFT JOIN ovr o ON o.deal_id = cd.ID
+         LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
+         LEFT JOIN email_bc ebc ON ebc.email = em.join_email
+         LEFT JOIN crt ON crt.deal_id = cd.ID
+         LEFT JOIN src ON src.email = em.join_email
+         WHERE cd.DELETED_AT IS NULL
+           AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
+           AND NOT ${excludedDealName('cd.NAME')}
+       ),
+       -- Cohort aggregate by booking day AND channel. Same held / no-show / accepted rules as
+       -- the blended query (see getDailyMarketing for why each guard exists).
+       s AS (
+         SELECT day, channel, SUM(held) AS held, SUM(accepted) AS accepted, SUM(no_show) AS no_show
+         FROM (
+           SELECT day, channel,
+             CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
+             CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' AND (stage_entered_day IS NULL OR stage_entered_day > day) THEN 1 ELSE 0 END AS no_show,
+             CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) AND (
+                        stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
+                        OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
+                      ) THEN 1 ELSE 0 END AS held
+           FROM ds WHERE day IS NOT NULL AND channel IS NOT NULL
+         )
+         GROUP BY day, channel
+       ),
+       -- CALL1_BOOKED: marketing-qualified leads who booked, keyed to their qualified day.
+       qual AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email,
+           MIN(CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date) AS qualified_day,
+           MAX_BY(${CHANNEL_SQL}, EVENT_TIME) AS channel
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1
+       ),
+       bk AS (
+         SELECT LOWER(b.INVITEE_EMAIL) AS email
+         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
+         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED AND b.INVITEE_EMAIL IS NOT NULL
+           AND NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')}
+         GROUP BY 1
+       ),
+       lead AS (
+         SELECT q.qualified_day AS day, q.channel, COUNT(*) AS booked
+         FROM qual q JOIN bk ON bk.email = q.email
+         GROUP BY 1, 2
+       ),
+       -- Union the three keyings so a channel-day appears if it has traffic, a booking, or an outcome.
+       keys AS (
+         SELECT day, channel FROM f
+         UNION SELECT day, channel FROM lead
+         UNION SELECT day, channel FROM s
+       )
+       SELECT TO_CHAR(k.day,'YYYY-MM-DD') AS DATE, k.channel AS CHANNEL,
+         COALESCE(f.sessions,0) AS SESSIONS,
+         COALESCE(f.cta,0) AS CTA,
+         COALESCE(f.partial,0) AS SUBMIT_PARTIAL,
+         COALESCE(f.qualified,0) AS SUBMIT_QUALIFIED,
+         COALESCE(lead.booked,0) AS CALL1_BOOKED,
+         COALESCE(s.held,0) AS HELD,
+         COALESCE(s.no_show,0) AS NO_SHOW,
+         COALESCE(s.accepted,0) AS ACCEPTED
+       FROM keys k
+       LEFT JOIN f ON f.day = k.day AND f.channel = k.channel
+       LEFT JOIN lead ON lead.day = k.day AND lead.channel = k.channel
+       LEFT JOIN s ON s.day = k.day AND s.channel = k.channel
+       WHERE k.day IS NOT NULL AND k.channel IS NOT NULL
+       ORDER BY k.day DESC, k.channel`,
+      // Binds: overrides JSON, then the -days window for excluded_amps, mkt, src_raw, qual.
+      [overridesJson(bookingOverrides), -days, -days, -days, -days]
+    );
+
+    return rows.map((r) => ({
+      date: String(r.DATE),
+      channel: toChannel(r.CHANNEL),
+      sessions: num(r.SESSIONS),
+      cta: num(r.CTA),
+      submitPartial: num(r.SUBMIT_PARTIAL),
+      submitQualified: num(r.SUBMIT_QUALIFIED),
+      booked: num(r.CALL1_BOOKED),
+      held: num(r.HELD),
+      noShow: num(r.NO_SHOW),
+      accepted: num(r.ACCEPTED),
+    }));
+  }
+
+  /**
+   * Organic-search performance per LANDING PAGE — which SEO pages actually produce customers.
+   *
+   * A person's landing page is the path of their EARLIEST marketing page view in the window
+   * (`MIN_BY(path, EVENT_TIME)`), and they count for that page for the rest of the funnel, so
+   * a visitor who lands on `/pricing` and converts three pages later is still credited to
+   * `/pricing`. Only people whose first touch was organic search are included — the same
+   * `seo` rule the channel funnel uses.
+   *
+   * Deal outcomes reuse the CSM_OPS stage definitions from `getDailyMarketing`, joined
+   * page → person → submit email → CRM contact → deal. Held / accepted therefore carry the
+   * same maturation caveat: a page whose traffic is recent will read low.
+   *
+   * @param days - Trailing window to pull, e.g. 120
+   * @returns One row per landing page with any organic traffic, best-converting first
+   */
+  async getSeoLandingPages(days: number): Promise<SeoPageRow[]> {
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH excluded_amps AS (
+         SELECT DISTINCT AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND ${excludedEmail('LOWER(COALESCE(USER_PROPERTIES:email::string, EVENT_PROPERTIES:email::string))')}
+       ),
+       mkt AS (
+         SELECT AMPLITUDE_ID, EVENT_TYPE, EVENT_TIME,
+           EVENT_PROPERTIES:path::string AS path,
+           ${CHANNEL_SQL} AS channel
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
+       ),
+       -- One row per organic-search person: their landing page and their funnel high-water mark.
+       person AS (
+         SELECT AMPLITUDE_ID,
+           MIN_BY(path, CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND path IS NOT NULL THEN EVENT_TIME END) AS landing_path,
+           MAX(CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' THEN 1 ELSE 0 END) AS cta,
+           MAX(CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN 1 ELSE 0 END) AS partial,
+           MAX(CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN 1 ELSE 0 END) AS qualified
+         FROM mkt
+         WHERE channel = 'seo'
+         GROUP BY AMPLITUDE_ID
+         HAVING MIN_BY(path, CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND path IS NOT NULL THEN EVENT_TIME END) IS NOT NULL
+       ),
+       sub AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY 1, 2
+       ),
+       em AS (
+         SELECT CONTACT_ID,
+           LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
+         FROM AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS
+         WHERE DELETED_AT IS NULL
+         GROUP BY CONTACT_ID
+       ),
+       -- Deal outcomes per email (same stage rules as the blended query), deduped to one row
+       -- per email so a contractor with two deals can't double-count their landing page.
+       d AS (
+         SELECT em.join_email AS email,
+           MAX(CASE WHEN st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)}) THEN 1 ELSE 0 END) AS booked,
+           MAX(CASE WHEN st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)}) AND (
+                      st.TYPE IN (${sqlIn(OFFER_STAGE_TYPES)})
+                      OR (st.TYPE IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND NULLIF(cd.LOSS_REASON_KEY,'') IS NOT NULL)
+                    ) THEN 1 ELSE 0 END) AS held,
+           MAX(CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN 1 ELSE 0 END) AS accepted
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
+           ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+         JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
+         WHERE cd.DELETED_AT IS NULL
+           AND NOT ${excludedEmail('em.join_email')}
+           AND NOT ${excludedDealName('cd.NAME')}
+         GROUP BY 1
+       ),
+       joined AS (
+         SELECT p.landing_path AS path, p.AMPLITUDE_ID, p.cta, p.partial, p.qualified,
+           MAX(COALESCE(d.booked,0)) AS booked,
+           MAX(COALESCE(d.held,0)) AS held,
+           MAX(COALESCE(d.accepted,0)) AS accepted
+         FROM person p
+         LEFT JOIN sub ON sub.AMPLITUDE_ID = p.AMPLITUDE_ID
+         LEFT JOIN d ON d.email = sub.email
+         GROUP BY 1, 2, 3, 4, 5
+       )
+       SELECT path AS PATH, COUNT(*) AS SESSIONS, SUM(cta) AS CTA, SUM(partial) AS SUBMIT_PARTIAL,
+         SUM(qualified) AS SUBMIT_QUALIFIED, SUM(booked) AS CALL1_BOOKED,
+         SUM(held) AS HELD, SUM(accepted) AS ACCEPTED
+       FROM joined
+       GROUP BY path
+       ORDER BY ACCEPTED DESC, CALL1_BOOKED DESC, SESSIONS DESC`,
+      [-days, -days, -days]
+    );
+
+    return rows.map((r) => ({
+      path: String(r.PATH ?? ''),
+      sessions: num(r.SESSIONS),
+      cta: num(r.CTA),
+      submitPartial: num(r.SUBMIT_PARTIAL),
+      submitQualified: num(r.SUBMIT_QUALIFIED),
+      booked: num(r.CALL1_BOOKED),
+      held: num(r.HELD),
+      accepted: num(r.ACCEPTED),
     }));
   }
 

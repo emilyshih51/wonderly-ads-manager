@@ -24,6 +24,12 @@ import {
 } from '@/lib/campaign-performance';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
 import {
+  SEO_FUNNEL_HEADERS,
+  buildSeoFunnelFormatRequests,
+  toSeoFunnelValues,
+} from '@/lib/seo-funnel';
+import { SEO_PAGES_HEADERS, buildSeoPagesFormatRequests, toSeoPagesValues } from '@/lib/seo-pages';
+import {
   HISTORICAL_CAC_HEADERS,
   buildHistoricalCacFormatRequests,
   toHistoricalCacValues,
@@ -82,6 +88,12 @@ const CALL1_DEALS_TAB = 'call1_deals';
 
 /** Per-campaign booked/held/accepted + spend + cost-per-accepted dashboard. */
 const CAMPAIGN_PERFORMANCE_TAB = 'Campaign Performance';
+
+/** SEO Funnel: the funnel split by acquisition channel, organic search in the foreground. */
+const SEO_FUNNEL_TAB = 'SEO Funnel';
+
+/** SEO Pages: which organic landing pages carry people all the way to accepted. */
+const SEO_PAGES_TAB = 'SEO Pages';
 
 /** Retired tab — deleted each run so it can't linger with stale data. */
 const CALL1_SUMMARY_TAB = 'call1_summary';
@@ -260,6 +272,46 @@ export async function GET(request: Request) {
       );
     } catch (formatError) {
       logger.error('Campaign Performance formatting failed (values still written)', formatError);
+    }
+
+    // SEO Funnel + SEO Pages: the same funnel viewed by acquisition channel, and by the
+    // organic landing page people arrived on. Both re-derive the full window each run (no
+    // read-back/merge) and share the blended query's definitions, so their per-channel
+    // counts reconcile with `wonderly_daily`. Wrapped together because neither is on the
+    // critical path — an SEO read failing must not cost the sheet its paid numbers.
+    try {
+      const [channelFunnel, seoPages] = await Promise.all([
+        snow.getChannelFunnel(backfillDays, bookingOverrides),
+        snow.getSeoLandingPages(backfillDays),
+      ]);
+
+      const seoFunnelValues = toSeoFunnelValues(channelFunnel, BACKFILL_START);
+
+      await sheets.ensureTab(sheetId, SEO_FUNNEL_TAB);
+      await sheets.replaceRows(sheetId, SEO_FUNNEL_TAB, [...SEO_FUNNEL_HEADERS], seoFunnelValues);
+
+      try {
+        await sheets.formatTab(sheetId, SEO_FUNNEL_TAB, (gid) =>
+          buildSeoFunnelFormatRequests(gid, seoFunnelValues.length)
+        );
+      } catch (formatError) {
+        logger.error('SEO Funnel formatting failed (values still written)', formatError);
+      }
+
+      const seoPagesValues = toSeoPagesValues(seoPages);
+
+      await sheets.ensureTab(sheetId, SEO_PAGES_TAB);
+      await sheets.replaceRows(sheetId, SEO_PAGES_TAB, [...SEO_PAGES_HEADERS], seoPagesValues);
+
+      try {
+        await sheets.formatTab(sheetId, SEO_PAGES_TAB, (gid) =>
+          buildSeoPagesFormatRequests(gid, seoPagesValues.length)
+        );
+      } catch (formatError) {
+        logger.error('SEO Pages formatting failed (values still written)', formatError);
+      }
+    } catch (seoError) {
+      logger.error('SEO tabs refresh failed (rest of the sheet still written)', seoError);
     }
 
     // call1_summary was retired — its metrics live in Overview, Daily Funnel, and Daily

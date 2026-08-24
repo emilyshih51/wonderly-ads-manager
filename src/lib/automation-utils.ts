@@ -255,3 +255,58 @@ export function parseInsightMetrics(
     cost_per_result: costPerResult === Infinity ? COST_PER_RESULT_NO_DATA : costPerResult,
   };
 }
+
+/* ─────────── Lifetime-conversion guardrail ─────────── */
+
+/**
+ * Meta `date_preset` value for an entity's full lifetime history.
+ * (`lifetime` was renamed to `maximum` in Marketing API v10.)
+ */
+export const LIFETIME_DATE_PRESET = 'maximum';
+
+/**
+ * Minimum lifetime conversions that mark an entity as "proven" and therefore
+ * protected from destructive automation actions.
+ *
+ * The product rule is deliberately simple: an ad that has ever converted is
+ * never auto-killed; an ad at exactly zero lifetime conversions can be.
+ */
+export const LIFETIME_CONVERSION_PROTECTION_MIN = 1;
+
+/**
+ * True when an entity's lifetime conversion count protects it from destructive
+ * automation actions (pause, budget decrease, promote's pause-original).
+ *
+ * @param lifetimeResults - Lifetime conversion count for the entity
+ */
+export function hasLifetimeConversions(lifetimeResults: number): boolean {
+  return lifetimeResults >= LIFETIME_CONVERSION_PROTECTION_MIN;
+}
+
+/**
+ * Build a map of entity ID → lifetime conversion count from a set of insight
+ * rows fetched with `date_preset=maximum`.
+ *
+ * Rows are keyed at whichever level they were queried (ad, ad set, campaign).
+ * Counts are summed defensively so a duplicated row can never *lower* an
+ * entity's protection.
+ *
+ * @param rows - Insight rows fetched over the lifetime date preset
+ * @param optimizationMap - Map of ad set/campaign ID → Meta action type
+ */
+export function buildLifetimeResultsMap(
+  rows: MetaInsightsRow[],
+  optimizationMap: Record<string, string>
+): Record<string, number> {
+  const map: Record<string, number> = {};
+
+  for (const row of rows) {
+    const id = row.ad_id ?? row.adset_id ?? row.campaign_id;
+
+    if (!id) continue;
+
+    map[id] = (map[id] ?? 0) + parseInsightMetrics(row, optimizationMap).results;
+  }
+
+  return map;
+}

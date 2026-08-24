@@ -24,6 +24,10 @@ export interface ActionNodeConfig {
   // promote only: whether to pause the original winning ad in its source campaign.
   // Absent/true = pause (legacy behaviour); false = leave the winner running.
   pause_original?: string | boolean;
+  // Guardrail: when absent/true, an entity with lifetime conversions is never
+  // paused, budget-decreased, or (for promote) paused as the original winner.
+  // Only an explicit false disables the protection.
+  protect_converters?: string | boolean;
   also_notify_slack?: string | boolean;
   slack_channel?: string;
   slack_message?: string;
@@ -63,6 +67,7 @@ export interface RuleConfig {
   target_adset_id: string;
   target_adset_name: string;
   pause_original: boolean;
+  protect_converters: boolean;
   also_notify_slack: boolean;
   slack_channel: string;
   slack_message: string;
@@ -142,6 +147,7 @@ export function configToNodes(config: RuleConfig) {
         target_adset_id: config.target_adset_id,
         target_adset_name: config.target_adset_name,
         pause_original: String(config.pause_original),
+        protect_converters: String(config.protect_converters),
         also_notify_slack: String(config.also_notify_slack),
         slack_channel: config.slack_channel,
         slack_message: config.slack_message,
@@ -197,7 +203,16 @@ export function nodesToConfig(nodes: AutomationNode[]): RuleConfig {
     target_adset_name: ac.target_adset_name || '',
     // Default to true so existing promote rules (saved before this field existed)
     // keep pausing the original winner.
-    pause_original: ac.pause_original === undefined ? true : ac.pause_original === 'true' || ac.pause_original === true,
+    pause_original:
+      ac.pause_original === undefined
+        ? true
+        : ac.pause_original === 'true' || ac.pause_original === true,
+    // Default to true so rules saved before this field existed inherit the
+    // guardrail — never auto-kill an ad that has lifetime conversions.
+    protect_converters:
+      ac.protect_converters === undefined
+        ? true
+        : ac.protect_converters === 'true' || ac.protect_converters === true,
     also_notify_slack: ac.also_notify_slack === 'true' || ac.also_notify_slack === true,
     slack_channel: ac.slack_channel || '',
     slack_message: ac.slack_message || '',
@@ -340,6 +355,7 @@ export function parseCopilotInput(text: string): { config: Partial<RuleConfig>; 
     target_adset_id: '',
     target_adset_name: '',
     pause_original: true,
+    protect_converters: true,
     also_notify_slack: actionType === 'notify',
     slack_channel: '',
     slack_message: '',

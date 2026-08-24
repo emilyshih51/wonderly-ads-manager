@@ -5,7 +5,10 @@ import {
   evaluateCondition,
   parseInsightMetrics,
   calculateNewBudget,
+  buildLifetimeResultsMap,
+  hasLifetimeConversions,
   COST_PER_RESULT_NO_DATA,
+  LIFETIME_DATE_PRESET,
 } from '@/lib/automation-utils';
 import { MetaService } from '@/services/meta';
 import { addPromotedMarker, isPromotedName } from '@/services/meta/constants';
@@ -267,6 +270,7 @@ interface NodeConfig {
   action_type?: string;
   target_adset_id?: string;
   pause_original?: string | boolean;
+  protect_converters?: string | boolean;
   slack_channel?: string;
   also_notify_slack?: string | boolean;
   slack_message?: string;
@@ -300,6 +304,8 @@ interface EvaluateResult {
   previous_budget?: number;
   new_budget?: number;
   skip_reason?: string;
+  lifetime_results?: number;
+  converter_protected?: boolean;
 }
 
 interface EvaluateRuleOptions {
@@ -365,6 +371,26 @@ async function evaluateRule(
   const triggerConfig = (triggerNode.data?.config ?? {}) as NodeConfig;
   const actionConfig = (actionNode.data?.config ?? {}) as NodeConfig;
   const isPromoteAction = (actionConfig.action_type ?? '') === 'promote';
+
+  // ── Lifetime-conversion guardrail ──
+  // When on (the default — including for rules saved before this toggle
+  // existed) an entity that has ever converted is never auto-killed: `pause`
+  // and budget *decreases* are skipped, and a promoted winner is duplicated
+  // into the target ad sets but left running in its original ad set. Only an
+  // explicit `false` turns the protection off. Budget *increases*, `activate`
+  // and Slack notifications are never gated.
+  const protectConverters =
+    actionConfig.protect_converters !== false && actionConfig.protect_converters !== 'false';
+  const configuredPauseOriginal =
+    actionConfig.pause_original !== false && actionConfig.pause_original !== 'false';
+  const guardedActionType = actionConfig.action_type ?? '';
+  const guardrailApplies =
+    protectConverters &&
+    (guardedActionType === 'pause' ||
+      (guardedActionType === 'adjust_budget' &&
+        (actionConfig.adjust_direction ?? 'increase') === 'decrease') ||
+      (guardedActionType === 'promote' && configuredPauseOriginal));
+
   const entityType = triggerConfig.entity_type ?? 'ad';
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
   // Support comma-separated campaign IDs for multi-campaign rules
@@ -430,6 +456,51 @@ async function evaluateRule(
     );
 
     return [{ rule: rule.name, skipped: 'no_data_returned', account: adAccountId }];
+  }
+
+  // Fetch lifetime conversions once per rule for the guardrail. The rule's own
+  // date preset (e.g. last_7d) drives the conditions; protection is judged on
+  // the entity's whole history, so it needs a separate `maximum` query.
+  //
+  // An entity absent from these rows is confirmed with a single-entity lookup
+  // below rather than assumed to be at zero. A *failed* bulk lookup is
+  // different — we cannot tell converters from non-converters at all, so every
+  // guarded action is held back rather than risking a kill on a proven ad.
+  let lifetimeResultsMap: Record<string, number> = {};
+  let lifetimeLookupFailed = false;
+
+  if (guardrailApplies && insightsData.length > 0) {
+    if (testData || datePreset === LIFETIME_DATE_PRESET) {
+      // Synthetic test rows and rules already scanning all-time need no second query.
+      lifetimeResultsMap = buildLifetimeResultsMap(insightsData, optimizationMap);
+    } else {
+      try {
+        const lifetimeRows =
+          campaignIds.length <= 1
+            ? await meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+                datePreset: LIFETIME_DATE_PRESET,
+                campaignId: campaignIds[0],
+              })
+            : (
+                await Promise.all(
+                  campaignIds.map((cid) =>
+                    meta.getFilteredInsights(entityType as 'ad' | 'adset' | 'campaign', {
+                      datePreset: LIFETIME_DATE_PRESET,
+                      campaignId: cid,
+                    })
+                  )
+                )
+              ).flat();
+
+        lifetimeResultsMap = buildLifetimeResultsMap(lifetimeRows, optimizationMap);
+      } catch (lifetimeError) {
+        lifetimeLookupFailed = true;
+        logger.error(
+          `Lifetime conversion lookup failed for rule "${rule.name}" (account ${adAccountId}) — holding back destructive actions`,
+          lifetimeError
+        );
+      }
+    }
   }
 
   const results: EvaluateResult[] = [];
@@ -512,6 +583,47 @@ async function evaluateRule(
 
     if (!allConditionsMet) continue;
 
+    // Guardrail lookup for this entity. A failed lifetime query is treated as
+    // "protected" so a Meta outage can never turn into a wave of false kills.
+    let lifetimeConversions = 0;
+    let converterProtected = false;
+    let lifetimeUnknown = lifetimeLookupFailed;
+
+    if (guardrailApplies) {
+      if (lifetimeLookupFailed) {
+        converterProtected = true;
+      } else if (entityId in lifetimeResultsMap) {
+        lifetimeConversions = lifetimeResultsMap[entityId];
+        converterProtected = hasLifetimeConversions(lifetimeConversions);
+      } else {
+        // Absent from the bulk lifetime rows. Usually a brand-new entity that
+        // has never delivered (genuinely 0), but it could also be a row lost to
+        // the bulk query's row limit — so confirm with a single-entity lookup
+        // instead of assuming zero and killing a proven ad.
+        try {
+          const single = await meta.getAdInsights(entityId, LIFETIME_DATE_PRESET);
+          const singleRow = single.data?.[0];
+
+          lifetimeConversions = singleRow
+            ? parseInsightMetrics(
+                // Carry the ad set/campaign IDs across: the single-entity
+                // endpoint omits them, and they key the optimization map.
+                { ...singleRow, adset_id: row.adset_id, campaign_id: row.campaign_id },
+                optimizationMap
+              ).results
+            : 0;
+          converterProtected = hasLifetimeConversions(lifetimeConversions);
+        } catch (singleError) {
+          logger.error(
+            `Single-entity lifetime lookup failed for "${entityName}" (${entityId}) — holding back destructive action`,
+            singleError
+          );
+          lifetimeUnknown = true;
+          converterProtected = true;
+        }
+      }
+    }
+
     const actionType = actionConfig.action_type ?? '';
     const actionResult: EvaluateResult = {
       rule: rule.name,
@@ -527,6 +639,37 @@ async function evaluateRule(
             : metrics.cost_per_result.toFixed(2),
       },
     };
+
+    // `pause` and budget decreases are hard-skipped for protected entities.
+    // `promote` is not skipped — the winner is still duplicated, it just keeps
+    // running in its original ad set (handled in the promote branch below).
+    if (
+      converterProtected &&
+      (actionType === 'pause' ||
+        (actionType === 'adjust_budget' &&
+          (actionConfig.adjust_direction ?? 'increase') === 'decrease'))
+    ) {
+      actionResult.action = 'skipped';
+      actionResult.converter_protected = true;
+
+      if (lifetimeUnknown) {
+        actionResult.skipped = 'lifetime_data_unavailable';
+        actionResult.skip_reason =
+          'Could not read lifetime conversions — held back to avoid killing a converting ad';
+      } else {
+        actionResult.skipped = 'has_lifetime_conversions';
+        actionResult.lifetime_results = lifetimeConversions;
+        actionResult.skip_reason = `Protected: ${lifetimeConversions} lifetime conversion(s)`;
+      }
+
+      logger.info(`Skipping ${actionType} for "${entityName}" (${entityId})`, {
+        rule: rule.name,
+        reason: actionResult.skipped,
+        lifetimeConversions,
+      });
+      results.push(actionResult);
+      continue;
+    }
 
     try {
       if (!dryRun && actionCap && actionCap.executed >= actionCap.max) {
@@ -552,12 +695,22 @@ async function evaluateRule(
         actionResult.action = 'activated';
         if (actionCap) actionCap.executed++;
       } else if (actionType === 'promote') {
-        // Default to pausing the original winner (legacy behaviour). Only skip
-        // the pause when pause_original is explicitly set to false. The pause
-        // itself is applied below, once at least one duplication has succeeded,
-        // so a failed promotion never silently pauses a live winner.
-        const pauseOriginal =
-          actionConfig.pause_original !== false && actionConfig.pause_original !== 'false';
+        // Default to pausing the original winner (legacy behaviour). The pause
+        // is skipped when pause_original is explicitly false, and when the
+        // lifetime-conversion guardrail protects this ad — the guardrail
+        // downgrades the pause rather than blocking the promotion, since
+        // duplicating a proven winner is desirable and killing it is not. The
+        // pause itself is applied below, once at least one duplication has
+        // succeeded, so a failed promotion never silently pauses a live winner.
+        const pauseOriginal = configuredPauseOriginal && !converterProtected;
+
+        if (converterProtected) {
+          actionResult.converter_protected = true;
+          if (!lifetimeUnknown) actionResult.lifetime_results = lifetimeConversions;
+          actionResult.skip_reason = lifetimeUnknown
+            ? 'Original kept active — could not read lifetime conversions'
+            : `Original kept active — ${lifetimeConversions} lifetime conversion(s)`;
+        }
 
         // Support duplicating a winner into several target ad sets (across
         // multiple campaigns). The config stores a comma-separated list; a

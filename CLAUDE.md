@@ -204,6 +204,29 @@ The promote action (`GET /api/automations/evaluate`) duplicates a winning ad int
 
 Invariant to preserve: after a successful promote, the original ad is renamed with a leading `+ ` via `meta.updateName(entityId, addPromotedMarker(entityName))`. On every run, promote candidates whose name is already marked (`isPromotedName`) are skipped with `skipped: 'already_promoted'` **before** conditions are evaluated. This is the only thing preventing an ad from being promoted twice when `pause_original` is off and the winner still matches the rule — the scan (`getFilteredInsights`) only returns ACTIVE ads, so a paused original drops out on its own, but a running one would re-match forever without the marker. The helpers live in `src/services/meta/constants.ts` (`PROMOTED_AD_MARKER`, `isPromotedName`, `addPromotedMarker`, `stripPromotedMarker`). The rename is best-effort (wrapped in try/catch) so a Meta API error can't fail the promotion itself. If you change how ads are scanned, named, or promoted, keep this skip-and-mark behavior intact.
 
+### Never auto-kill an ad that has converted (don't break this)
+
+Automation rules must never turn off an ad with lifetime conversions. The product rule is simple: **lifetime ≥ 1 conversion → never killed; lifetime 0 conversions → killable.**
+
+The guardrail lives in `evaluateRule` (`/api/automations/evaluate`) and is controlled per-rule by `protect_converters` (defaults to `true`, including for rules saved before the field existed; the Step 3 UI toggle is "Never turn off ads with conversions"). Only an explicit `false` disables it.
+
+What it gates:
+
+- `pause` — skipped, `skipped: 'has_lifetime_conversions'`
+- `adjust_budget` **decrease** — skipped the same way. Increases are never gated.
+- `promote` — **not** skipped. The winner is still duplicated into the target ad sets; only the pause of the original is suppressed (`promoted (original kept active)`). Duplicating a proven winner is desirable; killing it is not.
+- `activate` and Slack notifications are never gated.
+
+How lifetime conversions are read: the rule's own `date_preset` (e.g. `last_7d`) drives the **conditions**; protection is judged over the entity's whole history, so the engine runs a second `getFilteredInsights` at `date_preset=maximum` (`LIFETIME_DATE_PRESET`) and builds an entity-ID → conversion-count map with `buildLifetimeResultsMap`. The extra query only runs when the rule can actually kill something.
+
+Fail-closed invariants to preserve:
+
+1. A **failed** lifetime lookup protects everything — destructive actions are skipped with `skipped: 'lifetime_data_unavailable'`. A Meta outage must never become a wave of false kills.
+2. An entity **absent** from the bulk lifetime rows is confirmed with a single-entity `getAdInsights(entityId, 'maximum')` call before being treated as zero. Absence usually means "never delivered", but it can also mean the bulk query hit its row limit — assuming zero there would kill a converter. If that single lookup also fails, the entity is protected.
+3. The guardrail runs in dry-run/preview too, so the test panel reports what the cron would actually do.
+
+Tests: `src/app/api/automations/__tests__/evaluate-guardrail.test.ts`.
+
 ### Logging
 
 ```ts
@@ -234,6 +257,7 @@ Each service has a test file:
 - `src/services/anthropic/__tests__/anthropic.test.ts`
 - `src/services/logger/__tests__/logger.test.ts`
 - `src/lib/__tests__/automation-utils.test.ts`
+- `src/app/api/automations/__tests__/evaluate-guardrail.test.ts`
 
 ### Locale completeness test
 

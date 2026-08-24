@@ -16,6 +16,7 @@ function makePromoteConfig(overrides: Partial<RuleConfig> = {}): RuleConfig {
     target_adset_id: 'adset-a,adset-b,adset-c',
     target_adset_name: 'Winners US,Winners CA,Winners UK',
     pause_original: false,
+    protect_converters: true,
     also_notify_slack: true,
     slack_channel: '#ad-promotion',
     slack_message: '',
@@ -64,5 +65,29 @@ describe('automation-config promote multi-target serialization', () => {
     const ids = roundTripped.target_adset_id.split(',').filter(Boolean);
 
     expect(ids).toHaveLength(1);
+  });
+});
+
+describe('protect_converters round-trip', () => {
+  it('survives a config → nodes → config round trip when on', () => {
+    const config = makePromoteConfig({ protect_converters: true });
+
+    expect(nodesToConfig(configToNodes(config).nodes).protect_converters).toBe(true);
+  });
+
+  it('survives a config → nodes → config round trip when off', () => {
+    const config = makePromoteConfig({ protect_converters: false });
+
+    expect(nodesToConfig(configToNodes(config).nodes).protect_converters).toBe(false);
+  });
+
+  it('defaults to true for rules saved before the field existed', () => {
+    const { nodes } = configToNodes(makePromoteConfig());
+    const action = nodes.find((n) => n.type === 'action');
+
+    // Simulate a legacy stored rule: strip the field entirely.
+    delete (action!.data.config as Record<string, unknown>).protect_converters;
+
+    expect(nodesToConfig(nodes).protect_converters).toBe(true);
   });
 });

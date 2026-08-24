@@ -4,9 +4,13 @@ import {
   getResultCount,
   getCostPerResult,
   calculateNewBudget,
+  buildLifetimeResultsMap,
+  hasLifetimeConversions,
   MIN_DAILY_BUDGET_DOLLARS,
   MAX_BUDGET_STEP_MULTIPLIER,
+  LIFETIME_CONVERSION_PROTECTION_MIN,
 } from '@/lib/automation-utils';
+import type { MetaInsightsRow } from '@/types';
 
 describe('calculateNewBudget()', () => {
   it('increases by percent', () => {
@@ -300,5 +304,80 @@ describe('getCostPerResult()', () => {
     };
 
     expect(getCostPerResult(row, 'c1', optMap)).toBe(20);
+  });
+});
+
+describe('hasLifetimeConversions()', () => {
+  it('protects an entity with a single lifetime conversion', () => {
+    expect(hasLifetimeConversions(1)).toBe(true);
+  });
+
+  it('does not protect an entity with zero lifetime conversions', () => {
+    expect(hasLifetimeConversions(0)).toBe(false);
+  });
+
+  it('protects at the configured minimum', () => {
+    expect(hasLifetimeConversions(LIFETIME_CONVERSION_PROTECTION_MIN)).toBe(true);
+    expect(hasLifetimeConversions(LIFETIME_CONVERSION_PROTECTION_MIN - 1)).toBe(false);
+  });
+});
+
+describe('buildLifetimeResultsMap()', () => {
+  const optimizationMap = { 'adset-1': 'lead', 'adset-2': 'lead' };
+
+  function row(overrides: Partial<MetaInsightsRow>): MetaInsightsRow {
+    return {
+      ad_id: 'ad-1',
+      adset_id: 'adset-1',
+      campaign_id: 'camp-1',
+      spend: '100',
+      ...overrides,
+    } as MetaInsightsRow;
+  }
+
+  it('keys ad-level rows by ad id', () => {
+    const map = buildLifetimeResultsMap(
+      [
+        row({ ad_id: 'ad-1', actions: [{ action_type: 'lead', value: '4' }] }),
+        row({ ad_id: 'ad-2', actions: [] }),
+      ],
+      optimizationMap
+    );
+
+    expect(map).toEqual({ 'ad-1': 4, 'ad-2': 0 });
+  });
+
+  it('falls back to ad set then campaign id when there is no ad id', () => {
+    const map = buildLifetimeResultsMap(
+      [
+        row({
+          ad_id: undefined,
+          adset_id: 'adset-2',
+          actions: [{ action_type: 'lead', value: '2' }],
+        }),
+        row({ ad_id: undefined, adset_id: undefined, campaign_id: 'camp-9', actions: [] }),
+      ],
+      optimizationMap
+    );
+
+    expect(map).toEqual({ 'adset-2': 2, 'camp-9': 0 });
+  });
+
+  it('sums duplicate rows so a repeat can never lower protection', () => {
+    const map = buildLifetimeResultsMap(
+      [
+        row({ actions: [{ action_type: 'lead', value: '1' }] }),
+        row({ actions: [{ action_type: 'lead', value: '2' }] }),
+      ],
+      optimizationMap
+    );
+
+    expect(map['ad-1']).toBe(3);
+  });
+
+  it('ignores rows with no identifiable entity', () => {
+    const orphan = row({ ad_id: undefined, adset_id: undefined, campaign_id: undefined });
+
+    expect(buildLifetimeResultsMap([orphan], optimizationMap)).toEqual({});
   });
 });

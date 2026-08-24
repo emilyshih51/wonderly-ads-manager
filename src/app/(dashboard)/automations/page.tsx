@@ -155,6 +155,7 @@ const DEFAULT_CONFIG: RuleConfig = {
   target_adset_id: '',
   target_adset_name: '',
   pause_original: true,
+  protect_converters: true,
   also_notify_slack: false,
   slack_channel: '',
   slack_message:
@@ -1563,6 +1564,31 @@ export default function AutomationsPage() {
                           )}
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {(config.action_type === 'pause' ||
+                    (config.action_type === 'adjust_budget' &&
+                      config.adjust_direction === 'decrease') ||
+                    (config.action_type === 'promote' && config.pause_original)) && (
+                    <div className="border-t border-[var(--color-border)] pt-4">
+                      <label className="flex cursor-pointer items-center gap-2.5">
+                        <Switch
+                          size="sm"
+                          checked={config.protect_converters}
+                          onCheckedChange={(checked) =>
+                            updateConfig({ protect_converters: checked })
+                          }
+                        />
+                        <span className="text-sm font-medium text-[var(--color-foreground)]">
+                          {t('protectConverters')}
+                        </span>
+                      </label>
+                      <p className="mt-1 ml-[2.6rem] text-xs text-[var(--color-muted-foreground)]">
+                        {config.action_type === 'promote'
+                          ? t('protectConvertersPromoteHint')
+                          : t('protectConvertersHint')}
+                      </p>
                     </div>
                   )}
 

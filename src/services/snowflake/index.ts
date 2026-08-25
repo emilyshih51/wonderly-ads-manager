@@ -613,7 +613,7 @@ export class SnowflakeService {
    * `utm_source IN (facebook, ig) OR fbclid IS NOT NULL` session rule, which makes the
    * remaining channels an exact partition of today's `*_ORGANIC` columns.
    *
-   * Keying matches the blended tab: sessions / CTA / partial / qualified are FLOW metrics on
+   * Keying matches the blended tab: page views / CTA / partial / qualified are FLOW metrics on
    * the event day; CALL1_BOOKED is keyed to the lead's QUALIFIED day (so it stays a subset of
    * Qualified); HELD / NO_SHOW / ACCEPTED are COHORT metrics keyed to the deal's booking day,
    * so recent days read low until the cohort matures.
@@ -647,13 +647,21 @@ export class SnowflakeService {
            AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        -- Flow metrics: unique people per stage per day per channel.
+       -- Flow metrics per day, at TWO grain levels via GROUPING SETS: once per channel, and
+       -- once for the day as a whole (emitted as the synthetic channel 'all').
+       --
+       -- The 'all' row must be its own COUNT(DISTINCT …) over the undivided day — it is NOT
+       -- the sum of the channel rows. One person can produce events in two channels on the
+       -- same day (an fbclid on one hit and not the next), so summing the channels
+       -- double-counts them (~0.2%/day) and would stop the tab tying out to wonderly_daily.
        f AS (
-         SELECT day, channel,
-           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS sessions,
+         SELECT day,
+           CASE WHEN GROUPING(channel) = 1 THEN 'all' ELSE channel END AS channel,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS page_views,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM_CTA__CLICKED' THEN AMPLITUDE_ID END) AS cta,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN AMPLITUDE_ID END) AS partial,
            COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN AMPLITUDE_ID END) AS qualified
-         FROM mkt GROUP BY day, channel
+         FROM mkt GROUP BY GROUPING SETS ((day, channel), (day))
        ),
        em AS (
          SELECT CONTACT_ID,
@@ -701,13 +709,18 @@ export class SnowflakeService {
        ds AS (
          SELECT
            COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) AS day,
+           -- Deals we cannot bridge to any marketing session keep an explicit 'unattributed'
+           -- label rather than a NULL that later filters them out. They are real acquisitions
+           -- (outbound, rep-created, pre-tracking) and belong in the ALL denominator — dropping
+           -- them would flatter every channel's share.
            COALESCE(
              CASE
                WHEN LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:utm_source::string) IN ('facebook','ig')
                  OR LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel::string) IN ('facebook','ig')
                  OR TRY_PARSE_JSON(cd.METADATA):attribution:fbclid IS NOT NULL THEN 'fb'
              END,
-             src.channel
+             src.channel,
+             'unattributed'
            ) AS channel,
            st.TYPE AS stage_type,
            NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
@@ -734,7 +747,9 @@ export class SnowflakeService {
        -- Cohort aggregate by booking day AND channel. Same held / no-show / accepted rules as
        -- the blended query (see getDailyMarketing for why each guard exists).
        s AS (
-         SELECT day, channel, SUM(held) AS held, SUM(accepted) AS accepted, SUM(no_show) AS no_show
+         SELECT day,
+           CASE WHEN GROUPING(channel) = 1 THEN 'all' ELSE channel END AS channel,
+           SUM(held) AS held, SUM(accepted) AS accepted, SUM(no_show) AS no_show
          FROM (
            SELECT day, channel,
              CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END AS accepted,
@@ -743,9 +758,9 @@ export class SnowflakeService {
                         stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
                         OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
                       ) THEN 1 ELSE 0 END AS held
-           FROM ds WHERE day IS NOT NULL AND channel IS NOT NULL
+           FROM ds WHERE day IS NOT NULL
          )
-         GROUP BY day, channel
+         GROUP BY GROUPING SETS ((day, channel), (day))
        ),
        -- CALL1_BOOKED: marketing-qualified leads who booked, keyed to their qualified day.
        qual AS (
@@ -766,9 +781,11 @@ export class SnowflakeService {
          GROUP BY 1
        ),
        lead AS (
-         SELECT q.qualified_day AS day, q.channel, COUNT(*) AS booked
+         SELECT q.qualified_day AS day,
+           CASE WHEN GROUPING(q.channel) = 1 THEN 'all' ELSE q.channel END AS channel,
+           COUNT(*) AS booked
          FROM qual q JOIN bk ON bk.email = q.email
-         GROUP BY 1, 2
+         GROUP BY GROUPING SETS ((q.qualified_day, q.channel), (q.qualified_day))
        ),
        -- Union the three keyings so a channel-day appears if it has traffic, a booking, or an outcome.
        keys AS (
@@ -777,7 +794,7 @@ export class SnowflakeService {
          UNION SELECT day, channel FROM s
        )
        SELECT TO_CHAR(k.day,'YYYY-MM-DD') AS DATE, k.channel AS CHANNEL,
-         COALESCE(f.sessions,0) AS SESSIONS,
+         COALESCE(f.page_views,0) AS PAGE_VIEWS,
          COALESCE(f.cta,0) AS CTA,
          COALESCE(f.partial,0) AS SUBMIT_PARTIAL,
          COALESCE(f.qualified,0) AS SUBMIT_QUALIFIED,
@@ -798,7 +815,7 @@ export class SnowflakeService {
     return rows.map((r) => ({
       date: String(r.DATE),
       channel: toChannel(r.CHANNEL),
-      sessions: num(r.SESSIONS),
+      pageViews: num(r.PAGE_VIEWS),
       cta: num(r.CTA),
       submitPartial: num(r.SUBMIT_PARTIAL),
       submitQualified: num(r.SUBMIT_QUALIFIED),

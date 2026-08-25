@@ -30,6 +30,27 @@ export const CHANNELS = ['seo', 'ai', 'direct', 'referral', 'other', 'fb'] as co
 
 export type Channel = (typeof CHANNELS)[number];
 
+/**
+ * Deals that reach no marketing session at all — outbound, rep-created, or from before
+ * tracking. Real acquisitions with no channel, so they are labelled rather than dropped:
+ * they belong in the ALL denominator, and excluding them would flatter every channel's share.
+ */
+export const UNATTRIBUTED = 'unattributed';
+
+/**
+ * The synthetic row carrying the whole day, undivided.
+ *
+ * It is computed at its own grain (a `COUNT(DISTINCT …)` over the undivided day), **not** by
+ * summing the channel rows. One person can produce events in two channels on the same day —
+ * an `fbclid` on one hit and not the next — so a sum double-counts them and would stop the
+ * SEO tab tying out to `wonderly_daily`. Always read this row for a total; never add up
+ * the channels.
+ */
+export const ALL_CHANNELS = 'all';
+
+/** A row key on the channel funnel: one real channel, the unattributed bucket, or the total. */
+export type ChannelKey = Channel | typeof UNATTRIBUTED | typeof ALL_CHANNELS;
+
 /** Human-readable label per channel, for tab headers and the Definitions glossary. */
 export const CHANNEL_LABELS: Record<Channel, string> = {
   seo: 'Organic search',
@@ -50,11 +71,18 @@ export const CHANNEL_PREFIX: Record<Channel, string> = {
   fb: 'FB',
 };
 
-/** Narrow an arbitrary string from Snowflake to a Channel, defaulting to `direct`. */
-export function toChannel(value: unknown): Channel {
+/**
+ * Narrow an arbitrary string from Snowflake to a ChannelKey.
+ *
+ * Unknown values fall back to `unattributed` rather than to a real channel — a row whose
+ * channel we can't read must not silently inflate one.
+ */
+export function toChannel(value: unknown): ChannelKey {
   const s = String(value ?? '').toLowerCase();
 
-  return (CHANNELS as readonly string[]).includes(s) ? (s as Channel) : 'direct';
+  if (s === ALL_CHANNELS || s === UNATTRIBUTED) return s;
+
+  return (CHANNELS as readonly string[]).includes(s) ? (s as Channel) : UNATTRIBUTED;
 }
 
 /**
@@ -63,16 +91,21 @@ export function toChannel(value: unknown): Channel {
  * Long format — one row per (date, channel) with any activity — rather than a wide row per
  * day, so adding a channel never changes the shape. `computeSeoMetrics` pivots it.
  *
- * Keying matches the blended tabs: `sessions` / `cta` / `submitPartial` / `submitQualified`
+ * Keying matches the blended tabs: `pageViews` / `cta` / `submitPartial` / `submitQualified`
  * are FLOW metrics on the event day; `booked` is keyed to the lead's QUALIFIED day; `held`,
  * `noShow` and `accepted` are COHORT metrics keyed to the deal's booking day.
  */
 export interface ChannelFunnelRow {
   /** `YYYY-MM-DD`, bucketed on the report timezone. */
   date: string;
-  channel: Channel;
-  /** Unique people with a page view that day. */
-  sessions: number;
+  /** A real channel, the `unattributed` bucket, or the `all` total row. */
+  channel: ChannelKey;
+  /**
+   * Unique PEOPLE with a marketing page view that day — `COUNT(DISTINCT AMPLITUDE_ID)`, the
+   * same measure `wonderly_daily` reports as PAGE_VIEW. Not visits and not page-view events:
+   * on 2026-08-25 organic search was 69 people across 78 Amplitude sessions and 131 page views.
+   */
+  pageViews: number;
   cta: number;
   submitPartial: number;
   submitQualified: number;

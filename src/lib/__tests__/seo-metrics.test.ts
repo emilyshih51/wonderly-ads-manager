@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Channel, ChannelFunnelRow } from '@/lib/channel';
+import type { ChannelKey, ChannelFunnelRow } from '@/lib/channel';
 import { SEO_METRICS_LABELS, computeSeoMetrics, toSeoDays } from '@/lib/seo-metrics';
 import { buildSeoMetricsFormatRequests } from '@/lib/seo-metrics-format';
 
-function row(date: string, channel: Channel, o: Partial<ChannelFunnelRow> = {}): ChannelFunnelRow {
+function row(
+  date: string,
+  channel: ChannelKey,
+  o: Partial<ChannelFunnelRow> = {}
+): ChannelFunnelRow {
   return {
     date,
     channel,
-    sessions: 0,
+    pageViews: 0,
     cta: 0,
     submitPartial: 0,
     submitQualified: 0,
@@ -20,7 +24,14 @@ function row(date: string, channel: Channel, o: Partial<ChannelFunnelRow> = {}):
   };
 }
 
-/** A full week (Mon 2026-08-03 … Sun 2026-08-09) plus one day of the next, newest first. */
+/**
+ * A full week (Mon 2026-08-03 … Sun 2026-08-09) plus one day of the next, newest first.
+ *
+ * The `all` row is deliberately NOT the sum of the channel rows: its page views are lower
+ * than seo + fb (one person active in both channels that day) and its accepted is higher
+ * (one deal no channel could be found for). Anything that sums channels instead of reading
+ * the `all` row fails these fixtures.
+ */
 function fixture(): ChannelFunnelRow[] {
   const out: ChannelFunnelRow[] = [];
 
@@ -29,7 +40,7 @@ function fixture(): ChannelFunnelRow[] {
 
     out.push(
       row(date, 'seo', {
-        sessions: 100,
+        pageViews: 100,
         cta: 20,
         submitPartial: 10,
         submitQualified: 4,
@@ -39,7 +50,19 @@ function fixture(): ChannelFunnelRow[] {
         accepted: 1,
       })
     );
-    out.push(row(date, 'fb', { sessions: 900, cta: 180, booked: 18, held: 9, accepted: 4 }));
+    out.push(row(date, 'fb', { pageViews: 901, cta: 180, booked: 18, held: 9, accepted: 4 }));
+    out.push(
+      row(date, 'all', {
+        pageViews: 1000,
+        cta: 200,
+        submitPartial: 100,
+        submitQualified: 40,
+        booked: 20,
+        held: 10,
+        noShow: 5,
+        accepted: 6,
+      })
+    );
   }
 
   return out;
@@ -72,25 +95,55 @@ describe('toSeoDays', () => {
   it('splits each day into the SEO slice and the all-channel total, newest first', () => {
     const days = toSeoDays(
       [
-        row('2026-08-01', 'seo', { sessions: 10, accepted: 1 }),
-        row('2026-08-01', 'fb', { sessions: 90, accepted: 3 }),
-        row('2026-08-02', 'direct', { sessions: 50 }),
+        row('2026-08-01', 'seo', { pageViews: 10, accepted: 1 }),
+        row('2026-08-01', 'fb', { pageViews: 90, accepted: 3 }),
+        row('2026-08-01', 'all', { pageViews: 97, accepted: 5 }),
+        row('2026-08-02', 'direct', { pageViews: 50 }),
+        row('2026-08-02', 'all', { pageViews: 50 }),
       ],
       '2026-01-01'
     );
 
     expect(days.map((d) => d.date)).toEqual(['2026-08-02', '2026-08-01']);
-    expect(days[1].seo.sessions).toBe(10);
-    expect(days[1].all.sessions).toBe(100);
-    expect(days[1].all.accepted).toBe(4);
+    expect(days[1].seo.pageViews).toBe(10);
     // A day with no organic traffic still reports its all-channel total.
-    expect(days[0].seo.sessions).toBe(0);
-    expect(days[0].all.sessions).toBe(50);
+    expect(days[0].seo.pageViews).toBe(0);
+    expect(days[0].all.pageViews).toBe(50);
+  });
+
+  it('takes the total from the all row, never by summing channels', () => {
+    const days = toSeoDays(
+      [
+        row('2026-08-01', 'seo', { pageViews: 10, accepted: 1 }),
+        row('2026-08-01', 'fb', { pageViews: 90, accepted: 3 }),
+        // Fewer page views than seo + fb (someone was active in both channels) and more
+        // accepted (one deal bridged to no channel at all).
+        row('2026-08-01', 'all', { pageViews: 97, accepted: 5 }),
+      ],
+      '2026-01-01'
+    );
+
+    expect(days[0].all.pageViews).toBe(97);
+    expect(days[0].all.accepted).toBe(5);
+  });
+
+  it('ignores the unattributed bucket as a channel — it only reaches the total', () => {
+    const days = toSeoDays(
+      [
+        row('2026-08-01', 'seo', { accepted: 1 }),
+        row('2026-08-01', 'unattributed', { accepted: 4 }),
+        row('2026-08-01', 'all', { accepted: 5 }),
+      ],
+      '2026-01-01'
+    );
+
+    expect(days[0].seo.accepted).toBe(1);
+    expect(days[0].all.accepted).toBe(5);
   });
 
   it('drops days before the floor date', () => {
     const days = toSeoDays(
-      [row('2026-04-30', 'seo', { sessions: 5 }), row('2026-05-01', 'seo', { sessions: 7 })],
+      [row('2026-04-30', 'seo', { pageViews: 5 }), row('2026-05-01', 'seo', { pageViews: 7 })],
       '2026-05-01'
     );
 
@@ -116,7 +169,7 @@ describe('computeSeoMetrics layout', () => {
       'Qualified',
       'Partial',
       'CTA',
-      'Sessions',
+      'Page views',
     ]);
   });
 
@@ -126,7 +179,7 @@ describe('computeSeoMetrics layout', () => {
     expect(headers.filter((h) => h === 'SEO')).toHaveLength(8);
     expect(headers.filter((h) => h === 'ALL')).toHaveLength(8);
     expect(headers.filter((h) => h === 'SEO %')).toHaveLength(8);
-    // Conv on every stage except the top of funnel (Sessions) and No show.
+    // Conv on every stage except the top of funnel (Page views) and No show.
     expect(headers.filter((h) => h === 'Conv')).toHaveLength(6);
     // w/w everywhere except Accepted and No show.
     expect(headers.filter((h) => h === 'w/w')).toHaveLength(6);
@@ -160,9 +213,9 @@ describe('computeSeoMetrics rows', () => {
     const week = body.find((r) => r[0] === 'Week of 2026-08-03')!;
 
     // Seven days x 100 organic sessions, against 7 x 1000 all-channel.
-    expect(week[groupCol(m, 'Sessions', 'SEO')]).toBe(700);
-    expect(week[groupCol(m, 'Sessions', 'ALL')]).toBe(7000);
-    expect(week[groupCol(m, 'Sessions', 'SEO %')]).toBe(0.1);
+    expect(week[groupCol(m, 'Page views', 'SEO')]).toBe(700);
+    expect(week[groupCol(m, 'Page views', 'ALL')]).toBe(7000);
+    expect(week[groupCol(m, 'Page views', 'SEO %')]).toBe(0.1);
     // Accepted 7 of 14 booked — a rate over the week, not a sum of daily rates.
     expect(week[groupCol(m, 'Accepted', 'Conv')]).toBe(0.5);
   });
@@ -170,8 +223,8 @@ describe('computeSeoMetrics rows', () => {
   it('computes step conversion inside the SEO slice only', () => {
     const day = body[0];
 
-    // CTA group: Conv = SEO cta / SEO sessions = 20 / 100 — organic's own rate, even though
-    // FB contributed 180 CTAs from 900 sessions on the same day.
+    // CTA group: Conv = SEO cta / SEO page views = 20 / 100 — organic's own rate, even though
+    // FB contributed 180 CTAs from 901 page views on the same day.
     expect(day[groupCol(m, 'CTA', 'Conv')]).toBe(0.2);
     expect(day[groupCol(m, 'Qualified', 'Conv')]).toBe(0.4); // 4 / 10 partial
   });
@@ -179,23 +232,26 @@ describe('computeSeoMetrics rows', () => {
   it('computes SEO share against the all-channel total, not against itself', () => {
     const day = body[0];
 
-    expect(day[groupCol(m, 'Sessions', 'SEO')]).toBe(100);
-    expect(day[groupCol(m, 'Sessions', 'ALL')]).toBe(1000);
-    expect(day[groupCol(m, 'Sessions', 'SEO %')]).toBe(0.1);
+    expect(day[groupCol(m, 'Page views', 'SEO')]).toBe(100);
+    // 1000, the all row — not 1001, which is what summing seo + fb would give.
+    expect(day[groupCol(m, 'Page views', 'ALL')]).toBe(1000);
+    expect(day[groupCol(m, 'Page views', 'SEO %')]).toBe(0.1);
+    // Accepted's total includes the unattributed deal the channel rows can't see.
+    expect(day[groupCol(m, 'Accepted', 'ALL')]).toBe(6);
   });
 
   it('leaves a rate blank rather than 0 when its denominator is empty', () => {
     const m2 = computeSeoMetrics([row('2026-08-10', 'seo')], '2026-08-11', '2026-01-01');
     const day = m2[5];
 
-    expect(day[groupCol(m2, 'Sessions', 'SEO %')]).toBe('');
+    expect(day[groupCol(m2, 'Page views', 'SEO %')]).toBe('');
   });
 
   it('writes the summary rows as live sheet formulas, not baked values', () => {
     expect(String(m[3][1])).toContain('EOMONTH(TODAY()');
     expect(String(m[2][1]).startsWith('=')).toBe(true);
     // Rates aggregate as ratio-of-totals (a division of two SUMIFS), never AVERAGE of rates.
-    const mtdShare = String(m[3][groupCol(m, 'Sessions', 'SEO %')]);
+    const mtdShare = String(m[3][groupCol(m, 'Page views', 'SEO %')]);
 
     expect(mtdShare).toContain('SUMIFS');
     expect(mtdShare).toContain('/');

@@ -5,7 +5,7 @@
  * into ISO-week blocks with a "Week of …" summary row closing each block, under live
  * 7d-avg / MTD / Prev-Month formula rows. Metrics run the funnel backwards so the outcome
  * reads first: Accepted → Held → No show → Call 1 booked → Qualified → Partial → CTA →
- * Sessions.
+ * Page views.
  *
  * Where Daily Metrics puts a **Cost** column in front of each stage, this tab puts
  * **Conv** — the step conversion from the previous stage. That substitution is the whole
@@ -30,11 +30,11 @@
  * Cron-computed and unit-tested. Written to the "SEO Metrics" tab.
  */
 
-import type { Channel, ChannelFunnelRow } from '@/lib/channel';
+import { ALL_CHANNELS, type ChannelFunnelRow } from '@/lib/channel';
 
 /** The funnel counts this tab reports, per day, for one slice (SEO or all channels). */
 export interface SeoCounts {
-  sessions: number;
+  pageViews: number;
   cta: number;
   submitPartial: number;
   submitQualified: number;
@@ -45,7 +45,7 @@ export interface SeoCounts {
 }
 
 const ZERO: SeoCounts = {
-  sessions: 0,
+  pageViews: 0,
   cta: 0,
   submitPartial: 0,
   submitQualified: 0,
@@ -95,9 +95,9 @@ const METRICS: SeoMetric[] = [
   { label: 'Call 1 booked', value: (c) => c.booked, prevLabel: 'Qualified' },
   { label: 'Qualified', value: (c) => c.submitQualified, prevLabel: 'Partial' },
   { label: 'Partial', value: (c) => c.submitPartial, prevLabel: 'CTA' },
-  { label: 'CTA', value: (c) => c.cta, prevLabel: 'Sessions' },
+  { label: 'CTA', value: (c) => c.cta, prevLabel: 'Page views' },
   // Top of funnel — nothing precedes it, so no Conv column.
-  { label: 'Sessions', value: (c) => c.sessions },
+  { label: 'Page views', value: (c) => c.pageViews },
 ];
 
 /** Index of a metric by label. Throws on a typo'd `prevLabel` rather than silently skipping. */
@@ -159,7 +159,7 @@ function colLetter(index: number): string {
 
 function addCounts(a: SeoCounts, b: SeoCounts): SeoCounts {
   return {
-    sessions: a.sessions + b.sessions,
+    pageViews: a.pageViews + b.pageViews,
     cta: a.cta + b.cta,
     submitPartial: a.submitPartial + b.submitPartial,
     submitQualified: a.submitQualified + b.submitQualified,
@@ -186,7 +186,7 @@ export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
 
     const day = byDate.get(r.date) ?? { seo: { ...ZERO }, all: { ...ZERO } };
     const counts: SeoCounts = {
-      sessions: r.sessions,
+      pageViews: r.pageViews,
       cta: r.cta,
       submitPartial: r.submitPartial,
       submitQualified: r.submitQualified,
@@ -196,8 +196,14 @@ export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
       accepted: r.accepted,
     };
 
-    day.all = addCounts(day.all, counts);
-    if ((r.channel as Channel) === 'seo') day.seo = addCounts(day.seo, counts);
+    // Read the total from the query's own `all` row — a day-grain COUNT(DISTINCT …) — rather
+    // than summing the channel rows. A person active in two channels on the same day appears
+    // in both, so a sum runs ~0.2%/day high and would break the tie-out to wonderly_daily.
+    // The `all` row also includes deals no channel could be found for, which the channel rows
+    // by definition cannot.
+    if (r.channel === ALL_CHANNELS) day.all = counts;
+    else if (r.channel === 'seo') day.seo = addCounts(day.seo, counts);
+
     byDate.set(r.date, day);
   }
 

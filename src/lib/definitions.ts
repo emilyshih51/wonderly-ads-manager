@@ -373,14 +373,21 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'SEO Metrics',
     'Per-metric columns on the SEO grid: the organic-search count, the all-channel total for the same metric, and organic’s share of it.',
     'Amplitude + CSM_OPS CRM',
-    'SEO = the count whose CHANNEL is seo; ALL = every channel including Facebook; SEO % = SEO ÷ ALL. Windowed rows (weekly, 7d avg, MTD, Prev Month) compute SEO % as a ratio of totals (Σ SEO ÷ Σ ALL), never an average of daily percentages — a 3-session day must not weigh the same as a 300-session day.',
+    'SEO = the count whose CHANNEL is seo. ALL is the day counted WHOLE — its own COUNT(DISTINCT …), not the sum of the channels: one person can appear in two channels the same day (an fbclid on one hit and not the next), so summing runs ~0.2%/day high, and ALL also carries the deals no channel could be found for. That is what makes ALL tie out to wonderly_daily. SEO % = SEO ÷ ALL. Windowed rows (weekly, 7d avg, MTD, Prev Month) compute it as a ratio of totals (Σ SEO ÷ Σ ALL), never an average of daily percentages — a 20-view day must not weigh the same as a 200-view day.',
+  ],
+  [
+    'Page views',
+    'SEO Metrics',
+    'The top-of-funnel row: how many PEOPLE viewed the marketing site that day — not visits, and not page-view events.',
+    'Amplitude',
+    'COUNT(DISTINCT AMPLITUDE_ID) on MARKETING_SITE__PAGE__VIEW — the same measure wonderly_daily reports as PAGE_VIEW, so the two tabs are directly comparable. One person browsing five pages across two visits counts once. For scale: on 2026-08-25 organic search was 69 people, across 78 Amplitude sessions and 131 page-view events.',
   ],
   [
     'Conv',
     'SEO Metrics',
     'The leading column on each stage: what share of the previous step made it to this one, within organic search only.',
     'Derived',
-    'Conv = this stage’s SEO count ÷ the previous stage’s SEO count (Sessions → CTA → Partial → Qualified → Call 1 booked → Held/Accepted). It sits where Daily Metrics puts Cost, because SEO has no media spend to divide by. Blank (not 0%) when the previous step was empty. Ratio of totals on all windowed rows. No show has no Conv — it is a disposition of a booked call, not a funnel step.',
+    'Conv = this stage’s SEO count ÷ the previous stage’s SEO count (Page views → CTA → Partial → Qualified → Call 1 booked → Held/Accepted). It sits where Daily Metrics puts Cost, because SEO has no media spend to divide by. Blank (not 0%) when the previous step was empty. Ratio of totals on all windowed rows. No show has no Conv — it is a disposition of a booked call, not a funnel step.',
   ],
   [
     '7d avg / MTD / Prev Month / Week of …',

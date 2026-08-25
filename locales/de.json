@@ -108,7 +108,8 @@
     "spendVsCpm": "Ausgaben vs. CPM",
     "spendResultsCpa": "Ausgaben + Ergebnisse + CPA",
     "clicksCtrCpc": "Klicks + CTR + CPC",
-    "optional": "(optional)"
+    "optional": "(optional)",
+    "dismiss": "Schließen"
   },
   "metrics": {
     "amountSpent": "Ausgegebener Betrag",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "Wenn aktiviert, läuft eine Gewinneranzeige mit Conversions nach dem Duplizieren in die Ziel-Anzeigengruppen in ihrer ursprünglichen Anzeigengruppe weiter.",
     "otherAccountRulesTitle": "{count} aktive Regel(n) laufen auf einem anderen Werbekonto",
     "otherAccountRulesHint": "Der Automatisierungs-Cron wertet alle aktiven Regeln aus, diese Liste zeigt jedoch nur das ausgewählte Werbekonto. Wechseln Sie das Konto, um sie anzuzeigen oder zu bearbeiten.",
+    "couldNotUpdateRule": "„{name}“ konnte nicht aktualisiert werden.",
+    "couldNotDeleteRule": "Diese Regel konnte nicht gelöscht werden.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Kampagnen suchen...",
     "searchAdSets": "Anzeigengruppen suchen...",

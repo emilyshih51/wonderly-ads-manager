@@ -108,7 +108,8 @@
     "spendVsCpm": "Gasto vs CPM",
     "spendResultsCpa": "Gasto + Resultados + CPA",
     "clicksCtrCpc": "Clics + CTR + CPC",
-    "optional": "(opcional)"
+    "optional": "(opcional)",
+    "dismiss": "Descartar"
   },
   "metrics": {
     "amountSpent": "Gasto total",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "Cuando está activado, un anuncio ganador que haya convertido sigue activo en su conjunto de anuncios original tras duplicarse a los conjuntos de destino.",
     "otherAccountRulesTitle": "{count} regla(s) activa(s) se ejecutan en otra cuenta publicitaria",
     "otherAccountRulesHint": "El cron de automatización evalúa todas las reglas activas, pero esta lista solo muestra la cuenta publicitaria seleccionada. Cambia de cuenta para verlas o editarlas.",
+    "couldNotUpdateRule": "No se pudo actualizar “{name}”.",
+    "couldNotDeleteRule": "No se pudo eliminar esta regla.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Buscar campañas...",
     "searchAdSets": "Buscar conjuntos de anuncios...",

@@ -138,8 +138,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 });
     }
 
-    if (existingRule.user_id && existingRule.user_id !== session.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Authorise by ad account, not by the individual who created the rule.
+    // Rules are listed by ad account, so owner-based authorisation orphaned any
+    // rule whose creator later signed in as a different Meta user: it stayed
+    // visible and active but could not be toggled or deleted, and the 403 was
+    // swallowed by the client. If you can see a rule, you can manage it.
+    if (existingRule.ad_account_id && existingRule.ad_account_id !== session.ad_account_id) {
+      return NextResponse.json(
+        { error: 'This rule belongs to a different ad account' },
+        { status: 403 }
+      );
     }
 
     const updatedRule: StoredRule = {
@@ -177,8 +185,12 @@ export async function DELETE(request: NextRequest) {
     const store = await createRulesStore();
     const existingRule = await store.get(ruleId);
 
-    if (existingRule?.user_id && existingRule.user_id !== session.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Same ad-account scoping as PUT — see the comment there.
+    if (existingRule?.ad_account_id && existingRule.ad_account_id !== session.ad_account_id) {
+      return NextResponse.json(
+        { error: 'This rule belongs to a different ad account' },
+        { status: 403 }
+      );
     }
 
     await store.delete(ruleId);

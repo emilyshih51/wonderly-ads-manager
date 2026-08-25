@@ -309,3 +309,32 @@ describe('clearCookieRules()', () => {
     expect(cookies.getAll()).toHaveLength(1);
   });
 });
+
+describe('rule authorisation scope (regression: un-toggleable rules)', () => {
+  /**
+   * PUT/DELETE used to authorise on `user_id`. A rule created under a different
+   * Meta login stayed visible (the list filters by ad account) but every toggle
+   * and delete returned 403, and the client swallowed it — so the switch simply
+   * snapped back. Authorisation now matches visibility: same ad account.
+   */
+  function authorised(
+    rule: Pick<StoredRule, 'user_id' | 'ad_account_id'>,
+    session: { id: string; ad_account_id: string }
+  ): boolean {
+    return !rule.ad_account_id || rule.ad_account_id === session.ad_account_id;
+  }
+
+  const session = { id: 'user-current', ad_account_id: 'act-1' };
+
+  it('allows managing a rule on the same ad account created by someone else', () => {
+    expect(authorised({ user_id: 'user-other', ad_account_id: 'act-1' }, session)).toBe(true);
+  });
+
+  it('allows managing a legacy rule with no ad account', () => {
+    expect(authorised({ user_id: 'user-other', ad_account_id: undefined }, session)).toBe(true);
+  });
+
+  it('still blocks a rule belonging to a different ad account', () => {
+    expect(authorised({ user_id: 'user-current', ad_account_id: 'act-2' }, session)).toBe(false);
+  });
+});

@@ -108,7 +108,8 @@
     "spendVsCpm": "花費 vs CPM",
     "spendResultsCpa": "花費 + 結果 + CPA",
     "clicksCtrCpc": "點擊量 + CTR + CPC",
-    "optional": "（選填）"
+    "optional": "（選填）",
+    "dismiss": "關閉"
   },
   "metrics": {
     "amountSpent": "總花費",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "開啟後，有轉換的獲勝廣告在複製到目標廣告組後，仍會在其原始廣告組中繼續投放。",
     "otherAccountRulesTitle": "{count} 條啟用中的規則在其他廣告帳戶上執行",
     "otherAccountRulesHint": "自動化排程會評估所有啟用中的規則，但此列表僅顯示目前選取的廣告帳戶。切換帳戶以查看或編輯這些規則。",
+    "couldNotUpdateRule": "無法更新「{name}」。",
+    "couldNotDeleteRule": "無法刪除此規則。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "搜尋廣告活動...",
     "searchAdSets": "搜尋廣告組合...",

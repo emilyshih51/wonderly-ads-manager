@@ -108,7 +108,8 @@
     "spendVsCpm": "消化額 vs CPM",
     "spendResultsCpa": "消化額 + 成果 + CPA",
     "clicksCtrCpc": "クリック数 + CTR + CPC",
-    "optional": "(任意)"
+    "optional": "(任意)",
+    "dismiss": "閉じる"
   },
   "metrics": {
     "amountSpent": "合計消化額",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "オンにすると、コンバージョンのある勝者広告は対象広告セットへ複製された後も、元の広告セットで配信を継続します。",
     "otherAccountRulesTitle": "{count} 件の有効なルールが別の広告アカウントで実行されています",
     "otherAccountRulesHint": "自動化cronはすべての有効なルールを評価しますが、このリストには選択中の広告アカウントのみが表示されます。表示や編集にはアカウントを切り替えてください。",
+    "couldNotUpdateRule": "「{name}」を更新できませんでした。",
+    "couldNotDeleteRule": "このルールを削除できませんでした。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "キャンペーンを検索...",
     "searchAdSets": "広告セットを検索...",

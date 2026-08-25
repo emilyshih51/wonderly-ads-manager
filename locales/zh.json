@@ -108,7 +108,8 @@
     "spendVsCpm": "花费 vs CPM",
     "spendResultsCpa": "花费 + 结果 + CPA",
     "clicksCtrCpc": "点击量 + CTR + CPC",
-    "optional": "（可选）"
+    "optional": "（可选）",
+    "dismiss": "关闭"
   },
   "metrics": {
     "amountSpent": "总花费",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "开启后，有转化的获胜广告在复制到目标广告组后，仍会在其原始广告组中继续投放。",
     "otherAccountRulesTitle": "{count} 条启用中的规则在其他广告账户上运行",
     "otherAccountRulesHint": "自动化定时任务会评估所有启用中的规则，但此列表仅显示当前选中的广告账户。切换账户以查看或编辑这些规则。",
+    "couldNotUpdateRule": "无法更新“{name}”。",
+    "couldNotDeleteRule": "无法删除此规则。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "搜索广告系列...",
     "searchAdSets": "搜索广告组...",

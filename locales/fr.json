@@ -108,7 +108,8 @@
     "spendVsCpm": "Dépenses vs CPM",
     "spendResultsCpa": "Dépenses + Résultats + CPA",
     "clicksCtrCpc": "Clics + CTR + CPC",
-    "optional": "(facultatif)"
+    "optional": "(facultatif)",
+    "dismiss": "Ignorer"
   },
   "metrics": {
     "amountSpent": "Montant dépensé",
@@ -372,6 +373,8 @@
     "protectConvertersPromoteHint": "Lorsque activé, une annonce gagnante ayant converti continue d'être diffusée dans son ensemble d'annonces d'origine après duplication vers les ensembles cibles.",
     "otherAccountRulesTitle": "{count} règle(s) active(s) s'exécutent sur un autre compte publicitaire",
     "otherAccountRulesHint": "Le cron d'automatisation évalue toutes les règles actives, mais cette liste n'affiche que le compte publicitaire sélectionné. Changez de compte pour les consulter ou les modifier.",
+    "couldNotUpdateRule": "Impossible de mettre à jour « {name} ».",
+    "couldNotDeleteRule": "Impossible de supprimer cette règle.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Rechercher des campagnes...",
     "searchAdSets": "Rechercher des ensembles de publicités...",

@@ -323,6 +323,9 @@ export default function AutomationsPage() {
   const tMetrics = useTranslations('metrics');
   const { data: rules = [], isLoading: rulesLoading } = useRules();
   const { data: otherAccountRules = [] } = useOtherAccountRules();
+  // Toggle/delete failures used to go to the console only, so a rejected
+  // request looked exactly like a toggle that did nothing.
+  const [actionError, setActionError] = useState<string | null>(null);
   const { data: activityLog = [] } = useAutomationHistory();
   const saveRule = useSaveRule();
   const deleteRule = useDeleteRule();
@@ -384,19 +387,29 @@ export default function AutomationsPage() {
   };
 
   const handleDelete = async (ruleId: string) => {
+    setActionError(null);
+
     try {
       await deleteRule.mutateAsync(ruleId);
       if (selectedRule?.id === ruleId) setSelectedRule(null);
     } catch (err) {
       logger.error('Delete failed', err);
+      setActionError(
+        `${t('couldNotDeleteRule')} ${err instanceof Error ? err.message : ''}`.trim()
+      );
     }
   };
 
   const handleToggle = async (rule: Rule) => {
+    setActionError(null);
+
     try {
       await toggleRule.mutateAsync({ id: rule.id, is_active: !rule.is_active });
     } catch (err) {
       logger.error('Toggle failed', err);
+      setActionError(
+        `${t('couldNotUpdateRule', { name: rule.name })} ${err instanceof Error ? err.message : ''}`.trim()
+      );
     }
   };
 
@@ -702,6 +715,26 @@ export default function AutomationsPage() {
             {/* ─── RULES TAB ─── */}
             {listTab === 'rules' && (
               <div className="space-y-2">
+                {actionError && (
+                  <Card
+                    role="alert"
+                    className="mb-3 border-red-300 bg-red-50 p-3 sm:p-4 dark:border-red-800/60 dark:bg-red-950/30"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-500" />
+                      <p className="min-w-0 text-sm text-red-900 dark:text-red-200">
+                        {actionError}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActionError(null)}
+                        className="ml-auto shrink-0 text-xs font-medium text-red-700 hover:underline dark:text-red-300"
+                      >
+                        {tCommon('dismiss')}
+                      </button>
+                    </div>
+                  </Card>
+                )}
                 {otherAccountRules.length > 0 && (
                   <Card className="mb-3 border-amber-300 bg-amber-50 p-3 sm:p-4 dark:border-amber-800/60 dark:bg-amber-950/30">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">

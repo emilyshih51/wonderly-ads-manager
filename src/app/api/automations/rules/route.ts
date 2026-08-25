@@ -22,13 +22,30 @@ export async function GET(_request: NextRequest) {
   logger.info('GET /api/automations/rules');
 
   const store = await createRulesStore();
+
+  // Legacy rule cookies can shadow Redis if the read order ever regresses, and
+  // they are never written back once Redis is configured. Drop them on read.
+  store.clearCookieRules();
+
   const allRules = await store.getAll();
   // Filter rules for the current ad account (rules without ad_account_id are shown to all — legacy rules)
   const rules = allRules.filter(
     (r) => !r.ad_account_id || r.ad_account_id === session.ad_account_id
   );
 
-  return NextResponse.json({ data: rules, kv_configured: !!process.env.REDIS_URL });
+  // The cron evaluates every active rule in the store regardless of which ad
+  // account is selected in the UI. Surface the active ones this view filters out
+  // so a rule can never run invisibly — that is how a stale rule kept firing
+  // against a window the user thought they had changed.
+  const otherAccountRules = allRules
+    .filter((r) => r.is_active && r.ad_account_id && r.ad_account_id !== session.ad_account_id)
+    .map((r) => ({ id: r.id, name: r.name, ad_account_id: r.ad_account_id as string }));
+
+  return NextResponse.json({
+    data: rules,
+    other_account_rules: otherAccountRules,
+    kv_configured: !!process.env.REDIS_URL,
+  });
 }
 
 export async function POST(request: NextRequest) {

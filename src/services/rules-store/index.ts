@@ -39,24 +39,10 @@ export class RulesStoreService {
    * @returns All rules sorted newest-first
    */
   async getAll(): Promise<StoredRule[]> {
-    if (this.cookieStore) {
-      const rules: StoredRule[] = [];
-
-      for (const cookie of this.cookieStore.getAll()) {
-        if (cookie.name.startsWith(RULE_COOKIE_PREFIX)) {
-          try {
-            rules.push(JSON.parse(cookie.value) as StoredRule);
-          } catch {
-            /* skip malformed */
-          }
-        }
-      }
-
-      if (rules.length > 0) {
-        return rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-      }
-    }
-
+    // Redis is the single source of truth whenever it is configured — it is the
+    // only store `save()` writes to, and the only one the cron can read. Reading
+    // cookies first here (as this used to) let a stale cookie shadow Redis
+    // forever: the UI showed one config while the cron executed another.
     if (this.redis) {
       try {
         const data = await this.redis.hGetAll(RULES_REDIS_HASH_KEY);
@@ -69,9 +55,61 @@ export class RulesStoreService {
       } catch (e) {
         this.logger.error('Redis read error', e);
       }
+
+      return [];
     }
 
-    return [];
+    return this.getAllFromCookies();
+  }
+
+  /**
+   * Read rules from the cookie store. Only used when Redis is unavailable
+   * (local dev without `REDIS_URL`), and by `clearCookieRules()`.
+   */
+  private getAllFromCookies(): StoredRule[] {
+    if (!this.cookieStore) return [];
+
+    const rules: StoredRule[] = [];
+
+    for (const cookie of this.cookieStore.getAll()) {
+      if (cookie.name.startsWith(RULE_COOKIE_PREFIX)) {
+        try {
+          rules.push(JSON.parse(cookie.value) as StoredRule);
+        } catch {
+          /* skip malformed */
+        }
+      }
+    }
+
+    return rules.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }
+
+  /**
+   * Delete any leftover rule cookies. Call this when Redis is the active store
+   * so legacy cookies — written before Redis was configured, or during a Redis
+   * outage — cannot shadow it if the read order ever regresses.
+   *
+   * @returns Number of rule cookies removed
+   */
+  clearCookieRules(): number {
+    if (!this.cookieStore || !this.redis) return 0;
+
+    let cleared = 0;
+
+    for (const cookie of this.cookieStore.getAll()) {
+      if (cookie.name.startsWith(RULE_COOKIE_PREFIX)) {
+        try {
+          this.cookieStore.delete(cookie.name);
+          cleared++;
+        } catch {
+          /* cookie mutation is not always permitted — best effort */
+        }
+      }
+    }
+
+    if (cleared > 0) this.logger.info('Cleared stale rule cookies', { cleared });
+
+    return cleared;
   }
 
   /**
@@ -95,6 +133,20 @@ export class RulesStoreService {
    * @returns The rule, or `null` if not found
    */
   async get(ruleId: string): Promise<StoredRule | null> {
+    // Redis first, for the same reason as getAll(): an edit must merge onto the
+    // version the cron will actually run, not onto a stale cookie copy.
+    if (this.redis) {
+      try {
+        const data = await this.redis.hGet(RULES_REDIS_HASH_KEY, ruleId);
+
+        return data ? (JSON.parse(data) as StoredRule) : null;
+      } catch (e) {
+        this.logger.error('Redis read error', e);
+      }
+
+      return null;
+    }
+
     if (this.cookieStore) {
       const cookie = this.cookieStore.get(`${RULE_COOKIE_PREFIX}${ruleId}`);
 
@@ -104,16 +156,6 @@ export class RulesStoreService {
         } catch {
           /* malformed */
         }
-      }
-    }
-
-    if (this.redis) {
-      try {
-        const data = await this.redis.hGet(RULES_REDIS_HASH_KEY, ruleId);
-
-        return data ? (JSON.parse(data) as StoredRule) : null;
-      } catch (e) {
-        this.logger.error('Redis read error', e);
       }
     }
 

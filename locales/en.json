@@ -370,6 +370,8 @@
     "protectConverters": "Never turn off ads with conversions",
     "protectConvertersHint": "When on, an ad that has ever converted is never auto-paused and never has its budget cut. Only ads with zero lifetime conversions can be killed.",
     "protectConvertersPromoteHint": "When on, a winning ad that has converted keeps running in its original ad set after being duplicated to the target ad sets.",
+    "otherAccountRulesTitle": "{count} active rule(s) run on another ad account",
+    "otherAccountRulesHint": "The automation cron evaluates every active rule, but this list only shows the ad account you have selected. Switch accounts to view or edit these.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Search campaigns...",
     "searchAdSets": "Search ad sets...",

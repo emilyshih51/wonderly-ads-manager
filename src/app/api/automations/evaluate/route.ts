@@ -306,6 +306,9 @@ interface EvaluateResult {
   skip_reason?: string;
   lifetime_results?: number;
   converter_protected?: boolean;
+  /** The date preset the rule was actually evaluated over. */
+  date_preset?: string;
+  rule_id?: string;
 }
 
 interface EvaluateRuleOptions {
@@ -393,6 +396,20 @@ async function evaluateRule(
 
   const entityType = triggerConfig.entity_type ?? 'ad';
   const datePreset = triggerConfig.date_preset ?? 'last_7d';
+
+  // Log the window every rule actually runs on. Without this the only way to
+  // tell what period a rule used was to reverse-engineer the date_preset out of
+  // an ad deep-link in Slack.
+  logger.info('Evaluating rule', {
+    rule: rule.name,
+    ruleId: rule.id,
+    account: adAccountId,
+    entityType,
+    datePreset,
+    action: actionConfig.action_type,
+    protectConverters,
+    dryRun,
+  });
   // Support comma-separated campaign IDs for multi-campaign rules
   const campaignIdRaw = triggerConfig.campaign_id ?? '';
   const campaignIds = campaignIdRaw
@@ -627,6 +644,8 @@ async function evaluateRule(
     const actionType = actionConfig.action_type ?? '';
     const actionResult: EvaluateResult = {
       rule: rule.name,
+      rule_id: rule.id,
+      date_preset: datePreset,
       entity_type: entityType,
       entity_id: entityId,
       entity_name: entityName,

@@ -370,6 +370,8 @@
     "protectConverters": "Nunca desligar anúncios com conversões",
     "protectConvertersHint": "Quando ativado, um anúncio que já converteu nunca é pausado automaticamente nem tem o orçamento cortado. Só anúncios com zero conversões no histórico podem ser desligados.",
     "protectConvertersPromoteHint": "Quando ativado, um anúncio vencedor que converteu continua ativo no conjunto de anúncios original após ser duplicado para os conjuntos de destino.",
+    "otherAccountRulesTitle": "{count} regra(s) ativa(s) são executadas em outra conta de anúncios",
+    "otherAccountRulesHint": "O cron de automação avalia todas as regras ativas, mas esta lista mostra apenas a conta de anúncios selecionada. Troque de conta para visualizá-las ou editá-las.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Pesquisar campanhas...",
     "searchAdSets": "Pesquisar conjuntos de anúncios...",

@@ -370,6 +370,8 @@
     "protectConverters": "전환이 있는 광고는 끄지 않기",
     "protectConvertersHint": "켜면 한 번이라도 전환이 발생한 광고는 자동으로 일시중지되거나 예산이 삭감되지 않습니다. 누적 전환이 0인 광고만 중단할 수 있습니다.",
     "protectConvertersPromoteHint": "켜면 전환이 있는 우승 광고는 대상 광고 세트로 복제된 뒤에도 원래 광고 세트에서 계속 게재됩니다.",
+    "otherAccountRulesTitle": "{count}개의 활성 규칙이 다른 광고 계정에서 실행 중입니다",
+    "otherAccountRulesHint": "자동화 크론은 모든 활성 규칙을 평가하지만 이 목록에는 선택한 광고 계정만 표시됩니다. 확인하거나 수정하려면 계정을 전환하세요.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "캠페인 검색...",
     "searchAdSets": "광고 세트 검색...",

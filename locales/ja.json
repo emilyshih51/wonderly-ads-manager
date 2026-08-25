@@ -370,6 +370,8 @@
     "protectConverters": "コンバージョンのある広告は停止しない",
     "protectConvertersHint": "オンにすると、これまでにコンバージョンが発生した広告は自動停止も予算削減もされません。停止できるのは累計コンバージョンが0の広告のみです。",
     "protectConvertersPromoteHint": "オンにすると、コンバージョンのある勝者広告は対象広告セットへ複製された後も、元の広告セットで配信を継続します。",
+    "otherAccountRulesTitle": "{count} 件の有効なルールが別の広告アカウントで実行されています",
+    "otherAccountRulesHint": "自動化cronはすべての有効なルールを評価しますが、このリストには選択中の広告アカウントのみが表示されます。表示や編集にはアカウントを切り替えてください。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "キャンペーンを検索...",
     "searchAdSets": "広告セットを検索...",

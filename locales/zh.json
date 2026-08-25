@@ -370,6 +370,8 @@
     "protectConverters": "从不关闭有转化的广告",
     "protectConvertersHint": "开启后，曾产生过转化的广告不会被自动暂停，预算也不会被削减。只有累计转化为 0 的广告才会被关停。",
     "protectConvertersPromoteHint": "开启后，有转化的获胜广告在复制到目标广告组后，仍会在其原始广告组中继续投放。",
+    "otherAccountRulesTitle": "{count} 条启用中的规则在其他广告账户上运行",
+    "otherAccountRulesHint": "自动化定时任务会评估所有启用中的规则，但此列表仅显示当前选中的广告账户。切换账户以查看或编辑这些规则。",
     "plusSlack": "+ Slack",
     "searchCampaigns": "搜索广告系列...",
     "searchAdSets": "搜索广告组...",

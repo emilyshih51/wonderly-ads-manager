@@ -370,6 +370,8 @@
     "protectConverters": "Ne jamais désactiver les annonces avec conversions",
     "protectConvertersHint": "Lorsque activé, une annonce ayant déjà généré une conversion n'est jamais mise en pause automatiquement ni amputée de son budget. Seules les annonces à zéro conversion cumulée peuvent être désactivées.",
     "protectConvertersPromoteHint": "Lorsque activé, une annonce gagnante ayant converti continue d'être diffusée dans son ensemble d'annonces d'origine après duplication vers les ensembles cibles.",
+    "otherAccountRulesTitle": "{count} règle(s) active(s) s'exécutent sur un autre compte publicitaire",
+    "otherAccountRulesHint": "Le cron d'automatisation évalue toutes les règles actives, mais cette liste n'affiche que le compte publicitaire sélectionné. Changez de compte pour les consulter ou les modifier.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Rechercher des campagnes...",
     "searchAdSets": "Rechercher des ensembles de publicités...",

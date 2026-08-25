@@ -36,9 +36,11 @@ import {
   RotateCcw,
   TrendingUp,
   TrendingDown,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   useRules,
+  useOtherAccountRules,
   useSaveRule,
   useDeleteRule,
   useToggleRule,
@@ -320,6 +322,7 @@ export default function AutomationsPage() {
   const tCommon = useTranslations('common');
   const tMetrics = useTranslations('metrics');
   const { data: rules = [], isLoading: rulesLoading } = useRules();
+  const { data: otherAccountRules = [] } = useOtherAccountRules();
   const { data: activityLog = [] } = useAutomationHistory();
   const saveRule = useSaveRule();
   const deleteRule = useDeleteRule();
@@ -699,6 +702,34 @@ export default function AutomationsPage() {
             {/* ─── RULES TAB ─── */}
             {listTab === 'rules' && (
               <div className="space-y-2">
+                {otherAccountRules.length > 0 && (
+                  <Card className="mb-3 border-amber-300 bg-amber-50 p-3 sm:p-4 dark:border-amber-800/60 dark:bg-amber-950/30">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                          {t('otherAccountRulesTitle', { count: otherAccountRules.length })}
+                        </p>
+                        <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-300/90">
+                          {t('otherAccountRulesHint')}
+                        </p>
+                        <ul className="mt-2 space-y-1">
+                          {otherAccountRules.map((r) => (
+                            <li
+                              key={r.id}
+                              className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-amber-900 dark:text-amber-200"
+                            >
+                              <span className="font-medium break-all">{r.name}</span>
+                              <span className="font-mono text-[11px] text-amber-700 dark:text-amber-400">
+                                act_{r.ad_account_id}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </Card>
+                )}
                 {rules.length === 0 ? (
                   <Card className="border-dashed bg-[var(--color-muted)] py-12 text-center">
                     <Zap className="mx-auto mb-3 h-8 w-8 text-[var(--color-muted-foreground)]" />

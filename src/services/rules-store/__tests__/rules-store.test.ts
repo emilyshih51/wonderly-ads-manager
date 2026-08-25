@@ -225,3 +225,87 @@ describe('RulesStoreService', () => {
     });
   });
 });
+
+describe('Redis/cookie precedence (regression: stale cookies shadowing Redis)', () => {
+  it('getAll() prefers Redis over cookies when both have rules', async () => {
+    // The exact production failure: a legacy cookie held an old config while
+    // Redis — the store the cron reads — held the edited one.
+    const stale = makeRule({ id: 'rule-1', name: 'Stale cookie copy' });
+    const current = makeRule({ id: 'rule-1', name: 'Current Redis copy' });
+    const redis = makeRedis([current]);
+    const svc = new RulesStoreService(redis as never, makeCookieStore([stale]));
+
+    const result = await svc.getAll();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Current Redis copy');
+    expect(redis.hGetAll).toHaveBeenCalled();
+  });
+
+  it('get() prefers Redis over cookies so edits merge onto what the cron runs', async () => {
+    const stale = makeRule({ id: 'xyz', name: 'Stale cookie copy' });
+    const current = makeRule({ id: 'xyz', name: 'Current Redis copy' });
+    const svc = new RulesStoreService(makeRedis([current]) as never, makeCookieStore([stale]));
+
+    expect(await svc.get('xyz')).toMatchObject({ name: 'Current Redis copy' });
+  });
+
+  it('getAll() returns empty (not cookies) when Redis is configured but empty', async () => {
+    const stale = makeRule({ id: 'rule-1', name: 'Stale cookie copy' });
+    const svc = new RulesStoreService(makeRedis([]) as never, makeCookieStore([stale]));
+
+    expect(await svc.getAll()).toEqual([]);
+  });
+
+  it('still reads cookies when Redis is not configured (dev)', async () => {
+    const rule = makeRule({ id: 'rule-1', name: 'Dev cookie rule' });
+    const svc = new RulesStoreService(null, makeCookieStore([rule]));
+
+    const result = await svc.getAll();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Dev cookie rule');
+  });
+
+  it('a saved edit is what getAll() returns back, even with a stale cookie present', async () => {
+    const stale = makeRule({ id: 'rule-1', name: 'Old name' });
+    const cookies = makeCookieStore([stale]);
+    const svc = new RulesStoreService(makeRedis([stale]) as never, cookies);
+
+    await svc.save(makeRule({ id: 'rule-1', name: 'Edited name' }));
+
+    const result = await svc.getAll();
+
+    expect(result[0].name).toBe('Edited name');
+  });
+});
+
+describe('clearCookieRules()', () => {
+  it('removes rule cookies when Redis is the active store', async () => {
+    const cookies = makeCookieStore([makeRule({ id: 'a' }), makeRule({ id: 'b' })]);
+    const svc = new RulesStoreService(makeRedis([]) as never, cookies);
+
+    expect(svc.clearCookieRules()).toBe(2);
+    expect(cookies.getAll()).toHaveLength(0);
+  });
+
+  it('leaves non-rule cookies untouched', async () => {
+    const cookies = makeCookieStore([makeRule({ id: 'a' })]);
+
+    cookies.set('session', 'keep-me');
+
+    const svc = new RulesStoreService(makeRedis([]) as never, cookies);
+
+    svc.clearCookieRules();
+
+    expect(cookies.getAll().map((c) => c.name)).toEqual(['session']);
+  });
+
+  it('does nothing when Redis is not configured — cookies are the real store', async () => {
+    const cookies = makeCookieStore([makeRule({ id: 'a' })]);
+    const svc = new RulesStoreService(null, cookies);
+
+    expect(svc.clearCookieRules()).toBe(0);
+    expect(cookies.getAll()).toHaveLength(1);
+  });
+});

@@ -5,8 +5,16 @@ import { queryKeys } from '@/lib/queries/keys';
 import { apiFetch, apiPost, apiPut, apiDelete } from '@/lib/queries/api-fetch';
 import type { AutomationRule } from '@/types';
 
+/** An active rule the cron runs but this ad-account view filters out. */
+export interface OtherAccountRule {
+  id: string;
+  name: string;
+  ad_account_id: string;
+}
+
 interface RulesResponse {
   data: AutomationRule[];
+  other_account_rules?: OtherAccountRule[];
   kv_configured: boolean;
 }
 
@@ -20,6 +28,23 @@ export function useRules() {
     queryKey: queryKeys.automations.rules(),
     queryFn: () => apiFetch<RulesResponse>('/api/automations/rules'),
     select: (res) => res.data,
+  });
+}
+
+/**
+ * Active rules the cron evaluates that this ad-account view hides.
+ *
+ * The rules list is scoped to the selected ad account, but the cron runs every
+ * active rule in the store. Without this a rule can execute with nobody able to
+ * see or edit it.
+ *
+ * @returns TanStack Query result with the hidden active rules.
+ */
+export function useOtherAccountRules() {
+  return useQuery({
+    queryKey: queryKeys.automations.rules(),
+    queryFn: () => apiFetch<RulesResponse>('/api/automations/rules'),
+    select: (res) => res.other_account_rules ?? [],
   });
 }
 

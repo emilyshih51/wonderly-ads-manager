@@ -370,6 +370,8 @@
     "protectConverters": "Anzeigen mit Conversions nie abschalten",
     "protectConvertersHint": "Wenn aktiviert, wird eine Anzeige, die jemals konvertiert hat, nie automatisch pausiert und ihr Budget nie gekürzt. Nur Anzeigen mit null Lifetime-Conversions können abgeschaltet werden.",
     "protectConvertersPromoteHint": "Wenn aktiviert, läuft eine Gewinneranzeige mit Conversions nach dem Duplizieren in die Ziel-Anzeigengruppen in ihrer ursprünglichen Anzeigengruppe weiter.",
+    "otherAccountRulesTitle": "{count} aktive Regel(n) laufen auf einem anderen Werbekonto",
+    "otherAccountRulesHint": "Der Automatisierungs-Cron wertet alle aktiven Regeln aus, diese Liste zeigt jedoch nur das ausgewählte Werbekonto. Wechseln Sie das Konto, um sie anzuzeigen oder zu bearbeiten.",
     "plusSlack": "+ Slack",
     "searchCampaigns": "Kampagnen suchen...",
     "searchAdSets": "Anzeigengruppen suchen...",

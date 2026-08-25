@@ -884,7 +884,7 @@ async function evaluateRule(
             await slack
               .sendAutomationNotification(effectiveSlackChannel, {
                 ruleName: rule.name,
-                actionType: actionType as 'pause' | 'activate' | 'promote',
+                actionType: actionType as 'pause' | 'activate' | 'promote' | 'slack_notify',
                 entityType,
                 entityId,
                 entityName,

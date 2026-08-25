@@ -294,9 +294,26 @@ export class SlackService {
     );
     const brand = SlackService.extractBrand(campaignName);
 
-    const actionEmoji = actionType === 'promote' ? '🚀' : actionType === 'activate' ? '▶️' : '⏸️';
+    // Only label a message as a pause when something was actually paused.
+    // This used to fall through to ⏸️/"Paused" for every non-promote,
+    // non-activate action — so a Notify Only rule announced a pause that had
+    // never happened, and the ad was still running.
+    const actionEmoji =
+      actionType === 'promote'
+        ? '🚀'
+        : actionType === 'activate'
+          ? '▶️'
+          : actionType === 'pause'
+            ? '⏸️'
+            : '👀';
     const actionVerb =
-      actionType === 'promote' ? 'Promoted' : actionType === 'activate' ? 'Activated' : 'Paused';
+      actionType === 'promote'
+        ? 'Promoted'
+        : actionType === 'activate'
+          ? 'Activated'
+          : actionType === 'pause'
+            ? 'Paused'
+            : 'Flagged (no action taken)';
 
     const resultDisplay = metrics.results ?? 0;
     const cpaDisplay =

@@ -461,3 +461,46 @@ describe('SlackService', () => {
     });
   });
 });
+
+describe('sendAutomationNotification() action labelling', () => {
+  /**
+   * Regression: every action that was not promote or activate rendered as
+   * ⏸️ "Paused", so a Notify Only rule announced a pause that never happened
+   * while the ad kept running.
+   */
+  const base = {
+    ruleName: 'Notify when: spend >= $150, 0 results',
+    entityType: 'ad',
+    entityId: 'ad-1',
+    entityName: 'Test Ad',
+    adAccountId: '123',
+    metrics: { spend: 281, results: 0, cost_per_result: 99999, clicks: 10, ctr: 1.2 },
+  };
+
+  async function payloadFor(actionType: 'pause' | 'activate' | 'promote' | 'slack_notify') {
+    const fetchFn = makeFetch({ ok: true, ts: '1', channel: 'C1' });
+    const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+    await svc.sendAutomationNotification('C1', { ...base, actionType });
+
+    const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+
+    return options.body as string;
+  }
+
+  it('does not claim a pause for a notify-only rule', async () => {
+    const body = await payloadFor('slack_notify');
+
+    expect(body).not.toContain('Paused');
+    expect(body).not.toContain('⏸️');
+  });
+
+  it('still labels a real pause as paused', async () => {
+    expect(await payloadFor('pause')).toContain('Paused');
+  });
+
+  it('still labels promote and activate correctly', async () => {
+    expect(await payloadFor('promote')).toContain('Promoted');
+    expect(await payloadFor('activate')).toContain('Activated');
+  });
+});

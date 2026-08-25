@@ -51,7 +51,11 @@ export interface AutomationNotification {
   /** Human-readable rule name shown in the notification header. */
   ruleName: string;
   /** Action that was taken: `'pause'`, `'activate'`, or `'promote'`. */
-  actionType: 'pause' | 'activate' | 'promote';
+  /**
+   * The action the rule performed. `slack_notify` (and any unrecognised value)
+   * is a notification only — nothing was changed on the ad.
+   */
+  actionType: 'pause' | 'activate' | 'promote' | 'slack_notify';
   /** Entity type that was acted on (e.g. `'ad'`, `'adset'`). */
   entityType: string;
   /** Meta object ID of the entity. */

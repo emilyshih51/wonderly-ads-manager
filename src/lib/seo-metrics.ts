@@ -1,5 +1,5 @@
 /**
- * SEO Metrics — the Motion-style grid for organic search, mirroring the Daily Metrics tab.
+ * SEO Metrics — the Motion-style grid for acquisition by CHANNEL, mirroring Daily Metrics.
  *
  * Same layout, same cadence, same reading habits: one row per day newest-first, grouped
  * into ISO-week blocks with a "Week of …" summary row closing each block, under live
@@ -7,21 +7,29 @@
  * reads first: Accepted → Held → No show → Call 1 booked → Qualified → Partial → CTA →
  * Page views.
  *
- * Where Daily Metrics puts a **Cost** column in front of each stage, this tab puts
- * **Conv** — the step conversion from the previous stage. That substitution is the whole
- * point: SEO has no media spend to divide by, so the efficiency question isn't "what did
- * this cost" but "what share of the previous step made it here". Everything else lines up:
+ * Where Daily Metrics splits each metric two ways (FB vs Organic), this tab splits it by
+ * every channel, so "was it Google or ChatGPT or direct?" is answerable at every stage:
  *
  *   Daily Metrics:  [Cost]  ALL   [w/w]  FB   Organic
- *   SEO Metrics:    [Conv]  SEO   [w/w]  ALL  SEO share
+ *   SEO Metrics:    [Conv]  SEO   [w/w]  AI  Direct  Referral  Other  [Unatt.]  FB  ALL
  *
- * SEO is the primary column (leftmost in each group) because this tab is read by whoever
- * owns organic; ALL and SEO-share sit to its right so the channel can always be seen in
- * proportion to the whole site without opening another tab.
+ * Three things about that layout are deliberate:
  *
- * Windowed aggregates use RATIO OF TOTALS, never a mean of daily rates — a day with 3
- * sessions must not weigh the same as a day with 300. That applies to Conv and SEO share
- * in the weekly rows and in all three summary rows.
+ *   - **Conv replaces Cost.** SEO has no media spend to divide by, so the efficiency
+ *     question is what share of the previous step converted. It is SEO's OWN conversion
+ *     (SEO ÷ previous stage's SEO), since SEO is the column this tab leads with.
+ *   - **ALL is not the sum of the channels.** It comes from the query's own day-grain row.
+ *     One person can appear in two channels the same day, so the columns can add to slightly
+ *     more than ALL; deals that bridge to no channel land only in ALL and in `Unatt.`.
+ *   - **`Unatt.` only appears on the cohort metrics** (Accepted / Held / No show). Those come
+ *     from CRM deals, where a deal can fail to bridge to any marketing session — outbound,
+ *     rep-created, pre-tracking. The flow metrics are read straight off marketing events,
+ *     which always carry a channel, so an unattributed column there would be a column of
+ *     zeros. On Accepted it is not a rounding error: roughly one accepted contractor in
+ *     eight reaches no channel at all.
+ *
+ * Windowed aggregates use RATIO OF TOTALS, never a mean of daily rates — a day with 3 page
+ * views must not weigh the same as a day with 300.
  *
  * Maturation caveat inherited from the rest of the sheet: Held / No show / Accepted are
  * cohort metrics keyed to the deal's booking day, so the newest rows read low until those
@@ -30,10 +38,11 @@
  * Cron-computed and unit-tested. Written to the "SEO Metrics" tab.
  */
 
-import { ALL_CHANNELS, type ChannelFunnelRow } from '@/lib/channel';
+import { ALL_CHANNELS, UNATTRIBUTED, type ChannelKey, type ChannelFunnelRow } from '@/lib/channel';
 
-/** The funnel counts this tab reports, per day, for one slice (SEO or all channels). */
+/** The funnel counts this tab reports, per day, for one channel slice. */
 export interface SeoCounts {
+  /** Unique PEOPLE with a marketing page view — not visits, not page-view events. */
   pageViews: number;
   cta: number;
   submitPartial: number;
@@ -55,29 +64,43 @@ const ZERO: SeoCounts = {
   accepted: 0,
 };
 
-/** One day, split into the organic-search slice and the all-channels total. */
+/**
+ * Channel columns in display order. SEO leads because it is the tab's subject; FB sits last
+ * before ALL because it is the volume baseline you compare against, not the thing being read.
+ *
+ * `Unatt.` is included here but only rendered on metrics that set `showUnattributed` — see
+ * the module docstring for why it would be a column of zeros elsewhere.
+ */
+export const CHANNEL_COLUMNS: { key: ChannelKey; label: string }[] = [
+  { key: 'seo', label: 'SEO' },
+  { key: 'ai', label: 'AI' },
+  { key: 'direct', label: 'Direct' },
+  { key: 'referral', label: 'Referral' },
+  { key: 'other', label: 'Other' },
+  { key: UNATTRIBUTED, label: 'Unatt.' },
+  { key: 'fb', label: 'FB' },
+];
+
+/** One day, split per channel, plus the independently-counted all-channel total. */
 export interface SeoDay {
   date: string;
-  seo: SeoCounts;
+  byChannel: Map<ChannelKey, SeoCounts>;
   all: SeoCounts;
 }
 
-/**
- * A metric column-group. `value` reads the count from a slice; `prev` names the previous
- * funnel step, which supplies the Conv denominator (absent = no Conv column).
- */
 interface SeoMetric {
   label: string;
   value: (c: SeoCounts) => number;
   /**
-   * Label of the previous funnel step. Conv = this stage ÷ that stage, within the SEO
-   * slice. Referencing the step BY LABEL rather than by its own accessor keeps one
-   * definition of each stage's count — and makes the denominator's column findable in the
-   * summary-row formulas, which need the sheet column, not just the number.
+   * Label of the previous funnel step. Conv = this stage ÷ that stage, within SEO.
+   * Referencing by LABEL rather than by accessor keeps one definition of each stage's count
+   * and makes the denominator's sheet column findable for the summary-row formulas.
    */
   prevLabel?: string;
   /** Drop the week-over-week column — for tiny-count metrics where w/w is only noise. */
   noWow?: boolean;
+  /** Show the `Unatt.` column — cohort metrics read from CRM deals only. */
+  showUnattributed?: boolean;
 }
 
 /**
@@ -85,13 +108,19 @@ interface SeoMetric {
  *
  * Accepted and No show drop their w/w for the same reason they do there: organic runs 0–2
  * accepted on a good day, so a day-vs-same-weekday percentage is −100%/+200% noise. The
- * weekly rows are where those two are actually legible.
+ * weekly rows are where those two become legible.
  */
 const METRICS: SeoMetric[] = [
-  { label: 'Accepted', value: (c) => c.accepted, prevLabel: 'Call 1 booked', noWow: true },
-  { label: 'Held', value: (c) => c.held, prevLabel: 'Call 1 booked' },
+  {
+    label: 'Accepted',
+    value: (c) => c.accepted,
+    prevLabel: 'Call 1 booked',
+    noWow: true,
+    showUnattributed: true,
+  },
+  { label: 'Held', value: (c) => c.held, prevLabel: 'Call 1 booked', showUnattributed: true },
   // A disposition of a booked call, not a funnel step — it converts against nothing.
-  { label: 'No show', value: (c) => c.noShow, noWow: true },
+  { label: 'No show', value: (c) => c.noShow, noWow: true, showUnattributed: true },
   { label: 'Call 1 booked', value: (c) => c.booked, prevLabel: 'Qualified' },
   { label: 'Qualified', value: (c) => c.submitQualified, prevLabel: 'Partial' },
   { label: 'Partial', value: (c) => c.submitPartial, prevLabel: 'CTA' },
@@ -99,6 +128,19 @@ const METRICS: SeoMetric[] = [
   // Top of funnel — nothing precedes it, so no Conv column.
   { label: 'Page views', value: (c) => c.pageViews },
 ];
+
+/** Metric shape in column order — the formatter must stay in step with this. */
+export const SEO_METRICS_LABELS = METRICS.map((m) => ({
+  label: m.label,
+  hasConv: Boolean(m.prevLabel),
+  noWow: Boolean(m.noWow),
+  showUnattributed: Boolean(m.showUnattributed),
+}));
+
+/** Channel columns rendered for one metric (drops `Unatt.` unless the metric opts in). */
+function channelsFor(m: { showUnattributed?: boolean }): { key: ChannelKey; label: string }[] {
+  return CHANNEL_COLUMNS.filter((c) => c.key !== UNATTRIBUTED || m.showUnattributed);
+}
 
 /** Index of a metric by label. Throws on a typo'd `prevLabel` rather than silently skipping. */
 function metricIndex(label: string): number {
@@ -108,13 +150,6 @@ function metricIndex(label: string): number {
 
   return i;
 }
-
-/** Metric labels in column order — the formatter must stay in step with this. */
-export const SEO_METRICS_LABELS = METRICS.map((m) => ({
-  label: m.label,
-  hasConv: Boolean(m.prevLabel),
-  noWow: Boolean(m.noWow),
-}));
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -170,21 +205,33 @@ function addCounts(a: SeoCounts, b: SeoCounts): SeoCounts {
   };
 }
 
+/** Counts for one channel on one day, zero-filled when that channel had no activity. */
+function slice(day: SeoDay | undefined, key: ChannelKey): SeoCounts {
+  return day?.byChannel.get(key) ?? ZERO;
+}
+
 /**
- * Collapse the long (day, channel) rows into one entry per day: the `seo` slice and the
- * `all` total across every channel.
+ * Collapse the long (day, channel) rows into one entry per day.
+ *
+ * The `all` total is taken from the query's own `all` row — a day-grain COUNT(DISTINCT …) —
+ * never by summing the channel rows. A person active in two channels the same day appears in
+ * both, so a sum runs high and would break the tie-out to `wonderly_daily`.
  *
  * @param rows - Long-format rows from `SnowflakeService.getChannelFunnel`
  * @param minDate - Floor date (`YYYY-MM-DD`); older rows are dropped
  * @returns One entry per day with any activity, newest day first
  */
 export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
-  const byDate = new Map<string, { seo: SeoCounts; all: SeoCounts }>();
+  const byDate = new Map<string, SeoDay>();
 
   for (const r of rows) {
     if (r.date < minDate) continue;
 
-    const day = byDate.get(r.date) ?? { seo: { ...ZERO }, all: { ...ZERO } };
+    const day = byDate.get(r.date) ?? {
+      date: r.date,
+      byChannel: new Map<ChannelKey, SeoCounts>(),
+      all: { ...ZERO },
+    };
     const counts: SeoCounts = {
       pageViews: r.pageViews,
       cta: r.cta,
@@ -196,40 +243,45 @@ export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
       accepted: r.accepted,
     };
 
-    // Read the total from the query's own `all` row — a day-grain COUNT(DISTINCT …) — rather
-    // than summing the channel rows. A person active in two channels on the same day appears
-    // in both, so a sum runs ~0.2%/day high and would break the tie-out to wonderly_daily.
-    // The `all` row also includes deals no channel could be found for, which the channel rows
-    // by definition cannot.
     if (r.channel === ALL_CHANNELS) day.all = counts;
-    else if (r.channel === 'seo') day.seo = addCounts(day.seo, counts);
+    else day.byChannel.set(r.channel, addCounts(slice(day, r.channel), counts));
 
     byDate.set(r.date, day);
   }
 
-  return [...byDate.entries()]
-    .map(([date, v]) => ({ date, seo: v.seo, all: v.all }))
-    .sort((a, b) => b.date.localeCompare(a.date));
+  return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /**
- * One weekly summary row: sums for the counts, ratio-of-totals for Conv and SEO share, and
- * a blank w/w cell (a week-total w/w would mix meanings with the same-weekday w/w that
- * column carries on daily rows).
+ * One weekly summary row: sums for the counts, ratio-of-totals for Conv, and a blank w/w
+ * cell (a week-total w/w would mix meanings with the same-weekday w/w that column carries
+ * on daily rows).
  *
  * Labelled "Week of <Monday>" so the formatter can find it and so the date-criteria SUMIFS
  * in the summary rows skip it — its column A is text, not a date.
  */
 function weeklyRow(members: SeoDay[]): (string | number)[] {
-  const seo = members.map((m) => m.seo).reduce(addCounts, { ...ZERO });
+  const totals = new Map<ChannelKey, SeoCounts>();
+
+  for (const c of CHANNEL_COLUMNS) {
+    totals.set(c.key, members.map((m) => slice(m, c.key)).reduce(addCounts, { ...ZERO }));
+  }
+
   const all = members.map((m) => m.all).reduce(addCounts, { ...ZERO });
+  const seo = totals.get('seo') ?? ZERO;
   const out: (string | number)[] = [`Week of ${weekKey(members[members.length - 1].date)}`];
 
   for (const m of METRICS) {
     if (m.prevLabel) out.push(ratio(m.value(seo), METRICS[metricIndex(m.prevLabel)].value(seo)));
     out.push(m.value(seo));
     if (!m.noWow) out.push('');
-    out.push(m.value(all), ratio(m.value(seo), m.value(all)));
+
+    for (const c of channelsFor(m)) {
+      if (c.key === 'seo') continue;
+      out.push(m.value(totals.get(c.key) ?? ZERO));
+    }
+
+    out.push(m.value(all));
   }
 
   return out;
@@ -238,14 +290,14 @@ function weeklyRow(members: SeoDay[]): (string | number)[] {
 /**
  * Build the SEO Metrics matrix.
  *
- * Layout mirrors Daily Metrics exactly: a merged group-header row, a sub-header row
- * (Date + Conv/SEO/w-w/ALL/SEO share per metric), the 7d-avg / MTD / Prev-Month rows, then
- * daily rows newest-first in ISO-week blocks each closed by a weekly summary row.
+ * Layout mirrors Daily Metrics: a merged group-header row, a sub-header row, the 7d-avg /
+ * MTD / Prev-Month rows, then daily rows newest-first in ISO-week blocks each closed by a
+ * weekly summary row.
  *
- * The three summary rows are written as live Google Sheets FORMULAS (=AVERAGE / =SUMIFS)
- * rather than pre-computed values, so the math stays visible and editable in the sheet and
- * the month windows self-advance via EOMONTH(TODAY()) instead of baking in dates. The cron
- * rewrites them verbatim each run. Data starts at sheet row 6.
+ * The three summary rows are live Google Sheets FORMULAS (=AVERAGE / =SUMIFS) rather than
+ * pre-computed values, so the math stays visible and editable in the sheet and the month
+ * windows self-advance via EOMONTH(TODAY()) instead of baking in dates. Data starts at
+ * sheet row 6.
  *
  * @param rows - Long-format rows from `getChannelFunnel`
  * @param today - Pacific `YYYY-MM-DD`, used only to skip today's partial row from the 7d average
@@ -260,8 +312,7 @@ export function computeSeoMetrics(
 
   // Emission plan first: daily rows grouped into ISO-week blocks, each closed by a weekly
   // row. Building it up front lets every daily row get an exact sheet row number, so the 7d
-  // formulas can list those rows explicitly and stay correct despite the interleaved
-  // weekly rows.
+  // formulas can list those rows explicitly despite the interleaved weekly rows.
   type PlanItem = { kind: 'day'; day: SeoDay; i: number } | { kind: 'week'; members: SeoDay[] };
   const plan: PlanItem[] = [];
   let members: SeoDay[] = [];
@@ -300,17 +351,22 @@ export function computeSeoMetrics(
   const p7 = completedRows.slice(7, 14);
   const cellList = (L: string, nums: number[]) => nums.map((n) => `${L}${n}`).join(',');
 
-  // Per-metric column layout. Groups are variable width: a Conv column is prepended on
-  // every stage that has a previous step, and `noWow` metrics drop their w/w column.
+  // Per-metric column layout: [Conv] SEO [w/w] <other channels> [Unatt.] FB ALL.
   let colIdx = 1;
   const layout = METRICS.map((m) => {
     const conv = m.prevLabel ? colIdx++ : undefined;
     const seo = colIdx++;
     const wow = m.noWow ? undefined : colIdx++;
-    const all = colIdx++;
-    const share = colIdx++;
+    const others = new Map<ChannelKey, number>();
 
-    return { conv, seo, wow, all, share };
+    for (const c of channelsFor(m)) {
+      if (c.key === 'seo') continue;
+      others.set(c.key, colIdx++);
+    }
+
+    const all = colIdx++;
+
+    return { conv, seo, wow, others, all };
   });
 
   const groupHeader: (string | number)[] = [''];
@@ -322,7 +378,8 @@ export function computeSeoMetrics(
     if (m.prevLabel) cols.push('Conv');
     cols.push('SEO');
     if (!m.noWow) cols.push('w/w');
-    cols.push('ALL', 'SEO %');
+    for (const c of channelsFor(m)) if (c.key !== 'seo') cols.push(c.label);
+    cols.push('ALL');
 
     groupHeader.push(m.label, ...Array(cols.length - 1).fill(''));
     subHeader.push(...cols);
@@ -344,9 +401,8 @@ export function computeSeoMetrics(
   };
 
   /**
-   * A rate over a window = ratio of totals (Σ numerator ÷ Σ denominator), NOT the average
-   * of the daily rates. Used for both Conv and SEO share; blank rather than 0 when the
-   * denominator is empty.
+   * A rate over a window = ratio of totals (Σ numerator ÷ Σ denominator), NOT the average of
+   * the daily rates. Blank rather than 0 when the denominator is empty.
    */
   const rateCells = (numerCol: number, denomCol: number) => {
     const N = colLetter(numerCol);
@@ -367,8 +423,6 @@ export function computeSeoMetrics(
     const L = layout[g];
     const seoL = colLetter(L.seo);
     const seo = countCells(L.seo);
-    const all = countCells(L.all);
-    const share = rateCells(L.seo, L.all);
 
     // 7d w/w: this week's SEO average vs the previous 7 completed days.
     const p7avg = `AVERAGE(${cellList(seoL, p7)})`;
@@ -396,9 +450,19 @@ export function computeSeoMetrics(
       prevRow.push('');
     }
 
-    d7Row.push(all.d7, share.d7);
-    mtdRow.push(all.mtd, share.mtd);
-    prevRow.push(all.prev, share.prev);
+    for (const [, col] of L.others) {
+      const cells = countCells(col);
+
+      d7Row.push(cells.d7);
+      mtdRow.push(cells.mtd);
+      prevRow.push(cells.prev);
+    }
+
+    const all = countCells(L.all);
+
+    d7Row.push(all.d7);
+    mtdRow.push(all.mtd);
+    prevRow.push(all.prev);
   });
 
   const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
@@ -411,16 +475,22 @@ export function computeSeoMetrics(
 
     const { day, i } = item;
     const weekAgo = days[i + 7];
+    const seo = slice(day, 'seo');
     const out: (string | number)[] = [day.date];
 
     for (const m of METRICS) {
-      const seoV = m.value(day.seo);
-      const allV = m.value(day.all);
+      const seoV = m.value(seo);
 
-      if (m.prevLabel) out.push(ratio(seoV, METRICS[metricIndex(m.prevLabel)].value(day.seo)));
+      if (m.prevLabel) out.push(ratio(seoV, METRICS[metricIndex(m.prevLabel)].value(seo)));
       out.push(round2(seoV));
-      if (!m.noWow) out.push(weekAgo ? pct(seoV, m.value(weekAgo.seo)) : '');
-      out.push(round2(allV), ratio(seoV, allV));
+      if (!m.noWow) out.push(weekAgo ? pct(seoV, m.value(slice(weekAgo, 'seo'))) : '');
+
+      for (const c of channelsFor(m)) {
+        if (c.key === 'seo') continue;
+        out.push(round2(m.value(slice(day, c.key))));
+      }
+
+      out.push(round2(m.value(day.all)));
     }
 
     matrix.push(out);

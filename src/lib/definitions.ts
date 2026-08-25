@@ -364,16 +364,16 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   [
     'CHANNEL',
     'SEO Metrics',
-    'Which acquisition channel a visit, lead or deal is attributed to: Organic search (SEO), AI search, Direct, Referral, Other campaign, or Facebook (paid).',
+    'Which acquisition channel a visit, lead or deal is attributed to: Organic search (SEO), AI search, Direct, Referral, Other campaign, or Facebook (paid). Every one of these gets its own column on SEO Metrics at every funnel stage.',
     'Amplitude + CRM',
     'First-match ladder: fb = the session carried a Facebook signal (utm_source facebook/ig or an fbclid) — byte-identical to the FB/Organic split on wonderly_daily, so the channels sum back to it. Everything else is judged on FIRST TOUCH (initial_utm_source / initial_referrer): ai = an LLM referrer (ChatGPT, Perplexity, Claude, Gemini, Copilot); seo = a search-engine referrer with no campaign utm; other = some other campaign utm; direct = no referrer at all (or an internal wonderly.com hop); referral = any other external domain. First touch on purpose — an SEO visitor who returns by typing the URL is still SEO, which last-touch would misfile as Direct.',
   ],
   [
-    'SEO / ALL / SEO %',
+    'SEO / AI / Direct / Referral / Other / Unatt. / FB / ALL',
     'SEO Metrics',
-    'Per-metric columns on the SEO grid: the organic-search count, the all-channel total for the same metric, and organic’s share of it.',
+    'Per-metric channel columns: the same metric counted for each acquisition channel, then the all-channel total.',
     'Amplitude + CSM_OPS CRM',
-    'SEO = the count whose CHANNEL is seo. ALL is the day counted WHOLE — its own COUNT(DISTINCT …), not the sum of the channels: one person can appear in two channels the same day (an fbclid on one hit and not the next), so summing runs ~0.2%/day high, and ALL also carries the deals no channel could be found for. That is what makes ALL tie out to wonderly_daily. SEO % = SEO ÷ ALL. Windowed rows (weekly, 7d avg, MTD, Prev Month) compute it as a ratio of totals (Σ SEO ÷ Σ ALL), never an average of daily percentages — a 20-view day must not weigh the same as a 200-view day.',
+    'SEO = organic search engines (Google, Bing, DuckDuckGo, Yahoo, Brave, Yandex, Baidu, Startpage) added together — ~93% of it is Google, which is why the engines are not split out. AI = LLM referrals (ChatGPT, Perplexity, Claude, Gemini, Copilot) — a SEPARATE channel, not part of SEO. Direct = no first-touch referrer. Referral = any other external domain. Other = carried some other campaign utm. FB = the paid Facebook signal. Unatt. = a CRM deal that bridged to no marketing session at all (outbound, rep-created, pre-tracking) — it appears ONLY on Accepted / Held / No show, since the flow metrics are read from marketing events that always carry a channel. **ALL is not the sum of these columns**: it is the day counted whole (its own COUNT(DISTINCT …)), so it ties out to wonderly_daily. The columns can total slightly more than ALL because one person can appear in two channels on the same day, and Unatt. deals sit only in ALL and Unatt.',
   ],
   [
     'Page views',

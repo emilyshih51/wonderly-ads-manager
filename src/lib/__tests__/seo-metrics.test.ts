@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChannelKey, ChannelFunnelRow } from '@/lib/channel';
-import { SEO_METRICS_LABELS, computeSeoMetrics, toSeoDays } from '@/lib/seo-metrics';
+import { SEO_METRICS_LABELS, computeSeoMetrics, toSeoDays, type SeoDay } from '@/lib/seo-metrics';
 import { buildSeoMetricsFormatRequests } from '@/lib/seo-metrics-format';
 
 function row(
@@ -51,6 +51,12 @@ function fixture(): ChannelFunnelRow[] {
       })
     );
     out.push(row(date, 'fb', { pageViews: 901, cta: 180, booked: 18, held: 9, accepted: 4 }));
+    out.push(row(date, 'ai', { pageViews: 3, cta: 1 }));
+    out.push(row(date, 'direct', { pageViews: 40, cta: 5 }));
+    out.push(row(date, 'referral', { pageViews: 8 }));
+    out.push(row(date, 'other', { pageViews: 6 }));
+    // Only ever on the cohort metrics — a deal that bridged to no marketing session.
+    out.push(row(date, 'unattributed', { held: 1, accepted: 1, noShow: 1 }));
     out.push(
       row(date, 'all', {
         pageViews: 1000,
@@ -69,6 +75,19 @@ function fixture(): ChannelFunnelRow[] {
 }
 
 const HEADERS = (m: (string | number)[][]): string[] => m[1].map(String);
+
+/** Counts for one channel on a day, zero-filled — mirrors the module's own `slice`. */
+const ch = (d: SeoDay, key: string) =>
+  d.byChannel.get(key as never) ?? {
+    pageViews: 0,
+    cta: 0,
+    submitPartial: 0,
+    submitQualified: 0,
+    booked: 0,
+    held: 0,
+    noShow: 0,
+    accepted: 0,
+  };
 
 /**
  * Column index of `colName` inside the `groupLabel` group. Group names live on the merged
@@ -105,9 +124,10 @@ describe('toSeoDays', () => {
     );
 
     expect(days.map((d) => d.date)).toEqual(['2026-08-02', '2026-08-01']);
-    expect(days[1].seo.pageViews).toBe(10);
+    expect(ch(days[1], 'seo').pageViews).toBe(10);
+    expect(ch(days[1], 'fb').pageViews).toBe(90);
     // A day with no organic traffic still reports its all-channel total.
-    expect(days[0].seo.pageViews).toBe(0);
+    expect(ch(days[0], 'seo').pageViews).toBe(0);
     expect(days[0].all.pageViews).toBe(50);
   });
 
@@ -125,9 +145,11 @@ describe('toSeoDays', () => {
 
     expect(days[0].all.pageViews).toBe(97);
     expect(days[0].all.accepted).toBe(5);
+    // The channels themselves still read their own values.
+    expect(ch(days[0], 'seo').pageViews + ch(days[0], 'fb').pageViews).toBe(100);
   });
 
-  it('ignores the unattributed bucket as a channel — it only reaches the total', () => {
+  it('keeps unattributed as its own channel, never folded into another', () => {
     const days = toSeoDays(
       [
         row('2026-08-01', 'seo', { accepted: 1 }),
@@ -137,7 +159,8 @@ describe('toSeoDays', () => {
       '2026-01-01'
     );
 
-    expect(days[0].seo.accepted).toBe(1);
+    expect(ch(days[0], 'seo').accepted).toBe(1);
+    expect(ch(days[0], 'unattributed').accepted).toBe(4);
     expect(days[0].all.accepted).toBe(5);
   });
 
@@ -178,7 +201,14 @@ describe('computeSeoMetrics layout', () => {
 
     expect(headers.filter((h) => h === 'SEO')).toHaveLength(8);
     expect(headers.filter((h) => h === 'ALL')).toHaveLength(8);
-    expect(headers.filter((h) => h === 'SEO %')).toHaveLength(8);
+
+    // Every channel gets a column on every metric...
+    for (const label of ['AI', 'Direct', 'Referral', 'Other', 'FB']) {
+      expect(headers.filter((h) => h === label)).toHaveLength(8);
+    }
+
+    // ...except Unatt., which only makes sense on the three CRM-sourced cohort metrics.
+    expect(headers.filter((h) => h === 'Unatt.')).toHaveLength(3);
     // Conv on every stage except the top of funnel (Page views) and No show.
     expect(headers.filter((h) => h === 'Conv')).toHaveLength(6);
     // w/w everywhere except Accepted and No show.
@@ -190,6 +220,11 @@ describe('computeSeoMetrics layout', () => {
     expect(SEO_METRICS_LABELS.filter((x) => x.hasConv)).toHaveLength(6);
     expect(SEO_METRICS_LABELS.filter((x) => x.noWow).map((x) => x.label)).toEqual([
       'Accepted',
+      'No show',
+    ]);
+    expect(SEO_METRICS_LABELS.filter((x) => x.showUnattributed).map((x) => x.label)).toEqual([
+      'Accepted',
+      'Held',
       'No show',
     ]);
   });
@@ -214,8 +249,9 @@ describe('computeSeoMetrics rows', () => {
 
     // Seven days x 100 organic sessions, against 7 x 1000 all-channel.
     expect(week[groupCol(m, 'Page views', 'SEO')]).toBe(700);
+    expect(week[groupCol(m, 'Page views', 'FB')]).toBe(6307);
+    expect(week[groupCol(m, 'Page views', 'AI')]).toBe(21);
     expect(week[groupCol(m, 'Page views', 'ALL')]).toBe(7000);
-    expect(week[groupCol(m, 'Page views', 'SEO %')]).toBe(0.1);
     // Accepted 7 of 14 booked — a rate over the week, not a sum of daily rates.
     expect(week[groupCol(m, 'Accepted', 'Conv')]).toBe(0.5);
   });
@@ -233,10 +269,15 @@ describe('computeSeoMetrics rows', () => {
     const day = body[0];
 
     expect(day[groupCol(m, 'Page views', 'SEO')]).toBe(100);
-    // 1000, the all row — not 1001, which is what summing seo + fb would give.
+    expect(day[groupCol(m, 'Page views', 'AI')]).toBe(3);
+    expect(day[groupCol(m, 'Page views', 'Direct')]).toBe(40);
+    expect(day[groupCol(m, 'Page views', 'Referral')]).toBe(8);
+    expect(day[groupCol(m, 'Page views', 'Other')]).toBe(6);
+    expect(day[groupCol(m, 'Page views', 'FB')]).toBe(901);
+    // ALL is the query's own day-grain row, NOT the sum of the channels above (1058).
     expect(day[groupCol(m, 'Page views', 'ALL')]).toBe(1000);
-    expect(day[groupCol(m, 'Page views', 'SEO %')]).toBe(0.1);
-    // Accepted's total includes the unattributed deal the channel rows can't see.
+    // The unattributed deal shows in its own column and in ALL, on cohort metrics only.
+    expect(day[groupCol(m, 'Accepted', 'Unatt.')]).toBe(1);
     expect(day[groupCol(m, 'Accepted', 'ALL')]).toBe(6);
   });
 
@@ -244,18 +285,18 @@ describe('computeSeoMetrics rows', () => {
     const m2 = computeSeoMetrics([row('2026-08-10', 'seo')], '2026-08-11', '2026-01-01');
     const day = m2[5];
 
-    expect(day[groupCol(m2, 'Page views', 'SEO %')]).toBe('');
+    expect(day[groupCol(m2, 'CTA', 'Conv')]).toBe('');
   });
 
   it('writes the summary rows as live sheet formulas, not baked values', () => {
     expect(String(m[3][1])).toContain('EOMONTH(TODAY()');
     expect(String(m[2][1]).startsWith('=')).toBe(true);
     // Rates aggregate as ratio-of-totals (a division of two SUMIFS), never AVERAGE of rates.
-    const mtdShare = String(m[3][groupCol(m, 'Page views', 'SEO %')]);
+    const mtdConv = String(m[3][groupCol(m, 'CTA', 'Conv')]);
 
-    expect(mtdShare).toContain('SUMIFS');
-    expect(mtdShare).toContain('/');
-    expect(mtdShare).not.toContain('AVERAGE');
+    expect(mtdConv).toContain('SUMIFS');
+    expect(mtdConv).toContain('/');
+    expect(mtdConv).not.toContain('AVERAGE');
   });
 
   it('skips today’s partial row from the 7d average', () => {

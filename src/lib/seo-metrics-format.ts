@@ -26,6 +26,20 @@ export interface SeoMetricFormat {
   hasConv: boolean;
   /** Group drops its week-over-week column (must match the same flag in `seo-metrics.ts`). */
   noWow: boolean;
+  /** Group carries an `Unatt.` column — cohort metrics read from CRM deals only. */
+  showUnattributed: boolean;
+}
+
+/**
+ * Channel columns rendered after SEO, before ALL. Mirrors `channelsFor` in `seo-metrics.ts`:
+ * every channel except SEO (which is rendered on its own, ahead of w/w), and `Unatt.` only
+ * on metrics that opt in. Kept as a count rather than a list — the formatter only needs the
+ * width, not the labels.
+ */
+function trailingChannelCount(m: SeoMetricFormat): number {
+  // CHANNEL_COLUMNS is [seo, ai, direct, referral, other, unattributed, fb]; drop seo, and
+  // drop unattributed unless this metric shows it.
+  return m.showUnattributed ? 6 : 5;
 }
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
@@ -135,9 +149,13 @@ export function buildSeoMetricsFormatRequests(
     },
   ];
 
-  // Group width: SEO · ALL · SEO share = 3, plus Conv and w/w when present.
+  // Group width: SEO + trailing channels + ALL, plus Conv and w/w when present.
   const lastColumn =
-    1 + metrics.reduce((n, m) => n + 3 + (m.hasConv ? 1 : 0) + (m.noWow ? 0 : 1), 0);
+    1 +
+    metrics.reduce(
+      (n, m) => n + 2 + trailingChannelCount(m) + (m.hasConv ? 1 : 0) + (m.noWow ? 0 : 1),
+      0
+    );
 
   let colIdx = 1;
 
@@ -146,8 +164,11 @@ export function buildSeoMetricsFormatRequests(
     const conv = m.hasConv ? colIdx++ : undefined;
     const seo = colIdx++;
     const wow = m.noWow ? undefined : colIdx++;
+    const trailing: number[] = [];
+
+    for (let k = 0; k < trailingChannelCount(m); k++) trailing.push(colIdx++);
+
     const all = colIdx++;
-    const share = colIdx++;
 
     requests.push({
       mergeCells: {
@@ -164,13 +185,13 @@ export function buildSeoMetricsFormatRequests(
 
     if (conv !== undefined) requests.push(numberFormat(sheetId, conv, PERCENT));
 
-    requests.push(numberFormat(sheetId, seo, COUNT));
-    requests.push(numberFormat(sheetId, all, COUNT));
-    requests.push(numberFormat(sheetId, share, PERCENT));
+    const countCols = [seo, ...trailing, all];
+
+    for (const col of countCols) requests.push(numberFormat(sheetId, col, COUNT));
 
     // The 7d average of a count is fractional (e.g. 0.4 accepted) — one decimal on that
-    // row only, so organic's small numbers don't round away to 0.
-    for (const col of [seo, all]) {
+    // row only, so the small channels don't round away to 0.
+    for (const col of countCols) {
       requests.push({
         repeatCell: {
           range: {
@@ -247,7 +268,8 @@ export function buildSeoMetricsFormatRequests(
       },
     });
 
-    // Re-tint the SEO count columns after the clear, so the tab's subject stays legible.
+    // Re-tint the SEO count columns after the clear, so the tab's subject stays legible
+    // among the other channels.
     let tintIdx = 1;
 
     for (const m of metrics) {
@@ -256,7 +278,7 @@ export function buildSeoMetricsFormatRequests(
       const seoCol = tintIdx++;
 
       if (!m.noWow) tintIdx++;
-      tintIdx += 2; // ALL, SEO share
+      tintIdx += trailingChannelCount(m) + 1; // other channels, then ALL
 
       requests.push({
         repeatCell: {

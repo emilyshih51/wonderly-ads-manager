@@ -230,6 +230,40 @@ export class GoogleSheetsService {
    * @param buildRequests - Given the tab's gid, returns the `batchUpdate` requests to apply
    * @throws When the tab does not exist
    */
+  /**
+   * Drop every merged range on a tab.
+   *
+   * Must be called BEFORE writing values whenever a tab's column layout can change width.
+   * Google only accepts a write to the TOP-LEFT cell of a merged range and silently discards
+   * writes to the rest, so a merge left over from the previous layout can swallow a header
+   * label that now lands mid-range — the cell reads blank with no error anywhere.
+   *
+   * `formatTab` also unmerges, but it runs *after* `replaceRows`, which is exactly one run too
+   * late: the values for the new layout get written while the old merges are still in place.
+   * The tab then self-heals on the following run, which is a confusing way to find out.
+   *
+   * @param spreadsheetId - Sheet ID from its URL
+   * @param tabName - Exact tab name
+   */
+  async unmergeAll(spreadsheetId: string, tabName: string): Promise<void> {
+    const meta = await this.request<{
+      sheets?: { properties?: { sheetId?: number; title?: string }; merges?: unknown[] }[];
+    }>(`/${spreadsheetId}?fields=sheets(properties(sheetId,title),merges)`);
+
+    const sheet = (meta.sheets ?? []).find((s) => s.properties?.title === tabName);
+    const sheetId = sheet?.properties?.sheetId;
+
+    // A tab that doesn't exist yet, or carries no merges, needs no work.
+    if (sheetId === undefined || (sheet?.merges ?? []).length === 0) return;
+
+    await this.request(`/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [{ unmergeCells: { range: { sheetId } } }],
+      }),
+    });
+  }
+
   async formatTab(
     spreadsheetId: string,
     tabName: string,

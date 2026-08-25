@@ -295,6 +295,9 @@ export async function GET(request: Request) {
       const seoMetrics = computeSeoMetrics(channelFunnel, ptToday, BACKFILL_START);
 
       await sheets.ensureTab(sheetId, SEO_METRICS_TAB);
+      // Clear stale merges FIRST: a merge left from a previous column layout silently eats
+      // any header label that no longer lands on its top-left cell.
+      await sheets.unmergeAll(sheetId, SEO_METRICS_TAB);
       await sheets.replaceRows(
         sheetId,
         SEO_METRICS_TAB,
@@ -390,6 +393,9 @@ export async function GET(request: Request) {
     const dailyMetrics = computeDailyMetrics(merged, ptToday);
 
     await sheets.ensureTab(sheetId, DAILY_METRICS_TAB);
+    // Same guard as SEO Metrics — this tab's group headers are merged too, so a column-shape
+    // change would otherwise blank a label for one run.
+    await sheets.unmergeAll(sheetId, DAILY_METRICS_TAB);
     await sheets.replaceRows(
       sheetId,
       DAILY_METRICS_TAB,

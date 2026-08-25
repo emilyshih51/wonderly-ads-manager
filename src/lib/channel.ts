@@ -25,10 +25,33 @@
  * an SEO visitor, and last-touch would silently reassign them to `direct`.
  */
 
+/**
+ * Search engines that get their own channel, and therefore their own column.
+ *
+ * Every engine with real traffic is here. The long tail — Yandex, Baidu, Ecosia, Startpage,
+ * 14 people between them since May 1 — collapses into `other_engine` rather than four
+ * columns that read 0 every day. Promote one out of the tail if it ever starts producing.
+ */
+export const SEARCH_ENGINES = [
+  'google',
+  'bing',
+  'duckduckgo',
+  'yahoo',
+  'brave',
+  'other_engine',
+] as const;
+
+export type SearchEngine = (typeof SEARCH_ENGINES)[number];
+
 /** The acquisition channels a marketing event / deal can be attributed to. */
-export const CHANNELS = ['seo', 'ai', 'direct', 'referral', 'other', 'fb'] as const;
+export const CHANNELS = [...SEARCH_ENGINES, 'ai', 'direct', 'referral', 'other', 'fb'] as const;
 
 export type Channel = (typeof CHANNELS)[number];
+
+/** True when a channel is an organic search engine (so it rolls up into Organic). */
+export function isSearchEngine(c: ChannelKey): c is SearchEngine {
+  return (SEARCH_ENGINES as readonly string[]).includes(c);
+}
 
 /**
  * Deals that reach no marketing session at all — outbound, rep-created, or from before
@@ -53,22 +76,17 @@ export type ChannelKey = Channel | typeof UNATTRIBUTED | typeof ALL_CHANNELS;
 
 /** Human-readable label per channel, for tab headers and the Definitions glossary. */
 export const CHANNEL_LABELS: Record<Channel, string> = {
-  seo: 'Organic search',
+  google: 'Google',
+  bing: 'Bing',
+  duckduckgo: 'DuckDuckGo',
+  yahoo: 'Yahoo',
+  brave: 'Brave',
+  other_engine: 'Other engine',
   ai: 'AI search',
   direct: 'Direct',
   referral: 'Referral',
   other: 'Other campaign',
-  fb: 'Facebook (paid)',
-};
-
-/** Column-name prefix per channel on the SEO Funnel tab (e.g. `SEO_SESSIONS`). */
-export const CHANNEL_PREFIX: Record<Channel, string> = {
-  seo: 'SEO',
-  ai: 'AI',
-  direct: 'DIRECT',
-  referral: 'REFERRAL',
-  other: 'OTHER',
-  fb: 'FB',
+  fb: 'Facebook',
 };
 
 /**

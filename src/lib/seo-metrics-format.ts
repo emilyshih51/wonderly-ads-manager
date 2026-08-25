@@ -18,6 +18,7 @@
  */
 
 import type { SheetsRequest } from '@/lib/daily-metrics-format';
+import { CHANNEL_COLUMNS } from '@/lib/seo-metrics';
 
 /** One metric column-group, in the order `computeSeoMetrics` writes them. */
 export interface SeoMetricFormat {
@@ -37,9 +38,9 @@ export interface SeoMetricFormat {
  * width, not the labels.
  */
 function trailingChannelCount(m: SeoMetricFormat): number {
-  // CHANNEL_COLUMNS is [seo, ai, direct, referral, other, unattributed, fb]; drop seo, and
-  // drop unattributed unless this metric shows it.
-  return m.showUnattributed ? 6 : 5;
+  // Every column after the leading Organic rollup: the six engines, AI search, Direct,
+  // Referral, Other campaign, Facebook — plus Unknown source when the metric shows it.
+  return CHANNEL_COLUMNS.filter((c) => c.label !== 'Organic').length - (m.showUnattributed ? 0 : 1);
 }
 
 /** Rows frozen at the top: group header, sub-header, 7d avg, MTD, Prev Month. */
@@ -61,7 +62,7 @@ const HEAT_MAX = { red: 0.6, green: 0.85, blue: 0.6 };
 const WEEK_LINE = { red: 0.45, green: 0.45, blue: 0.45 };
 const WEEK_ROW_BG = { red: 0.9, green: 0.93, blue: 0.9 };
 const WHITE = { red: 1, green: 1, blue: 1 };
-/** SEO columns get a faint tint so the channel reads as this tab's subject. */
+/** The Organic rollup gets a faint tint so the tab's subject reads out of the grid. */
 const SEO_COL_BG = { red: 0.95, green: 0.97, blue: 1 };
 
 const COUNT = { type: 'NUMBER', pattern: '#,##0' };

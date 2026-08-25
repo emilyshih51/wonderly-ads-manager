@@ -11,7 +11,7 @@
  * every channel, so "was it Google or ChatGPT or direct?" is answerable at every stage:
  *
  *   Daily Metrics:  [Cost]  ALL   [w/w]  FB   Organic
- *   SEO Metrics:    [Conv]  SEO   [w/w]  AI  Direct  Referral  Other  [Unatt.]  FB  ALL
+ *   SEO Metrics:    [Conv]  Organic  [w/w]  Google … Brave  AI search  Direct  …  Facebook  All
  *
  * Three things about that layout are deliberate:
  *
@@ -38,7 +38,13 @@
  * Cron-computed and unit-tested. Written to the "SEO Metrics" tab.
  */
 
-import { ALL_CHANNELS, UNATTRIBUTED, type ChannelKey, type ChannelFunnelRow } from '@/lib/channel';
+import {
+  ALL_CHANNELS,
+  SEARCH_ENGINES,
+  UNATTRIBUTED,
+  type ChannelKey,
+  type ChannelFunnelRow,
+} from '@/lib/channel';
 
 /** The funnel counts this tab reports, per day, for one channel slice. */
 export interface SeoCounts {
@@ -64,22 +70,46 @@ const ZERO: SeoCounts = {
   accepted: 0,
 };
 
+/** One column on the grid: a label and the channel rows it sums. */
+export interface ColumnSpec {
+  label: string;
+  /** Channel rows this column totals. More than one only for the derived Organic rollup. */
+  keys: ChannelKey[];
+}
+
 /**
- * Channel columns in display order. SEO leads because it is the tab's subject; FB sits last
- * before ALL because it is the volume baseline you compare against, not the thing being read.
+ * Channel columns in display order.
  *
- * `Unatt.` is included here but only rendered on metrics that set `showUnattributed` — see
- * the module docstring for why it would be a column of zeros elsewhere.
+ * **Organic leads and is derived** — it sums the engine columns that follow it. Summing is
+ * safe here in a way it is not for ALL: `initial_referrer` is an Amplitude `$setOnce`
+ * property, so a person resolves to exactly one engine for life and cannot be double-counted
+ * across two of them. It carries the w/w column and is Conv's basis, because "how is organic
+ * search doing" is the question the tab exists to answer; the engines underneath it say which
+ * search engine delivered it.
+ *
+ * Facebook sits last before All: it is the volume baseline you read everything else against,
+ * not a thing being studied here — Daily Metrics is where paid gets its own treatment.
+ *
+ * `Unknown source` renders only on metrics that opt in — see the module docstring.
  */
-export const CHANNEL_COLUMNS: { key: ChannelKey; label: string }[] = [
-  { key: 'seo', label: 'SEO' },
-  { key: 'ai', label: 'AI' },
-  { key: 'direct', label: 'Direct' },
-  { key: 'referral', label: 'Referral' },
-  { key: 'other', label: 'Other' },
-  { key: UNATTRIBUTED, label: 'Unatt.' },
-  { key: 'fb', label: 'FB' },
+export const CHANNEL_COLUMNS: ColumnSpec[] = [
+  { label: 'Organic', keys: [...SEARCH_ENGINES] },
+  { label: 'Google', keys: ['google'] },
+  { label: 'Bing', keys: ['bing'] },
+  { label: 'DuckDuckGo', keys: ['duckduckgo'] },
+  { label: 'Yahoo', keys: ['yahoo'] },
+  { label: 'Brave', keys: ['brave'] },
+  { label: 'Other engine', keys: ['other_engine'] },
+  { label: 'AI search', keys: ['ai'] },
+  { label: 'Direct', keys: ['direct'] },
+  { label: 'Referral', keys: ['referral'] },
+  { label: 'Other campaign', keys: ['other'] },
+  { label: 'Unknown source', keys: [UNATTRIBUTED] },
+  { label: 'Facebook', keys: ['fb'] },
 ];
+
+/** The column the grid leads with, and the basis for Conv and w/w. */
+const LEAD = CHANNEL_COLUMNS[0];
 
 /** One day, split per channel, plus the independently-counted all-channel total. */
 export interface SeoDay {
@@ -137,9 +167,14 @@ export const SEO_METRICS_LABELS = METRICS.map((m) => ({
   showUnattributed: Boolean(m.showUnattributed),
 }));
 
-/** Channel columns rendered for one metric (drops `Unatt.` unless the metric opts in). */
-function channelsFor(m: { showUnattributed?: boolean }): { key: ChannelKey; label: string }[] {
-  return CHANNEL_COLUMNS.filter((c) => c.key !== UNATTRIBUTED || m.showUnattributed);
+/** Columns rendered for one metric (drops `Unknown source` unless the metric opts in). */
+function channelsFor(m: { showUnattributed?: boolean }): ColumnSpec[] {
+  return CHANNEL_COLUMNS.filter((c) => c.keys[0] !== UNATTRIBUTED || m.showUnattributed);
+}
+
+/** Columns rendered after the lead column — everything except Organic itself. */
+function trailingFor(m: { showUnattributed?: boolean }): ColumnSpec[] {
+  return channelsFor(m).filter((c) => c !== LEAD);
 }
 
 /** Index of a metric by label. Throws on a typo'd `prevLabel` rather than silently skipping. */
@@ -205,9 +240,9 @@ function addCounts(a: SeoCounts, b: SeoCounts): SeoCounts {
   };
 }
 
-/** Counts for one channel on one day, zero-filled when that channel had no activity. */
-function slice(day: SeoDay | undefined, key: ChannelKey): SeoCounts {
-  return day?.byChannel.get(key) ?? ZERO;
+/** Counts for one column on one day — sums its channel rows, zero-filled when absent. */
+function slice(day: SeoDay | undefined, col: ColumnSpec): SeoCounts {
+  return col.keys.reduce((acc, k) => addCounts(acc, day?.byChannel.get(k) ?? ZERO), { ...ZERO });
 }
 
 /**
@@ -244,7 +279,7 @@ export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
     };
 
     if (r.channel === ALL_CHANNELS) day.all = counts;
-    else day.byChannel.set(r.channel, addCounts(slice(day, r.channel), counts));
+    else day.byChannel.set(r.channel, addCounts(day.byChannel.get(r.channel) ?? ZERO, counts));
 
     byDate.set(r.date, day);
   }
@@ -261,25 +296,22 @@ export function toSeoDays(rows: ChannelFunnelRow[], minDate: string): SeoDay[] {
  * in the summary rows skip it — its column A is text, not a date.
  */
 function weeklyRow(members: SeoDay[]): (string | number)[] {
-  const totals = new Map<ChannelKey, SeoCounts>();
+  const totals = new Map<ColumnSpec, SeoCounts>();
 
   for (const c of CHANNEL_COLUMNS) {
-    totals.set(c.key, members.map((m) => slice(m, c.key)).reduce(addCounts, { ...ZERO }));
+    totals.set(c, members.map((m) => slice(m, c)).reduce(addCounts, { ...ZERO }));
   }
 
   const all = members.map((m) => m.all).reduce(addCounts, { ...ZERO });
-  const seo = totals.get('seo') ?? ZERO;
+  const lead = totals.get(LEAD) ?? ZERO;
   const out: (string | number)[] = [`Week of ${weekKey(members[members.length - 1].date)}`];
 
   for (const m of METRICS) {
-    if (m.prevLabel) out.push(ratio(m.value(seo), METRICS[metricIndex(m.prevLabel)].value(seo)));
-    out.push(m.value(seo));
+    if (m.prevLabel) out.push(ratio(m.value(lead), METRICS[metricIndex(m.prevLabel)].value(lead)));
+    out.push(m.value(lead));
     if (!m.noWow) out.push('');
 
-    for (const c of channelsFor(m)) {
-      if (c.key === 'seo') continue;
-      out.push(m.value(totals.get(c.key) ?? ZERO));
-    }
+    for (const c of trailingFor(m)) out.push(m.value(totals.get(c) ?? ZERO));
 
     out.push(m.value(all));
   }
@@ -355,18 +387,12 @@ export function computeSeoMetrics(
   let colIdx = 1;
   const layout = METRICS.map((m) => {
     const conv = m.prevLabel ? colIdx++ : undefined;
-    const seo = colIdx++;
+    const lead = colIdx++;
     const wow = m.noWow ? undefined : colIdx++;
-    const others = new Map<ChannelKey, number>();
-
-    for (const c of channelsFor(m)) {
-      if (c.key === 'seo') continue;
-      others.set(c.key, colIdx++);
-    }
-
+    const others = trailingFor(m).map(() => colIdx++);
     const all = colIdx++;
 
-    return { conv, seo, wow, others, all };
+    return { conv, lead, wow, others, all };
   });
 
   const groupHeader: (string | number)[] = [''];
@@ -376,10 +402,10 @@ export function computeSeoMetrics(
     const cols: string[] = [];
 
     if (m.prevLabel) cols.push('Conv');
-    cols.push('SEO');
+    cols.push(LEAD.label);
     if (!m.noWow) cols.push('w/w');
-    for (const c of channelsFor(m)) if (c.key !== 'seo') cols.push(c.label);
-    cols.push('ALL');
+    for (const c of trailingFor(m)) cols.push(c.label);
+    cols.push('All');
 
     groupHeader.push(m.label, ...Array(cols.length - 1).fill(''));
     subHeader.push(...cols);
@@ -421,28 +447,28 @@ export function computeSeoMetrics(
 
   METRICS.forEach((m, g) => {
     const L = layout[g];
-    const seoL = colLetter(L.seo);
-    const seo = countCells(L.seo);
+    const leadL = colLetter(L.lead);
+    const lead = countCells(L.lead);
 
     // 7d w/w: this week's SEO average vs the previous 7 completed days.
-    const p7avg = `AVERAGE(${cellList(seoL, p7)})`;
-    const wow7 = p7.length ? `=IFERROR((${seoL}3-${p7avg})/${p7avg},"")` : '';
+    const p7avg = `AVERAGE(${cellList(leadL, p7)})`;
+    const wow7 = p7.length ? `=IFERROR((${leadL}3-${p7avg})/${p7avg},"")` : '';
     // MTD w/w: month-to-date vs the same day-span of the previous month.
-    const prevSpan = sumifs(seoL, prevLo, prevSpanHi);
-    const wowMtd = `=IFERROR((${seoL}4-${prevSpan})/${prevSpan},"")`;
+    const prevSpan = sumifs(leadL, prevLo, prevSpanHi);
+    const wowMtd = `=IFERROR((${leadL}4-${prevSpan})/${prevSpan},"")`;
 
     if (L.conv !== undefined && m.prevLabel) {
-      // Conv's denominator is the previous stage's SEO column, wherever it sits.
-      const conv = rateCells(L.seo, layout[metricIndex(m.prevLabel)].seo);
+      // Conv's denominator is the previous stage's Organic column, wherever it sits.
+      const conv = rateCells(L.lead, layout[metricIndex(m.prevLabel)].lead);
 
       d7Row.push(conv.d7);
       mtdRow.push(conv.mtd);
       prevRow.push(conv.prev);
     }
 
-    d7Row.push(seo.d7);
-    mtdRow.push(seo.mtd);
-    prevRow.push(seo.prev);
+    d7Row.push(lead.d7);
+    mtdRow.push(lead.mtd);
+    prevRow.push(lead.prev);
 
     if (!m.noWow) {
       d7Row.push(wow7);
@@ -450,7 +476,7 @@ export function computeSeoMetrics(
       prevRow.push('');
     }
 
-    for (const [, col] of L.others) {
+    for (const col of L.others) {
       const cells = countCells(col);
 
       d7Row.push(cells.d7);
@@ -475,20 +501,17 @@ export function computeSeoMetrics(
 
     const { day, i } = item;
     const weekAgo = days[i + 7];
-    const seo = slice(day, 'seo');
+    const lead = slice(day, LEAD);
     const out: (string | number)[] = [day.date];
 
     for (const m of METRICS) {
-      const seoV = m.value(seo);
+      const leadV = m.value(lead);
 
-      if (m.prevLabel) out.push(ratio(seoV, METRICS[metricIndex(m.prevLabel)].value(seo)));
-      out.push(round2(seoV));
-      if (!m.noWow) out.push(weekAgo ? pct(seoV, m.value(slice(weekAgo, 'seo'))) : '');
+      if (m.prevLabel) out.push(ratio(leadV, METRICS[metricIndex(m.prevLabel)].value(lead)));
+      out.push(round2(leadV));
+      if (!m.noWow) out.push(weekAgo ? pct(leadV, m.value(slice(weekAgo, LEAD))) : '');
 
-      for (const c of channelsFor(m)) {
-        if (c.key === 'seo') continue;
-        out.push(round2(m.value(slice(day, c.key))));
-      }
+      for (const c of trailingFor(m)) out.push(round2(m.value(slice(day, c))));
 
       out.push(round2(m.value(day.all)));
     }

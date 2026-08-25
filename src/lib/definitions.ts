@@ -369,11 +369,11 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'First-match ladder: fb = the session carried a Facebook signal (utm_source facebook/ig or an fbclid) — byte-identical to the FB/Organic split on wonderly_daily, so the channels sum back to it. Everything else is judged on FIRST TOUCH (initial_utm_source / initial_referrer): ai = an LLM referrer (ChatGPT, Perplexity, Claude, Gemini, Copilot); seo = a search-engine referrer with no campaign utm; other = some other campaign utm; direct = no referrer at all (or an internal wonderly.com hop); referral = any other external domain. First touch on purpose — an SEO visitor who returns by typing the URL is still SEO, which last-touch would misfile as Direct.',
   ],
   [
-    'SEO / AI / Direct / Referral / Other / Unatt. / FB / ALL',
+    'Organic / Google / Bing / … / AI search / Direct / Referral / Other campaign / Unknown source / Facebook / All',
     'SEO Metrics',
     'Per-metric channel columns: the same metric counted for each acquisition channel, then the all-channel total.',
     'Amplitude + CSM_OPS CRM',
-    'SEO = organic search engines (Google, Bing, DuckDuckGo, Yahoo, Brave, Yandex, Baidu, Startpage) added together — ~93% of it is Google, which is why the engines are not split out. AI = LLM referrals (ChatGPT, Perplexity, Claude, Gemini, Copilot) — a SEPARATE channel, not part of SEO. Direct = no first-touch referrer. Referral = any other external domain. Other = carried some other campaign utm. FB = the paid Facebook signal. Unatt. = a CRM deal that bridged to no marketing session at all (outbound, rep-created, pre-tracking) — it appears ONLY on Accepted / Held / No show, since the flow metrics are read from marketing events that always carry a channel. **ALL is not the sum of these columns**: it is the day counted whole (its own COUNT(DISTINCT …)), so it ties out to wonderly_daily. The columns can total slightly more than ALL because one person can appear in two channels on the same day, and Unatt. deals sit only in ALL and Unatt.',
+    'Organic = all search engines added together (the rollup that leads each group; safe to sum, since first-touch referrer is set once per person so nobody counts twice). Google / Bing / DuckDuckGo / Yahoo / Brave each get their own column; Other engine is the tail (Yandex, Baidu, Ecosia, Startpage — 14 people since May 1). AI search = LLM referrals (ChatGPT, Perplexity, Claude, Gemini, Copilot) — SEPARATE from organic, not part of it. Direct = the first visit carried no referrer and no campaign tag: typed URL, bookmark, an email or messaging app that strips the referrer, a QR code, or a privacy setting — mostly traffic whose real source was lost, which is why it converts at 0.19% against Facebook 2.9%. Referral = any other external domain. Other campaign = carried some other campaign utm. Unknown source = a CRM deal that reached NO marketing session at all (outbound, rep-created, pre-tracking) — about 1 accepted contractor in 8; appears ONLY on Accepted / Held / No show, since the earlier stages come from website events that always carry a source. **All is not the sum of these columns**: it is the day counted whole, so it ties out to wonderly_daily.',
   ],
   [
     'Page views',
@@ -387,7 +387,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'SEO Metrics',
     'The leading column on each stage: what share of the previous step made it to this one, within organic search only.',
     'Derived',
-    'Conv = this stage’s SEO count ÷ the previous stage’s SEO count (Page views → CTA → Partial → Qualified → Call 1 booked → Held/Accepted). It sits where Daily Metrics puts Cost, because SEO has no media spend to divide by. Blank (not 0%) when the previous step was empty. Ratio of totals on all windowed rows. No show has no Conv — it is a disposition of a booked call, not a funnel step.',
+    'Conv = this stage’s Organic count ÷ the previous stage’s Organic count (Page views → CTA → Partial → Qualified → Call 1 booked → Held/Accepted). It sits where Daily Metrics puts Cost, because SEO has no media spend to divide by. Blank (not 0%) when the previous step was empty. Ratio of totals on all windowed rows. No show has no Conv — it is a disposition of a booked call, not a funnel step.',
   ],
   [
     '7d avg / MTD / Prev Month / Week of …',

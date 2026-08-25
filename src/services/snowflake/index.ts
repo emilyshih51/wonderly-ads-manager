@@ -90,6 +90,25 @@ const SEARCH_ENGINE_REFERRERS =
 const AI_SURFACES = 'chatgpt|perplexity|claude\\.ai|gemini\\.google|copilot|you\\.com';
 
 /**
+ * Organic search resolves to the ENGINE rather than one "seo" bucket, so each engine gets its
+ * own column on the SEO Metrics tab. The long tail — Yandex, Baidu, Ecosia, Startpage, 14
+ * people between them since May 1 — collapses to `other_engine` rather than four columns that
+ * read 0 every day. Promote one out of the tail if it ever starts producing.
+ *
+ * `REF` is the lowercased first-touch referrer; only reached once the outer CASE has already
+ * confirmed the referrer matches SEARCH_ENGINE_REFERRERS.
+ */
+const REF = "LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,''))";
+const ENGINE_SQL = `CASE
+      WHEN ${REF} RLIKE '.*google\\..*' THEN 'google'
+      WHEN ${REF} RLIKE '.*bing\\..*' THEN 'bing'
+      WHEN ${REF} RLIKE '.*duckduckgo.*' THEN 'duckduckgo'
+      WHEN ${REF} RLIKE '.*yahoo\\..*' THEN 'yahoo'
+      WHEN ${REF} RLIKE '.*brave\\..*' THEN 'brave'
+      ELSE 'other_engine'
+    END`;
+
+/**
  * Acquisition channel for one marketing event, as a SQL CASE expression over the event's
  * own columns. Referenced by `getChannelFunnel` and `getSeoLandingPages`; both must use the
  * identical ladder or the two SEO tabs disagree with each other.
@@ -106,7 +125,8 @@ const CHANNEL_SQL = `CASE
   WHEN LOWER(COALESCE(USER_PROPERTIES:initial_utm_source::string,'')) RLIKE '.*(${AI_SURFACES}).*'
     OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*(${AI_SURFACES}).*' THEN 'ai'
   WHEN COALESCE(USER_PROPERTIES:initial_utm_source::string,'') = ''
-    AND LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*(${SEARCH_ENGINE_REFERRERS}).*' THEN 'seo'
+    AND LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*(${SEARCH_ENGINE_REFERRERS}).*'
+    THEN ${ENGINE_SQL}
   WHEN COALESCE(USER_PROPERTIES:initial_utm_source::string,'') <> '' THEN 'other'
   WHEN LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) IN ('','null')
     OR LOWER(COALESCE(USER_PROPERTIES:initial_referrer::string,'')) RLIKE '.*wonderly\\.(com|life).*' THEN 'direct'
@@ -868,7 +888,8 @@ export class SnowflakeService {
            MAX(CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN 1 ELSE 0 END) AS partial,
            MAX(CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN 1 ELSE 0 END) AS qualified
          FROM mkt
-         WHERE channel = 'seo'
+         -- Organic search is engine-level now, so match any engine channel.
+         WHERE channel IN ('google','bing','duckduckgo','yahoo','brave','other_engine')
          GROUP BY AMPLITUDE_ID
          HAVING MIN_BY(path, CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' AND path IS NOT NULL THEN EVENT_TIME END) IS NOT NULL
        ),

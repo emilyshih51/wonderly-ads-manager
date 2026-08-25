@@ -39,7 +39,7 @@ function fixture(): ChannelFunnelRow[] {
     const date = `2026-08-${String(d).padStart(2, '0')}`;
 
     out.push(
-      row(date, 'seo', {
+      row(date, 'google', {
         pageViews: 100,
         cta: 20,
         submitPartial: 10,
@@ -51,6 +51,7 @@ function fixture(): ChannelFunnelRow[] {
       })
     );
     out.push(row(date, 'fb', { pageViews: 901, cta: 180, booked: 18, held: 9, accepted: 4 }));
+    out.push(row(date, 'bing', { pageViews: 7, cta: 2 }));
     out.push(row(date, 'ai', { pageViews: 3, cta: 1 }));
     out.push(row(date, 'direct', { pageViews: 40, cta: 5 }));
     out.push(row(date, 'referral', { pageViews: 8 }));
@@ -114,7 +115,7 @@ describe('toSeoDays', () => {
   it('splits each day into the SEO slice and the all-channel total, newest first', () => {
     const days = toSeoDays(
       [
-        row('2026-08-01', 'seo', { pageViews: 10, accepted: 1 }),
+        row('2026-08-01', 'google', { pageViews: 10, accepted: 1 }),
         row('2026-08-01', 'fb', { pageViews: 90, accepted: 3 }),
         row('2026-08-01', 'all', { pageViews: 97, accepted: 5 }),
         row('2026-08-02', 'direct', { pageViews: 50 }),
@@ -124,17 +125,17 @@ describe('toSeoDays', () => {
     );
 
     expect(days.map((d) => d.date)).toEqual(['2026-08-02', '2026-08-01']);
-    expect(ch(days[1], 'seo').pageViews).toBe(10);
+    expect(ch(days[1], 'google').pageViews).toBe(10);
     expect(ch(days[1], 'fb').pageViews).toBe(90);
     // A day with no organic traffic still reports its all-channel total.
-    expect(ch(days[0], 'seo').pageViews).toBe(0);
+    expect(ch(days[0], 'google').pageViews).toBe(0);
     expect(days[0].all.pageViews).toBe(50);
   });
 
   it('takes the total from the all row, never by summing channels', () => {
     const days = toSeoDays(
       [
-        row('2026-08-01', 'seo', { pageViews: 10, accepted: 1 }),
+        row('2026-08-01', 'google', { pageViews: 10, accepted: 1 }),
         row('2026-08-01', 'fb', { pageViews: 90, accepted: 3 }),
         // Fewer page views than seo + fb (someone was active in both channels) and more
         // accepted (one deal bridged to no channel at all).
@@ -146,27 +147,30 @@ describe('toSeoDays', () => {
     expect(days[0].all.pageViews).toBe(97);
     expect(days[0].all.accepted).toBe(5);
     // The channels themselves still read their own values.
-    expect(ch(days[0], 'seo').pageViews + ch(days[0], 'fb').pageViews).toBe(100);
+    expect(ch(days[0], 'google').pageViews + ch(days[0], 'fb').pageViews).toBe(100);
   });
 
   it('keeps unattributed as its own channel, never folded into another', () => {
     const days = toSeoDays(
       [
-        row('2026-08-01', 'seo', { accepted: 1 }),
+        row('2026-08-01', 'google', { accepted: 1 }),
         row('2026-08-01', 'unattributed', { accepted: 4 }),
         row('2026-08-01', 'all', { accepted: 5 }),
       ],
       '2026-01-01'
     );
 
-    expect(ch(days[0], 'seo').accepted).toBe(1);
+    expect(ch(days[0], 'google').accepted).toBe(1);
     expect(ch(days[0], 'unattributed').accepted).toBe(4);
     expect(days[0].all.accepted).toBe(5);
   });
 
   it('drops days before the floor date', () => {
     const days = toSeoDays(
-      [row('2026-04-30', 'seo', { pageViews: 5 }), row('2026-05-01', 'seo', { pageViews: 7 })],
+      [
+        row('2026-04-30', 'google', { pageViews: 5 }),
+        row('2026-05-01', 'google', { pageViews: 7 }),
+      ],
       '2026-05-01'
     );
 
@@ -199,16 +203,16 @@ describe('computeSeoMetrics layout', () => {
   it('gives every group a SEO / ALL / SEO % column and keeps rows rectangular', () => {
     const headers = HEADERS(m);
 
-    expect(headers.filter((h) => h === 'SEO')).toHaveLength(8);
-    expect(headers.filter((h) => h === 'ALL')).toHaveLength(8);
+    expect(headers.filter((h) => h === 'Organic')).toHaveLength(8);
+    expect(headers.filter((h) => h === 'All')).toHaveLength(8);
 
     // Every channel gets a column on every metric...
-    for (const label of ['AI', 'Direct', 'Referral', 'Other', 'FB']) {
+    for (const label of ['Google', 'Bing', 'AI search', 'Direct', 'Referral', 'Facebook']) {
       expect(headers.filter((h) => h === label)).toHaveLength(8);
     }
 
     // ...except Unatt., which only makes sense on the three CRM-sourced cohort metrics.
-    expect(headers.filter((h) => h === 'Unatt.')).toHaveLength(3);
+    expect(headers.filter((h) => h === 'Unknown source')).toHaveLength(3);
     // Conv on every stage except the top of funnel (Page views) and No show.
     expect(headers.filter((h) => h === 'Conv')).toHaveLength(6);
     // w/w everywhere except Accepted and No show.
@@ -247,11 +251,13 @@ describe('computeSeoMetrics rows', () => {
   it('sums the week into its weekly row, as ratio-of-totals for the rates', () => {
     const week = body.find((r) => r[0] === 'Week of 2026-08-03')!;
 
-    // Seven days x 100 organic sessions, against 7 x 1000 all-channel.
-    expect(week[groupCol(m, 'Page views', 'SEO')]).toBe(700);
-    expect(week[groupCol(m, 'Page views', 'FB')]).toBe(6307);
-    expect(week[groupCol(m, 'Page views', 'AI')]).toBe(21);
-    expect(week[groupCol(m, 'Page views', 'ALL')]).toBe(7000);
+    // Organic is the ENGINE ROLLUP: 7 days x (100 Google + 7 Bing).
+    expect(week[groupCol(m, 'Page views', 'Organic')]).toBe(749);
+    expect(week[groupCol(m, 'Page views', 'Google')]).toBe(700);
+    expect(week[groupCol(m, 'Page views', 'Bing')]).toBe(49);
+    expect(week[groupCol(m, 'Page views', 'Facebook')]).toBe(6307);
+    expect(week[groupCol(m, 'Page views', 'AI search')]).toBe(21);
+    expect(week[groupCol(m, 'Page views', 'All')]).toBe(7000);
     // Accepted 7 of 14 booked — a rate over the week, not a sum of daily rates.
     expect(week[groupCol(m, 'Accepted', 'Conv')]).toBe(0.5);
   });
@@ -259,30 +265,34 @@ describe('computeSeoMetrics rows', () => {
   it('computes step conversion inside the SEO slice only', () => {
     const day = body[0];
 
-    // CTA group: Conv = SEO cta / SEO page views = 20 / 100 — organic's own rate, even though
-    // FB contributed 180 CTAs from 901 page views on the same day.
-    expect(day[groupCol(m, 'CTA', 'Conv')]).toBe(0.2);
+    // CTA group: Conv = organic CTA / organic page views = (20 + 2) / (100 + 7) — organic's
+    // own rate, even though FB contributed 180 CTAs from 901 page views the same day.
+    expect(day[groupCol(m, 'CTA', 'Conv')]).toBe(0.2056);
     expect(day[groupCol(m, 'Qualified', 'Conv')]).toBe(0.4); // 4 / 10 partial
   });
 
   it('computes SEO share against the all-channel total, not against itself', () => {
     const day = body[0];
 
-    expect(day[groupCol(m, 'Page views', 'SEO')]).toBe(100);
-    expect(day[groupCol(m, 'Page views', 'AI')]).toBe(3);
+    // Organic rolls the engines up; the engines still read individually beside it.
+    expect(day[groupCol(m, 'Page views', 'Organic')]).toBe(107);
+    expect(day[groupCol(m, 'Page views', 'Google')]).toBe(100);
+    expect(day[groupCol(m, 'Page views', 'Bing')]).toBe(7);
+    expect(day[groupCol(m, 'Page views', 'DuckDuckGo')]).toBe(0);
+    expect(day[groupCol(m, 'Page views', 'AI search')]).toBe(3);
     expect(day[groupCol(m, 'Page views', 'Direct')]).toBe(40);
     expect(day[groupCol(m, 'Page views', 'Referral')]).toBe(8);
-    expect(day[groupCol(m, 'Page views', 'Other')]).toBe(6);
-    expect(day[groupCol(m, 'Page views', 'FB')]).toBe(901);
-    // ALL is the query's own day-grain row, NOT the sum of the channels above (1058).
-    expect(day[groupCol(m, 'Page views', 'ALL')]).toBe(1000);
+    expect(day[groupCol(m, 'Page views', 'Other campaign')]).toBe(6);
+    expect(day[groupCol(m, 'Page views', 'Facebook')]).toBe(901);
+    // All is the query's own day-grain row, NOT the sum of the channels above.
+    expect(day[groupCol(m, 'Page views', 'All')]).toBe(1000);
     // The unattributed deal shows in its own column and in ALL, on cohort metrics only.
-    expect(day[groupCol(m, 'Accepted', 'Unatt.')]).toBe(1);
-    expect(day[groupCol(m, 'Accepted', 'ALL')]).toBe(6);
+    expect(day[groupCol(m, 'Accepted', 'Unknown source')]).toBe(1);
+    expect(day[groupCol(m, 'Accepted', 'All')]).toBe(6);
   });
 
   it('leaves a rate blank rather than 0 when its denominator is empty', () => {
-    const m2 = computeSeoMetrics([row('2026-08-10', 'seo')], '2026-08-11', '2026-01-01');
+    const m2 = computeSeoMetrics([row('2026-08-10', 'google')], '2026-08-11', '2026-01-01');
     const day = m2[5];
 
     expect(day[groupCol(m2, 'CTA', 'Conv')]).toBe('');

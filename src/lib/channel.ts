@@ -56,3 +56,31 @@ export function toChannel(value: unknown): Channel {
 
   return (CHANNELS as readonly string[]).includes(s) ? (s as Channel) : 'direct';
 }
+
+/**
+ * One day of one channel's funnel, as returned by `SnowflakeService.getChannelFunnel`.
+ *
+ * Long format — one row per (date, channel) with any activity — rather than a wide row per
+ * day, so adding a channel never changes the shape. `computeSeoMetrics` pivots it.
+ *
+ * Keying matches the blended tabs: `sessions` / `cta` / `submitPartial` / `submitQualified`
+ * are FLOW metrics on the event day; `booked` is keyed to the lead's QUALIFIED day; `held`,
+ * `noShow` and `accepted` are COHORT metrics keyed to the deal's booking day.
+ */
+export interface ChannelFunnelRow {
+  /** `YYYY-MM-DD`, bucketed on the report timezone. */
+  date: string;
+  channel: Channel;
+  /** Unique people with a page view that day. */
+  sessions: number;
+  cta: number;
+  submitPartial: number;
+  submitQualified: number;
+  /** Marketing-qualified leads who booked, keyed to their QUALIFIED day. */
+  booked: number;
+  /** Of that day's bookings, how many eventually held. Matures over ~30 days. */
+  held: number;
+  noShow: number;
+  /** Of that day's bookings, how many were eventually accepted. Matures over ~30 days. */
+  accepted: number;
+}

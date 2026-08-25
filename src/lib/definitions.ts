@@ -363,31 +363,38 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   // --- SEO / channel tabs -------------------------------------------------
   [
     'CHANNEL',
-    'SEO Funnel',
+    'SEO Metrics',
     'Which acquisition channel a visit, lead or deal is attributed to: Organic search (SEO), AI search, Direct, Referral, Other campaign, or Facebook (paid).',
     'Amplitude + CRM',
     'First-match ladder: fb = the session carried a Facebook signal (utm_source facebook/ig or an fbclid) — byte-identical to the FB/Organic split on wonderly_daily, so the channels sum back to it. Everything else is judged on FIRST TOUCH (initial_utm_source / initial_referrer): ai = an LLM referrer (ChatGPT, Perplexity, Claude, Gemini, Copilot); seo = a search-engine referrer with no campaign utm; other = some other campaign utm; direct = no referrer at all (or an internal wonderly.com hop); referral = any other external domain. First touch on purpose — an SEO visitor who returns by typing the URL is still SEO, which last-touch would misfile as Direct.',
   ],
   [
-    'SEO_SESSIONS',
-    'SEO Funnel, SEO Pages',
-    'People whose first touch was an organic search result.',
-    'Amplitude',
-    'Distinct users on MARKETING_SITE__PAGE__VIEW whose CHANNEL is seo. A person is counted once per day, not once per visit.',
+    'SEO / ALL / SEO %',
+    'SEO Metrics',
+    'Per-metric columns on the SEO grid: the organic-search count, the all-channel total for the same metric, and organic’s share of it.',
+    'Amplitude + CSM_OPS CRM',
+    'SEO = the count whose CHANNEL is seo; ALL = every channel including Facebook; SEO % = SEO ÷ ALL. Windowed rows (weekly, 7d avg, MTD, Prev Month) compute SEO % as a ratio of totals (Σ SEO ÷ Σ ALL), never an average of daily percentages — a 3-session day must not weigh the same as a 300-session day.',
   ],
   [
-    'SEO_CALL1_BOOKED / SEO_HELD / SEO_ACCEPTED',
-    'SEO Funnel',
+    'Conv',
+    'SEO Metrics',
+    'The leading column on each stage: what share of the previous step made it to this one, within organic search only.',
+    'Derived',
+    'Conv = this stage’s SEO count ÷ the previous stage’s SEO count (Sessions → CTA → Partial → Qualified → Call 1 booked → Held/Accepted). It sits where Daily Metrics puts Cost, because SEO has no media spend to divide by. Blank (not 0%) when the previous step was empty. Ratio of totals on all windowed rows. No show has no Conv — it is a disposition of a booked call, not a funnel step.',
+  ],
+  [
+    '7d avg / MTD / Prev Month / Week of …',
+    'SEO Metrics',
+    'The same daily-plus-weekly cadence as Daily Metrics, applied to organic search.',
+    'Sheet formulas + derived',
+    'Daily rows run newest-first in ISO-week blocks, each closed by a shaded "Week of <Monday>" summary row (sums for counts, ratio-of-totals for rates). Above them, 7d avg / MTD / Prev Month are live sheet formulas — 7d avg = the last 7 completed days (today’s partial row is skipped), MTD/Prev Month are EOMONTH(TODAY()) windows that self-advance. w/w compares a day to the same weekday a week earlier; Accepted and No show drop it, since organic runs 0–2 a day and the percentage is pure noise at that scale.',
+  ],
+  [
+    'SEO Call 1 booked / Held / Accepted',
+    'SEO Metrics',
     "Organic search's Call 1 bookings, calls that actually happened, and accepted contractors.",
     'Amplitude + CSM_OPS CRM',
     'Identical rules to the blended tabs, with the channel added: booked = a marketing-qualified lead who booked, keyed to their QUALIFIED day (so it stays a subset of Qualified); held / accepted are COHORT metrics keyed to the deal booking day, read from the CRM current stage TYPE. Recent days read low until the cohort matures.',
-  ],
-  [
-    'SEO_SESSION_TO_ACCEPTED',
-    'SEO Funnel, SEO Pages',
-    'End-to-end organic conversion: accepted contractors ÷ organic sessions.',
-    'Derived',
-    'The Total row uses ratio of totals (Σ accepted ÷ Σ sessions), not an average of daily rates. Because accepted lags the session that caused it, this reads low on recent days.',
   ],
   [
     'PATH',
@@ -398,10 +405,10 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
   ],
   [
     'No cost-per columns on the SEO tabs',
-    'SEO Funnel, SEO Pages',
+    'SEO Metrics, SEO Pages',
     'Deliberate omission — SEO carries no media cost to divide by.',
     'n/a',
-    "Cost per stage = FB spend ÷ actions, which is meaningless for a channel with no spend. SEO's unit of investment is the PAGE, which is what SEO Pages reports. Paid economics stay on Daily Funnel and Campaign Performance.",
+    "Cost per stage = FB spend ÷ actions, which is meaningless for a channel with no spend. On SEO Metrics that column slot carries Conv instead. SEO's unit of investment is the PAGE, which is what SEO Pages reports. Paid economics stay on Daily Funnel and Campaign Performance.",
   ],
 
   // --- meta ---------------------------------------------------------------

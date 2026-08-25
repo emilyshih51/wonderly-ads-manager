@@ -23,11 +23,8 @@ import {
   toCampaignPerformanceValues,
 } from '@/lib/campaign-performance';
 import { DAILY_FUNNEL_HEADERS, toDailyFunnelValues } from '@/lib/daily-funnel';
-import {
-  SEO_FUNNEL_HEADERS,
-  buildSeoFunnelFormatRequests,
-  toSeoFunnelValues,
-} from '@/lib/seo-funnel';
+import { SEO_METRICS_LABELS, computeSeoMetrics } from '@/lib/seo-metrics';
+import { buildSeoMetricsFormatRequests } from '@/lib/seo-metrics-format';
 import { SEO_PAGES_HEADERS, buildSeoPagesFormatRequests, toSeoPagesValues } from '@/lib/seo-pages';
 import {
   HISTORICAL_CAC_HEADERS,
@@ -89,8 +86,8 @@ const CALL1_DEALS_TAB = 'call1_deals';
 /** Per-campaign booked/held/accepted + spend + cost-per-accepted dashboard. */
 const CAMPAIGN_PERFORMANCE_TAB = 'Campaign Performance';
 
-/** SEO Funnel: the funnel split by acquisition channel, organic search in the foreground. */
-const SEO_FUNNEL_TAB = 'SEO Funnel';
+/** SEO Metrics: the Daily-Metrics-shaped grid for organic search (daily + weekly blocks). */
+const SEO_METRICS_TAB = 'SEO Metrics';
 
 /** SEO Pages: which organic landing pages carry people all the way to accepted. */
 const SEO_PAGES_TAB = 'SEO Pages';
@@ -129,6 +126,9 @@ export async function GET(request: Request) {
 
   try {
     const today = isoDate(new Date());
+    // Pacific 'today' — the report timezone the whole sheet buckets on. Declared here
+    // because both the SEO grid and Daily Metrics need it to skip today's partial row.
+    const ptToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
     // Derive the refetch window from the fixed May-1 anchor so it always reaches back to
     // exactly BACKFILL_START, no matter how much time has passed.
     const backfillDays = daysSince(BACKFILL_START, today) + 1;
@@ -285,17 +285,24 @@ export async function GET(request: Request) {
         snow.getSeoLandingPages(backfillDays),
       ]);
 
-      const seoFunnelValues = toSeoFunnelValues(channelFunnel, BACKFILL_START);
+      // SEO Metrics mirrors Daily Metrics: merged group headers, live 7d/MTD/Prev formula
+      // rows, then daily rows in ISO-week blocks each closed by a weekly summary row.
+      const seoMetrics = computeSeoMetrics(channelFunnel, ptToday, BACKFILL_START);
 
-      await sheets.ensureTab(sheetId, SEO_FUNNEL_TAB);
-      await sheets.replaceRows(sheetId, SEO_FUNNEL_TAB, [...SEO_FUNNEL_HEADERS], seoFunnelValues);
+      await sheets.ensureTab(sheetId, SEO_METRICS_TAB);
+      await sheets.replaceRows(
+        sheetId,
+        SEO_METRICS_TAB,
+        seoMetrics[0].map(String),
+        seoMetrics.slice(1)
+      );
 
       try {
-        await sheets.formatTab(sheetId, SEO_FUNNEL_TAB, (gid) =>
-          buildSeoFunnelFormatRequests(gid, seoFunnelValues.length)
+        await sheets.formatTab(sheetId, SEO_METRICS_TAB, (gid) =>
+          buildSeoMetricsFormatRequests(gid, SEO_METRICS_LABELS, seoMetrics)
         );
       } catch (formatError) {
-        logger.error('SEO Funnel formatting failed (values still written)', formatError);
+        logger.error('SEO Metrics formatting failed (values still written)', formatError);
       }
 
       const seoPagesValues = toSeoPagesValues(seoPages);
@@ -341,7 +348,6 @@ export async function GET(request: Request) {
     // Overview KPI dashboard: freshness, cost-per, warnings, and week-over-week.
     // Succeeding-contractor cohorts come straight from prod (team dim ↔ value view).
     const succeeding = await snow.getSucceedingContractors();
-    const ptToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
     const overview = computeOverview({
       rows: merged,
       call1Deals,

@@ -279,6 +279,11 @@ export async function GET(request: Request) {
     // read-back/merge) and share the blended query's definitions, so their per-channel
     // counts reconcile with `wonderly_daily`. Wrapped together because neither is on the
     // critical path — an SEO read failing must not cost the sheet its paid numbers.
+    // Reported in the cron's JSON response so a caller can tell at a glance whether the SEO
+    // tabs were written — null means the block threw and the sheet has no SEO data this run.
+    let seoRowCount: number | null = null;
+    let seoPageCount: number | null = null;
+
     try {
       const [channelFunnel, seoPages] = await Promise.all([
         snow.getChannelFunnel(backfillDays, bookingOverrides),
@@ -317,6 +322,10 @@ export async function GET(request: Request) {
       } catch (formatError) {
         logger.error('SEO Pages formatting failed (values still written)', formatError);
       }
+
+      seoRowCount = seoMetrics.length;
+      seoPageCount = seoPagesValues.length;
+      logger.info('SEO tabs refreshed', { seoRows: seoRowCount, seoPages: seoPageCount });
     } catch (seoError) {
       logger.error('SEO tabs refresh failed (rest of the sheet still written)', seoError);
     }
@@ -420,6 +429,9 @@ export async function GET(request: Request) {
       totalRows: merged.length,
       newestDate: merged[0]?.date ?? null,
       call1Deals: call1Deals.length,
+      // null = the SEO block threw this run; the rest of the sheet still refreshed.
+      seoRows: seoRowCount,
+      seoPages: seoPageCount,
       stale: staleReason,
     });
   } catch (error) {

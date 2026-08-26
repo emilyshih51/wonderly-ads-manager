@@ -56,6 +56,7 @@ import {
   METRIC_OPTIONS,
 } from '@/lib/automation-config';
 import type { RuleConfig, Condition } from '@/lib/automation-config';
+import { LIFETIME_DATE_PRESET } from '@/lib/automation-utils';
 import type { AutomationNode, AutomationEdge } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -126,6 +127,10 @@ const DATE_PRESET_OPTIONS = [
   { labelKey: 'datePresets.last7d', value: 'last_7d' },
   { labelKey: 'datePresets.last14d', value: 'last_14d' },
   { labelKey: 'datePresets.last30d', value: 'last_30d' },
+  // Lifetime. The engine passes this straight through to Meta as
+  // `date_preset=maximum`, and evaluateRule already reuses the scan for the
+  // conversion guardrail instead of issuing a second query.
+  { labelKey: 'datePresets.lifetime', value: LIFETIME_DATE_PRESET },
 ];
 
 const SCHEDULE_OPTIONS = [

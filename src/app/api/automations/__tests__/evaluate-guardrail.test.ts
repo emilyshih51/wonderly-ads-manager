@@ -295,3 +295,56 @@ describe('lifetime-conversion guardrail', () => {
     expect(updateStatus).toHaveBeenCalledWith('ad-1', 'ACTIVE');
   });
 });
+
+describe('lifetime-window rules (0 conversions + >$X lifetime -> kill)', () => {
+  /** The rule Olesya specified: both conditions judged over all time. */
+  function lifetimeRule() {
+    const rule = pauseRule();
+
+    (rule.nodes[0].data.config as Record<string, unknown>).date_preset = LIFETIME_DATE_PRESET;
+    (rule.nodes[1].data.config as Record<string, unknown>).threshold = '300';
+    rule.nodes.splice(2, 0, {
+      id: 'c2',
+      type: 'condition',
+      position: { x: 0, y: 1 },
+      data: { label: 'results', config: { metric: 'results', operator: '==', threshold: '0' } },
+    } as (typeof rule.nodes)[number]);
+
+    return rule;
+  }
+
+  it('pauses an ad with $300+ lifetime spend and zero lifetime conversions', async () => {
+    mockInsights([adRow(0, '512')], [adRow(0, '512')]);
+
+    const { results } = await evaluate(lifetimeRule());
+
+    expect(updateStatus).toHaveBeenCalledWith('ad-1', 'PAUSED');
+    expect(results[0]).toMatchObject({ action: 'paused', date_preset: LIFETIME_DATE_PRESET });
+  });
+
+  it('leaves an ad under the lifetime spend threshold alone', async () => {
+    mockInsights([adRow(0, '250')], [adRow(0, '250')]);
+
+    await evaluate(lifetimeRule());
+
+    expect(updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('leaves an ad with any lifetime conversion alone', async () => {
+    mockInsights([adRow(1, '900')], [adRow(1, '900')]);
+
+    await evaluate(lifetimeRule());
+
+    expect(updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('reuses the scan instead of issuing a second lifetime query', async () => {
+    mockInsights([adRow(0, '512')], [adRow(0, '512')]);
+
+    await evaluate(lifetimeRule());
+
+    // One query total: the rule's own window already is the lifetime window.
+    expect(getFilteredInsights).toHaveBeenCalledTimes(1);
+    expect(getAdInsights).not.toHaveBeenCalled();
+  });
+});

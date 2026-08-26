@@ -504,7 +504,8 @@
       "last3d": "3 derniers jours",
       "last7d": "7 derniers jours",
       "last14d": "14 derniers jours",
-      "last30d": "30 derniers jours"
+      "last30d": "30 derniers jours",
+      "lifetime": "Depuis le début"
     },
     "schedules": {
       "5min": "Toutes les 5 minutes",

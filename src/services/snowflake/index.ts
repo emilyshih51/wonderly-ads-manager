@@ -208,7 +208,16 @@ const LIFECYCLE_WEEKLY =
 interface SnowflakeConfig {
   account: string;
   username: string;
-  password: string;
+  /**
+   * Key-pair (JWT) auth — preferred. A PKCS8 PEM private key, e.g. the raw contents of
+   * `rsa_key.p8` (optionally passphrase-protected; pass the passphrase via `privateKeyPass`).
+   * Not subject to MFA, unlike password auth — Snowflake's recommended pattern for service/bot
+   * accounts. Takes precedence over `password` when both are set.
+   */
+  privateKey?: string;
+  privateKeyPass?: string;
+  /** Legacy password auth. Kept as a fallback; fails on any account with MFA enforced. */
+  password?: string;
   warehouse?: string;
   role?: string;
 }
@@ -242,17 +251,25 @@ export class SnowflakeService {
   static fromEnv(): SnowflakeService {
     const account = process.env.SNOWFLAKE_ACCOUNT;
     const username = process.env.SNOWFLAKE_USERNAME;
+    // Key-pair auth is preferred (SNOWFLAKE_PRIVATE_KEY holds the PKCS8 PEM, newlines intact —
+    // in Vercel, paste it with literal `\n` escapes and .replace(/\\n/g, '\n') below, since env
+    // vars there can't hold real newlines). SNOWFLAKE_PASSWORD is only a fallback for accounts
+    // that still allow plain password login; it breaks the moment MFA is enforced.
+    const privateKeyRaw = process.env.SNOWFLAKE_PRIVATE_KEY;
     const password = process.env.SNOWFLAKE_PASSWORD;
 
-    if (!account || !username || !password) {
+    if (!account || !username || (!privateKeyRaw && !password)) {
       throw new Error(
-        'Snowflake credentials missing: set SNOWFLAKE_ACCOUNT, SNOWFLAKE_USERNAME, SNOWFLAKE_PASSWORD'
+        'Snowflake credentials missing: set SNOWFLAKE_ACCOUNT, SNOWFLAKE_USERNAME, and either ' +
+          'SNOWFLAKE_PRIVATE_KEY (preferred) or SNOWFLAKE_PASSWORD'
       );
     }
 
     return new SnowflakeService({
       account,
       username,
+      privateKey: privateKeyRaw?.replace(/\\n/g, '\n'),
+      privateKeyPass: process.env.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE,
       password,
       warehouse: process.env.SNOWFLAKE_WAREHOUSE,
       role: process.env.SNOWFLAKE_ROLE,
@@ -263,13 +280,25 @@ export class SnowflakeService {
   private async connect(): Promise<Connection> {
     if (this.conn) return this.conn;
 
-    const connection = snowflake.createConnection({
-      account: this.config.account,
-      username: this.config.username,
-      password: this.config.password,
-      warehouse: this.config.warehouse,
-      role: this.config.role,
-    });
+    const connection = snowflake.createConnection(
+      this.config.privateKey
+        ? {
+            account: this.config.account,
+            username: this.config.username,
+            authenticator: 'SNOWFLAKE_JWT',
+            privateKey: this.config.privateKey,
+            privateKeyPass: this.config.privateKeyPass,
+            warehouse: this.config.warehouse,
+            role: this.config.role,
+          }
+        : {
+            account: this.config.account,
+            username: this.config.username,
+            password: this.config.password,
+            warehouse: this.config.warehouse,
+            role: this.config.role,
+          }
+    );
 
     await new Promise<void>((resolve, reject) => {
       connection.connect((err: Error | undefined) => (err ? reject(err) : resolve()));

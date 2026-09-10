@@ -399,6 +399,107 @@ Rebuilds the "Growth — acquisition update" readout from the [Cost per Succeedi
 - **Low-n guard:** below `MIN_SUCCEEDING = 5` the cost-per-succeeding cell reads `maturing — n/m` instead of a noisy dollar figure.
 - Caveats (match rate, attribution difference, cohort maturity, near-zero collected) are generated into the output — they are part of the readout, not commentary. Don't strip them.
 
+## Ad Winners Sheet (`wonderly_winners`)
+
+A Google Sheet refreshed by the cron `GET /api/cron/ad-winners` (Vercel cron, weekly —
+`0 13 * * 1`, Monday 9am ET). Ranks Meta ads by Results (lead volume) and CPL
+(cost-per-result) across four rolling windows and flags "winners": ads worth scaling,
+duplicating, or feeding into an automation rule's target ad set. Started as a sheet Emily
+rebuilt by hand from Ads Manager every week (same columns, same per-window thresholds, same
+Ads Manager links); this cron keeps it current instead. Reads Meta only — no Snowflake, no
+CRM, just `WONDERLY_AD_ACCOUNT_ID`.
+
+### Tabs and thresholds
+
+Four tabs, one per window, each a full rewrite every run (`ensureTab` + `replaceRows`, no
+read-back/merge — unlike the Growth Sheet's raw tab, there's no history to preserve here):
+
+| Tab          | `date_preset` | Results floor | CPL cap |
+| ------------ | ------------- | ------------- | ------- |
+| Last 7 Days  | `last_7d`     | ≥ 3           | ≤ $150  |
+| Last 14 Days | `last_14d`    | ≥ 5           | ≤ $150  |
+| Last 30 Days | `last_30d`    | ≥ 10          | ≤ $150  |
+| All Time     | `maximum`     | ≥ 20          | ≤ $150  |
+
+Columns: `AD_NAME` (a `HYPERLINK` formula opening straight to that ad's standalone edit view
+in Meta Ads Manager, via `buildAdsManagerAdLink` — the link shape, including
+`business_id`/`ads_manager_write_regions`, was confirmed against a real link pulled from the
+sheet, not guessed at; see `src/lib/ads-manager-link.ts`), `RESULTS`, `CPL`, `TOTAL_SPEND`, `STATUS` (Meta
+`effective_status` — `ACTIVE`/`PAUSED`/`CAMPAIGN_PAUSED`/`ADSET_PAUSED`/etc., from
+`MetaService.getAdEffectiveStatusMap`), `WINNER` (`YES` / `Near` / blank), `CREATIVE_FILE` (a
+`HYPERLINK` to the ad's original source file in the "Wonderly ads" Drive folder, or blank when
+no confident match is found — see below). Rows are sorted by `TOTAL_SPEND` descending, with a
+bold `TOTAL` row appended (Results and Spend summed; CPL re-derived from the totals, not
+averaged per-row). **Unlike `getFilteredInsights`, this cron does NOT apply `ACTIVE_FILTER`**
+— paused/campaign-paused/adset-paused ads stay on the report so a strong performer that got
+paused for an unrelated reason doesn't just vanish.
+
+The pre-existing `"+ "` prefix and `" [Winner Copy]"` suffix seen on some ad names are **not**
+reproduced by this cron — they're already part of the ad's real name in Meta once the
+automation engine's promote action has touched it (see "Promoting ads" above), so they come
+through for free via `ad_name`.
+
+### `CREATIVE_FILE` — linking an ad back to its Drive source file
+
+Separate from the `AD_NAME` Ads Manager link, `CREATIVE_FILE` links to the ad's original
+creative file in the "Wonderly ads" Drive folder (root ID
+`WONDERLY_ADS_DRIVE_ROOT_FOLDER_ID` in `src/lib/growth-config.ts`). Three pieces:
+
+- **`GoogleDriveService`** (`src/services/google-drive/index.ts`) — same service account and
+  `GOOGLE_SERVICE_ACCOUNT_JSON` as `GoogleSheetsService`, just with the `drive.readonly` scope
+  instead of `spreadsheets`. **The "Wonderly ads" Drive folder must be shared with that same
+  service account's `client_email` (Viewer is enough)** — without it, `listAllFilesRecursive`
+  fails and the cron logs it but still runs, leaving `CREATIVE_FILE` blank on every row rather
+  than failing the whole refresh. `listAllFilesRecursive` walks every subfolder under the root
+  (dated batch folders → "Campaign N" → "Ad set N" → files) and returns every file's `id`/`name`.
+- **`MetaService.getAdCreativeNameMap`** — ad ID → the ad's creative `name` field. When a
+  creative's media was uploaded from a Drive file, Meta stores that original filename
+  (sanitized, extension stripped) plus a trailing `" YYYY-MM-DD-<32-hex-hash>"` upload-time
+  suffix in this field — confirmed to hold for both video and static-image creatives. (Note:
+  `ads_get_ad_images`'s own `name` field is Meta's internal CDN filename and is useless for
+  this — don't use it here.)
+- **`src/lib/drive-creative-match.ts`** (`buildDriveCreativeIndex` + `matchDriveCreative`) —
+  matches the two names on a normalized token form rather than exact string equality, because
+  Meta's sanitizer drifts on punctuation-vs-underscore and zero-padding (e.g. Drive's `9.4`
+  becomes Meta's `09_04`) and pluralization (Drive's `Addition` becomes Meta's `Additions`).
+  Normalization: strip the extension (Drive side) / upload-time suffix (Meta side), lowercase,
+  split on runs of non-alphanumeric characters, strip leading zeros off purely-numeric tokens,
+  and fold a trailing "s" off longer tokens. **Exact match on the normalized form only — no
+  fuzzy/best-effort matching beyond that** — per Emily's instruction, an ad with no confident
+  match gets a blank `CREATIVE_FILE` cell, never a guess.
+- Wired into `GET /api/cron/ad-winners`: the Drive tree is walked once per run (not once per
+  ad) and the resulting index is reused across all four windows.
+
+### Two inferred rules — verify with Emily if a row ever looks wrong
+
+The hand-built sheet this cron replaces didn't come with a written spec for two of its rules;
+both were reverse-engineered from the sheet's own data and are implemented as best guesses:
+
+- **The `Near` tier** (`classifyWinner` in `src/lib/ad-winners.ts`): every `Near` row in the
+  original sheet sat at or under 1.5× its tab's CPL cap (e.g. $225 on a $150-cap tab), and
+  every blank row that still cleared the Results floor sat well above it — `$223.53` → Near,
+  `$257.37` → blank, on tabs with the same $150 cap. Implemented as
+  `NEAR_WINNER_CPL_MULTIPLIER = 1.5`. If a borderline row's tier looks off, this multiplier is
+  the first thing to check.
+- **All Time's trial/registration split**: the original tab's header read "Trial-optimized
+  ads only; registration-optimized ads excluded for metric consistency". Implemented by
+  excluding any ad whose ad set's raw `promoted_object.custom_event_type` (from the new
+  `MetaService.getAdSetEventTypeMap`, captured before Meta's API collapses all custom pixel
+  events into one `offsite_conversion.fb_pixel_custom` action type — see
+  `fetchOptimizationMaps`) equals `COMPLETE_REGISTRATION`. Everything else (including
+  `START_TRIAL` and non-custom goals like `LEAD_GENERATION`) stays in. Only applied on the
+  All Time tab (`AdWinnerWindow.excludeRegistrationOptimized`) — if new registration-optimized
+  campaigns start appearing (or a trial-optimized one starts disappearing) from All Time
+  unexpectedly, revisit this filter with Emily.
+
+### Known limitation
+
+`MetaService.getAdLevelInsights` caps at 200 ads per call (no pagination) — same limit it's
+always had elsewhere in the app. Fine for the 7/14/30-day windows; if Wonderly's _lifetime_ ad
+count on this account ever exceeds 200, the All Time tab will silently truncate. Fix by adding
+the same `after`/`paging.next` cursor loop already used in `getAdEffectiveStatusMap` and
+`fetchOptimizationMaps`.
+
 ### Read-only MCP server (`/api/mcp`)
 
 A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools for any MCP client (endpoint `POST /api/mcp/mcp`). **Read-only** — no writes, no ad changes, no sheet mutation. Node runtime, `maxDuration 60`.

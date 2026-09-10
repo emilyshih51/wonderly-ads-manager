@@ -8,6 +8,22 @@
 export const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
 /**
+ * The Meta Business Manager ID that owns `WONDERLY_AD_ACCOUNT_ID` ("Wonderly Marketing").
+ * Ads Manager's per-ad deep link (`buildAdsManagerAdLink`) requires this alongside the
+ * account ID and ad ID — omitting it still resolves, but not to the same standalone edit
+ * view a `business_id`-qualified link opens.
+ */
+export const WONDERLY_BUSINESS_ID = '1630682394838664';
+
+/**
+ * Root Google Drive folder ("Wonderly ads") holding every ad creative's original source
+ * file, organized into dated batch folders → "Campaign N" → "Ad set N" subfolders. Used by
+ * the Ad Winners sheet to link each ad back to its source file (see
+ * `src/services/google-drive/index.ts` and `src/lib/drive-creative-match.ts`).
+ */
+export const WONDERLY_ADS_DRIVE_ROOT_FOLDER_ID = '1DHr3f6PWf_knLFjyOwccjQAxu6gUy0cI';
+
+/**
  * Fixed backfill anchor: all Growth data is sourced and shown from this date forward
  * (first week the sales pipeline data exists). The fetch window is derived from it.
  */

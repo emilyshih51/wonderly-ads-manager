@@ -401,6 +401,47 @@ export class MetaService {
   }
 
   /**
+   * Build a map of ad ID → the ad's creative `name` field.
+   *
+   * When a creative's media was uploaded from a Google Drive file, Meta stores that
+   * original filename (sanitized, extension stripped) plus a trailing upload timestamp
+   * and hash in this field — e.g. `Brad - VID - 09_04 _ Growth backing v1 _ Home
+   * Additions - 3.2 2026-09-04-17e6d43d9c71fa1136ea07a9687f5bb8`. Used by the Ad Winners
+   * sheet (`matchDriveCreative` in `@/lib/drive-creative-match`) to link each ad back to
+   * its source file in the "Wonderly ads" Drive folder. Confirmed to hold for both video
+   * and static-image creatives; ads whose creative was authored directly in Ads Manager
+   * (never a Drive upload) simply won't match anything and get a blank cell.
+   *
+   * @returns `{ [adId]: creativeName }` — ads with no creative or no creative name are omitted
+   */
+  async getAdCreativeNameMap(): Promise<Record<string, string>> {
+    const nameMap: Record<string, string> = {};
+    let after: string | undefined;
+
+    // Paginate through all ads to handle accounts with >200 ads.
+    for (;;) {
+      const params: Record<string, string> = { fields: 'id,creative{name}', limit: '200' };
+
+      if (after) params.after = after;
+
+      const data = (await this.request(`/act_${this.adAccountId}/ads`, { params })) as {
+        data?: Array<{ id: string; creative?: { name?: string } }>;
+        paging?: { cursors?: { after?: string }; next?: string };
+      };
+
+      for (const ad of data.data || []) {
+        if (ad.creative?.name) nameMap[ad.id] = ad.creative.name;
+      }
+
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
+    }
+
+    return nameMap;
+  }
+
+  /**
    * Get performance insights for a single ad.
    *
    * @param adId - Meta ad ID

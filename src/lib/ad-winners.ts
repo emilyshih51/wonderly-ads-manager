@@ -17,6 +17,8 @@
 import { parseInsightMetrics } from './automation-utils';
 import { buildAdsManagerAdLink } from './ads-manager-link';
 import type { SheetsRequest } from './daily-metrics-format';
+import { matchDriveCreative } from './drive-creative-match';
+import { GoogleDriveService, type DriveFile } from '@/services/google-drive';
 import type { MetaInsightsRow } from '@/types';
 
 /** One rolling-window tab on the Ad Winners sheet. */
@@ -72,6 +74,7 @@ export const AD_WINNERS_HEADERS = [
   'TOTAL_SPEND',
   'STATUS',
   'WINNER',
+  'CREATIVE_FILE',
 ] as const;
 
 export type WinnerTier = 'YES' | 'Near' | '';
@@ -87,6 +90,13 @@ export interface AdWinnerRow {
   /** Meta `effective_status` (e.g. `ACTIVE`, `PAUSED`, `CAMPAIGN_PAUSED`, `ADSET_PAUSED`). */
   status: string;
   winner: WinnerTier;
+  /**
+   * The ad's original creative file in the "Wonderly ads" Drive folder, matched by name
+   * (see `@/lib/drive-creative-match`), or `null` when no confident match was found — a
+   * separate link from `adLink`, which always points at Ads Manager regardless of whether
+   * a Drive match exists.
+   */
+  creativeFile: DriveFile | null;
 }
 
 function money(value: number): number {
@@ -129,6 +139,10 @@ export function classifyWinner(
  *   `MetaService.getOptimizationMap`
  * @param eventTypeMap - ad set ID → raw `promoted_object.custom_event_type`, from
  *   `MetaService.getAdSetEventTypeMap` — only consulted when `window.excludeRegistrationOptimized`
+ * @param creativeNameMap - ad ID → creative `name`, from `MetaService.getAdCreativeNameMap` —
+ *   used to look up each ad's original file in `driveIndex`
+ * @param driveIndex - normalized filename → Drive file, from
+ *   `buildDriveCreativeIndex(await GoogleDriveService.listAllFilesRecursive(...))`
  * @param adAccountId - Ad account ID, for building each row's Ads Manager link
  * @param businessId - Meta Business Manager ID that owns the ad account (see
  *   `WONDERLY_BUSINESS_ID` in `growth-config.ts`), also for the Ads Manager link
@@ -140,6 +154,8 @@ export function computeAdWinnerRows(
   statusMap: Record<string, string>,
   optimizationMap: Record<string, string>,
   eventTypeMap: Record<string, string>,
+  creativeNameMap: Record<string, string>,
+  driveIndex: Map<string, DriveFile>,
   adAccountId: string,
   businessId: string,
   window: AdWinnerWindow
@@ -154,6 +170,7 @@ export function computeAdWinnerRows(
     .map((row) => {
       const metrics = parseInsightMetrics(row, optimizationMap);
       const cpl = metrics.results > 0 ? money(metrics.cost_per_result) : null;
+      const creativeName = creativeNameMap[row.ad_id];
 
       return {
         adId: row.ad_id,
@@ -164,6 +181,7 @@ export function computeAdWinnerRows(
         spend: money(metrics.spend),
         status: statusMap[row.ad_id] ?? '',
         winner: classifyWinner(metrics.results, cpl, window.minResults, window.cplCap),
+        creativeFile: creativeName ? (matchDriveCreative(creativeName, driveIndex) ?? null) : null,
       };
     })
     .sort((a, b) => b.spend - a.spend);
@@ -179,9 +197,12 @@ function escapeForFormula(value: string): string {
  * `AD_WINNERS_HEADERS`): one row per ad plus a `TOTAL` row.
  *
  * `AD_NAME` is written as a `HYPERLINK` formula (via `USER_ENTERED` input, same as the rest
- * of the sheet's writes) so each name opens straight to that ad in Meta Ads Manager. `TOTAL`
- * sums Results and Spend and derives CPL from the totals (spend ÷ results) rather than
- * averaging each row's CPL, matching the original sheet's TOTAL row.
+ * of the sheet's writes) so each name opens straight to that ad in Meta Ads Manager.
+ * `CREATIVE_FILE` is a separate `HYPERLINK` to the ad's original file in the "Wonderly ads"
+ * Drive folder when {@link computeAdWinnerRows} found a confident match, or a blank cell
+ * otherwise (never a guess). `TOTAL` sums Results and Spend and derives CPL from the totals
+ * (spend ÷ results) rather than averaging each row's CPL, matching the original sheet's
+ * TOTAL row.
  *
  * @param rows - Winner rows from {@link computeAdWinnerRows}
  */
@@ -193,6 +214,9 @@ export function toAdWinnerValues(rows: AdWinnerRow[]): (string | number)[][] {
     r.spend,
     r.status,
     r.winner,
+    r.creativeFile
+      ? `=HYPERLINK("${GoogleDriveService.fileLink(r.creativeFile.id)}", "${escapeForFormula(r.creativeFile.name)}")`
+      : '',
   ]);
 
   const totals = rows.reduce(
@@ -207,6 +231,7 @@ export function toAdWinnerValues(rows: AdWinnerRow[]): (string | number)[][] {
       totals.results,
       totals.results > 0 ? money(totals.spend / totals.results) : '',
       money(totals.spend),
+      '',
       '',
       '',
     ],

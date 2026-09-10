@@ -85,8 +85,11 @@ When a rule **promotes** a winner, it duplicates the ad into the rule's target "
 
 Weekly cron (`GET /api/cron/ad-winners`) that refreshes the `wonderly_winners` Google Sheet
 with Meta ads ranked by Results and CPL across four rolling windows (Last 7/14/30 Days, All
-Time), flagging `YES`/`Near` winners with a link to each ad in Ads Manager. Set
-`AD_WINNERS_SHEET_ID` (and `GOOGLE_SERVICE_ACCOUNT_JSON`) to enable — see
+Time), flagging `YES`/`Near` winners with a link to each ad in Ads Manager, plus a link to
+the ad's original creative file in the "Wonderly ads" Drive folder (blank when no confident
+match is found). Set `AD_WINNERS_SHEET_ID` (and `GOOGLE_SERVICE_ACCOUNT_JSON`) to enable —
+and share the "Wonderly ads" Drive folder with that same service account's `client_email` as
+a Viewer for the creative-file link — see
 [`CLAUDE.md`](./CLAUDE.md#ad-winners-sheet-wonderly_winners) for the tab/threshold model.
 
 ## Docs

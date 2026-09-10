@@ -7,6 +7,7 @@ import {
   toAdWinnerValues,
   type AdWinnerWindow,
 } from '@/lib/ad-winners';
+import { buildDriveCreativeIndex } from '@/lib/drive-creative-match';
 import type { MetaInsightsRow } from '@/types';
 
 const LAST_7_DAYS = AD_WINNER_WINDOWS.find((w) => w.tabName === 'Last 7 Days') as AdWinnerWindow;
@@ -35,6 +36,9 @@ function makeRow(overrides: Partial<MetaInsightsRow> & { results?: number } = {}
 }
 
 const OPTIMIZATION_MAP = { 'adset-1': 'offsite_conversion.fb_pixel_custom' };
+/** Empty by default — most tests aren't exercising the Drive-matching column. */
+const NO_CREATIVE_NAMES = {};
+const EMPTY_DRIVE_INDEX = new Map();
 
 describe('classifyWinner', () => {
   it('is blank below the Results floor, regardless of CPL', () => {
@@ -77,6 +81,8 @@ describe('computeAdWinnerRows', () => {
       { 'ad-1': 'ACTIVE' },
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '1403742814420018',
       '1630682394838664',
       LAST_7_DAYS
@@ -102,6 +108,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -117,6 +125,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -137,6 +147,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -151,6 +163,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -167,6 +181,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       { 'adset-1': 'COMPLETE_REGISTRATION' },
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       ALL_TIME
@@ -179,6 +195,8 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       { 'adset-1': 'COMPLETE_REGISTRATION' },
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -195,12 +213,74 @@ describe('computeAdWinnerRows', () => {
       {},
       OPTIMIZATION_MAP,
       { 'adset-1': 'START_TRIAL' },
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       ALL_TIME
     );
 
     expect(allTimeRows).toHaveLength(1);
+  });
+
+  it('matches an ad to its Drive creative file when the names normalize equal', () => {
+    const driveIndex = buildDriveCreativeIndex([
+      { id: 'file-1', name: 'Brad - VID - 9.4 - Growth backing v1 - Home Addition - 3.2.mov' },
+    ]);
+
+    const rows = computeAdWinnerRows(
+      [makeRow({ results: 5, spend: '100' })],
+      {},
+      OPTIMIZATION_MAP,
+      {},
+      {
+        'ad-1':
+          'Brad - VID - 09_04 _ Growth backing v1 _ Home Additions - 3.2 2026-09-04-17e6d43d9c71fa1136ea07a9687f5bb8',
+      },
+      driveIndex,
+      '123',
+      '456',
+      LAST_7_DAYS
+    );
+
+    expect(rows[0].creativeFile).toEqual({
+      id: 'file-1',
+      name: 'Brad - VID - 9.4 - Growth backing v1 - Home Addition - 3.2.mov',
+    });
+  });
+
+  it('leaves creativeFile null when no ad-level creative name is known', () => {
+    const rows = computeAdWinnerRows(
+      [makeRow({ results: 5, spend: '100' })],
+      {},
+      OPTIMIZATION_MAP,
+      {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
+      '123',
+      '456',
+      LAST_7_DAYS
+    );
+
+    expect(rows[0].creativeFile).toBeNull();
+  });
+
+  it('leaves creativeFile null rather than guess when no confident match is found', () => {
+    const driveIndex = buildDriveCreativeIndex([{ id: 'file-1', name: 'Totally Unrelated.png' }]);
+
+    const rows = computeAdWinnerRows(
+      [makeRow({ results: 5, spend: '100' })],
+      {},
+      OPTIMIZATION_MAP,
+      {},
+      { 'ad-1': 'Some Other Creative 2026-09-04-17e6d43d9c71fa1136ea07a9687f5bb8' },
+      driveIndex,
+      '123',
+      '456',
+      LAST_7_DAYS
+    );
+
+    expect(rows[0].creativeFile).toBeNull();
   });
 });
 
@@ -211,6 +291,8 @@ describe('toAdWinnerValues', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -223,6 +305,42 @@ describe('toAdWinnerValues', () => {
     );
   });
 
+  it('writes CREATIVE_FILE as a HYPERLINK to the matched Drive file, or blank when unmatched', () => {
+    const driveIndex = buildDriveCreativeIndex([{ id: 'file-1', name: 'Ad Creative.mov' }]);
+
+    const matchedRows = computeAdWinnerRows(
+      [makeRow({ results: 5, spend: '100' })],
+      {},
+      OPTIMIZATION_MAP,
+      {},
+      { 'ad-1': 'Ad Creative 2026-09-04-17e6d43d9c71fa1136ea07a9687f5bb8' },
+      driveIndex,
+      '123',
+      '456',
+      LAST_7_DAYS
+    );
+    const [matchedRow] = toAdWinnerValues(matchedRows);
+
+    expect(matchedRow[6]).toBe(
+      '=HYPERLINK("https://drive.google.com/file/d/file-1/view", "Ad Creative.mov")'
+    );
+
+    const unmatchedRows = computeAdWinnerRows(
+      [makeRow({ results: 5, spend: '100' })],
+      {},
+      OPTIMIZATION_MAP,
+      {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
+      '123',
+      '456',
+      LAST_7_DAYS
+    );
+    const [unmatchedRow] = toAdWinnerValues(unmatchedRows);
+
+    expect(unmatchedRow[6]).toBe('');
+  });
+
   it('appends a TOTAL row summing results/spend and deriving CPL from the totals', () => {
     const rows = computeAdWinnerRows(
       [
@@ -232,6 +350,8 @@ describe('toAdWinnerValues', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -240,7 +360,7 @@ describe('toAdWinnerValues', () => {
     const values = toAdWinnerValues(rows);
     const totalRow = values[values.length - 1];
 
-    expect(totalRow).toEqual(['TOTAL', 8, 137.5, 1100, '', '']);
+    expect(totalRow).toEqual(['TOTAL', 8, 137.5, 1100, '', '', '']);
   });
 
   it('blanks CPL in the TOTAL row when there are zero total results', () => {
@@ -249,6 +369,8 @@ describe('toAdWinnerValues', () => {
       {},
       OPTIMIZATION_MAP,
       {},
+      NO_CREATIVE_NAMES,
+      EMPTY_DRIVE_INDEX,
       '123',
       '456',
       LAST_7_DAYS
@@ -256,6 +378,6 @@ describe('toAdWinnerValues', () => {
 
     const values = toAdWinnerValues(rows);
 
-    expect(values[values.length - 1]).toEqual(['TOTAL', 0, '', 50, '', '']);
+    expect(values[values.length - 1]).toEqual(['TOTAL', 0, '', 50, '', '', '']);
   });
 });

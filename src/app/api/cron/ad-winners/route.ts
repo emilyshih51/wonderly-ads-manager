@@ -8,9 +8,12 @@
  *
  * Started as a sheet Emily rebuilt by hand from Ads Manager every week; this cron keeps it
  * current going forward — same columns, same per-window thresholds, same Ads Manager link
- * on every ad name. See `src/lib/ad-winners.ts` for the windows/thresholds and CLAUDE.md's
- * "Ad Winners Sheet" section for the full model (including two inferred rules worth
- * double-checking with Emily: the "Near" cutoff and the All Time trial/registration split).
+ * on every ad name, plus a CREATIVE_FILE column linking each ad to its original file in the
+ * "Wonderly ads" Drive folder (blank when no confident match is found — see
+ * `src/lib/drive-creative-match.ts`). See `src/lib/ad-winners.ts` for the windows/thresholds
+ * and CLAUDE.md's "Ad Winners Sheet" section for the full model (including two inferred
+ * rules worth double-checking with Emily: the "Near" cutoff and the All Time
+ * trial/registration split).
  *
  * Auth follows the existing cron pattern: `Authorization: Bearer <CRON_SECRET>` when
  * CRON_SECRET is set; 503 in production when it is not.
@@ -25,7 +28,13 @@ import {
   computeAdWinnerRows,
   toAdWinnerValues,
 } from '@/lib/ad-winners';
-import { WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID } from '@/lib/growth-config';
+import { buildDriveCreativeIndex } from '@/lib/drive-creative-match';
+import {
+  WONDERLY_AD_ACCOUNT_ID,
+  WONDERLY_ADS_DRIVE_ROOT_FOLDER_ID,
+  WONDERLY_BUSINESS_ID,
+} from '@/lib/growth-config';
+import { GoogleDriveService } from '@/services/google-drive';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { createLogger } from '@/services/logger';
 import { MetaService } from '@/services/meta';
@@ -57,14 +66,34 @@ export async function GET(request: Request) {
   try {
     // Shared across every window: which action type counts as a "Result" per ad set (for
     // Results/CPL), the raw pixel event per ad set (trial vs registration, for the All Time
-    // exclusion), and each ad's current effective_status (so paused/campaign-paused/
-    // adset-paused ads still show up instead of silently dropping off the report).
-    const [optimizationMap, eventTypeMap, statusMap] = await Promise.all([
-      meta.getOptimizationMap(),
-      meta.getAdSetEventTypeMap(),
-      meta.getAdEffectiveStatusMap(),
-    ]);
+    // exclusion), each ad's current effective_status (so paused/campaign-paused/
+    // adset-paused ads still show up instead of silently dropping off the report), each ad's
+    // creative name (to look up its source file), and the Drive folder tree that source file
+    // is looked up against.
+    //
+    // The Drive lookup is best-effort: if the service account hasn't been shared on the
+    // Drive folder yet (or Drive is briefly unavailable), don't fail the whole refresh over
+    // a column that's allowed to just come back blank — log it and fall back to an empty
+    // index, so every CREATIVE_FILE cell is blank rather than the sheet not updating at all.
+    const [optimizationMap, eventTypeMap, statusMap, creativeNameMap, driveFiles] =
+      await Promise.all([
+        meta.getOptimizationMap(),
+        meta.getAdSetEventTypeMap(),
+        meta.getAdEffectiveStatusMap(),
+        meta.getAdCreativeNameMap(),
+        GoogleDriveService.fromEnv()
+          .listAllFilesRecursive(WONDERLY_ADS_DRIVE_ROOT_FOLDER_ID)
+          .catch((driveError) => {
+            logger.error(
+              'Drive creative index unavailable — CREATIVE_FILE will be blank this run',
+              driveError
+            );
 
+            return [];
+          }),
+      ]);
+
+    const driveIndex = buildDriveCreativeIndex(driveFiles);
     const windowCounts: Record<string, number> = {};
 
     for (const window of AD_WINNER_WINDOWS) {
@@ -77,6 +106,8 @@ export async function GET(request: Request) {
         statusMap,
         optimizationMap,
         eventTypeMap,
+        creativeNameMap,
+        driveIndex,
         WONDERLY_AD_ACCOUNT_ID,
         WONDERLY_BUSINESS_ID,
         window

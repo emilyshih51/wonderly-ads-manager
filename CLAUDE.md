@@ -426,16 +426,49 @@ in Meta Ads Manager, via `buildAdsManagerAdLink` — the link shape, including
 `business_id`/`ads_manager_write_regions`, was confirmed against a real link pulled from the
 sheet, not guessed at; see `src/lib/ads-manager-link.ts`), `RESULTS`, `CPL`, `TOTAL_SPEND`, `STATUS` (Meta
 `effective_status` — `ACTIVE`/`PAUSED`/`CAMPAIGN_PAUSED`/`ADSET_PAUSED`/etc., from
-`MetaService.getAdEffectiveStatusMap`), `WINNER` (`YES` / `Near` / blank). Rows are sorted by
-`TOTAL_SPEND` descending, with a bold `TOTAL` row appended (Results and Spend summed; CPL
-re-derived from the totals, not averaged per-row). **Unlike `getFilteredInsights`, this cron
-does NOT apply `ACTIVE_FILTER`** — paused/campaign-paused/adset-paused ads stay on the report
-so a strong performer that got paused for an unrelated reason doesn't just vanish.
+`MetaService.getAdEffectiveStatusMap`), `WINNER` (`YES` / `Near` / blank), `CREATIVE_FILE` (a
+`HYPERLINK` to the ad's original source file in the "Wonderly ads" Drive folder, or blank when
+no confident match is found — see below). Rows are sorted by `TOTAL_SPEND` descending, with a
+bold `TOTAL` row appended (Results and Spend summed; CPL re-derived from the totals, not
+averaged per-row). **Unlike `getFilteredInsights`, this cron does NOT apply `ACTIVE_FILTER`**
+— paused/campaign-paused/adset-paused ads stay on the report so a strong performer that got
+paused for an unrelated reason doesn't just vanish.
 
 The pre-existing `"+ "` prefix and `" [Winner Copy]"` suffix seen on some ad names are **not**
 reproduced by this cron — they're already part of the ad's real name in Meta once the
 automation engine's promote action has touched it (see "Promoting ads" above), so they come
 through for free via `ad_name`.
+
+### `CREATIVE_FILE` — linking an ad back to its Drive source file
+
+Separate from the `AD_NAME` Ads Manager link, `CREATIVE_FILE` links to the ad's original
+creative file in the "Wonderly ads" Drive folder (root ID
+`WONDERLY_ADS_DRIVE_ROOT_FOLDER_ID` in `src/lib/growth-config.ts`). Three pieces:
+
+- **`GoogleDriveService`** (`src/services/google-drive/index.ts`) — same service account and
+  `GOOGLE_SERVICE_ACCOUNT_JSON` as `GoogleSheetsService`, just with the `drive.readonly` scope
+  instead of `spreadsheets`. **The "Wonderly ads" Drive folder must be shared with that same
+  service account's `client_email` (Viewer is enough)** — without it, `listAllFilesRecursive`
+  fails and the cron logs it but still runs, leaving `CREATIVE_FILE` blank on every row rather
+  than failing the whole refresh. `listAllFilesRecursive` walks every subfolder under the root
+  (dated batch folders → "Campaign N" → "Ad set N" → files) and returns every file's `id`/`name`.
+- **`MetaService.getAdCreativeNameMap`** — ad ID → the ad's creative `name` field. When a
+  creative's media was uploaded from a Drive file, Meta stores that original filename
+  (sanitized, extension stripped) plus a trailing `" YYYY-MM-DD-<32-hex-hash>"` upload-time
+  suffix in this field — confirmed to hold for both video and static-image creatives. (Note:
+  `ads_get_ad_images`'s own `name` field is Meta's internal CDN filename and is useless for
+  this — don't use it here.)
+- **`src/lib/drive-creative-match.ts`** (`buildDriveCreativeIndex` + `matchDriveCreative`) —
+  matches the two names on a normalized token form rather than exact string equality, because
+  Meta's sanitizer drifts on punctuation-vs-underscore and zero-padding (e.g. Drive's `9.4`
+  becomes Meta's `09_04`) and pluralization (Drive's `Addition` becomes Meta's `Additions`).
+  Normalization: strip the extension (Drive side) / upload-time suffix (Meta side), lowercase,
+  split on runs of non-alphanumeric characters, strip leading zeros off purely-numeric tokens,
+  and fold a trailing "s" off longer tokens. **Exact match on the normalized form only — no
+  fuzzy/best-effort matching beyond that** — per Emily's instruction, an ad with no confident
+  match gets a blank `CREATIVE_FILE` cell, never a guess.
+- Wired into `GET /api/cron/ad-winners`: the Drive tree is walked once per run (not once per
+  ad) and the resulting index is reused across all four windows.
 
 ### Two inferred rules — verify with Emily if a row ever looks wrong
 

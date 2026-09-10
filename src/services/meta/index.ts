@@ -187,15 +187,35 @@ export class MetaService {
   }
 
   /**
-   * Internal helper that fetches ad sets once and builds both the ad-set-keyed
-   * and campaign-keyed optimization maps in a single pass.
+   * Build a map of ad set ID → raw `promoted_object.custom_event_type` (e.g. `START_TRIAL`,
+   * `COMPLETE_REGISTRATION`) — the specific pixel event an ad set optimizes for, before it
+   * collapses into the single `offsite_conversion.fb_pixel_custom` action type used for
+   * Results/CPL counting (see `fetchOptimizationMaps`).
+   *
+   * Used only by the Ad Winners "All Time" tab, to exclude registration-optimized ads from
+   * a CPL comparison meant for trial-optimized ones. Not populated for ad sets without a
+   * custom event type (e.g. `LEAD_GENERATION` goals) — those simply have no entry.
+   *
+   * @returns `{ [adsetId]: customEventType }`
+   */
+  async getAdSetEventTypeMap(): Promise<Record<string, string>> {
+    const { eventTypeMap } = await this.fetchOptimizationMaps();
+
+    return eventTypeMap;
+  }
+
+  /**
+   * Internal helper that fetches ad sets once and builds the ad-set-keyed, campaign-keyed,
+   * and raw-event-type maps in a single pass.
    */
   private async fetchOptimizationMaps(): Promise<{
     adsetMap: Record<string, string>;
     campaignMap: Record<string, string>;
+    eventTypeMap: Record<string, string>;
   }> {
     const adsetMap: Record<string, string> = {};
     const campaignMap: Record<string, string> = {};
+    const eventTypeMap: Record<string, string> = {};
     let after: string | undefined;
 
     // Paginate through all ad sets to handle accounts with >200 ad sets
@@ -225,6 +245,8 @@ export class MetaService {
       for (const adset of data.data || []) {
         const goal = adset.optimization_goal as string;
         const promoted = adset.promoted_object;
+
+        if (promoted?.custom_event_type) eventTypeMap[adset.id] = promoted.custom_event_type;
 
         // Meta API v21+ uses OUTCOME_* names alongside legacy names
         const isOffsite =
@@ -267,7 +289,7 @@ export class MetaService {
       if (!after) break;
     }
 
-    return { adsetMap, campaignMap };
+    return { adsetMap, campaignMap, eventTypeMap };
   }
 
   /**
@@ -338,6 +360,44 @@ export class MetaService {
         limit: '100',
       },
     });
+  }
+
+  /**
+   * Build a map of ad ID → Meta `effective_status` (e.g. `ACTIVE`, `PAUSED`,
+   * `CAMPAIGN_PAUSED`, `ADSET_PAUSED`) for every ad in the account.
+   *
+   * Used by the Ad Winners sheet, which — unlike the `ACTIVE_FILTER`-gated automation
+   * queries in `getFilteredInsights` — deliberately keeps paused/campaign-paused/adset-paused
+   * ads visible, so a strong performer that got paused for an unrelated reason doesn't just
+   * disappear from the report.
+   *
+   * @returns `{ [adId]: effectiveStatus }`
+   */
+  async getAdEffectiveStatusMap(): Promise<Record<string, string>> {
+    const statusMap: Record<string, string> = {};
+    let after: string | undefined;
+
+    // Paginate through all ads to handle accounts with >200 ads.
+    for (;;) {
+      const params: Record<string, string> = { fields: 'id,effective_status', limit: '200' };
+
+      if (after) params.after = after;
+
+      const data = (await this.request(`/act_${this.adAccountId}/ads`, { params })) as {
+        data?: Array<{ id: string; effective_status?: string }>;
+        paging?: { cursors?: { after?: string }; next?: string };
+      };
+
+      for (const ad of data.data || []) {
+        if (ad.effective_status) statusMap[ad.id] = ad.effective_status;
+      }
+
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
+    }
+
+    return statusMap;
   }
 
   /**

@@ -81,6 +81,14 @@ Visual flow editor for creating rules that automatically pause, activate, or pro
 
 When a rule **promotes** a winner, it duplicates the ad into the rule's target "winners" ad set. By default it also pauses the original, but each promote rule has a **"Pause the original winning ad"** toggle — turn it off to keep the winner running in both places. Every promoted original is renamed with a leading `+ ` so it's easy to spot in Ads Manager, and any ad whose name already starts with `+` is skipped on future runs. This means an ad is never promoted twice — even when you choose to leave the original running.
 
+### Ad Winners Sheet
+
+Weekly cron (`GET /api/cron/ad-winners`) that refreshes the `wonderly_winners` Google Sheet
+with Meta ads ranked by Results and CPL across four rolling windows (Last 7/14/30 Days, All
+Time), flagging `YES`/`Near` winners with a link to each ad in Ads Manager. Set
+`AD_WINNERS_SHEET_ID` (and `GOOGLE_SERVICE_ACCOUNT_JSON`) to enable — see
+[`CLAUDE.md`](./CLAUDE.md#ad-winners-sheet-wonderly_winners) for the tab/threshold model.
+
 ## Docs
 
 - [`CLAUDE.md`](./CLAUDE.md) — architecture, conventions, security rules, known issues (read this first)

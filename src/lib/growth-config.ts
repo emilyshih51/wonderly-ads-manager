@@ -8,6 +8,14 @@
 export const WONDERLY_AD_ACCOUNT_ID = '1403742814420018';
 
 /**
+ * The Meta Business Manager ID that owns `WONDERLY_AD_ACCOUNT_ID` ("Wonderly Marketing").
+ * Ads Manager's per-ad deep link (`buildAdsManagerAdLink`) requires this alongside the
+ * account ID and ad ID — omitting it still resolves, but not to the same standalone edit
+ * view a `business_id`-qualified link opens.
+ */
+export const WONDERLY_BUSINESS_ID = '1630682394838664';
+
+/**
  * Fixed backfill anchor: all Growth data is sourced and shown from this date forward
  * (first week the sales pipeline data exists). The fetch window is derived from it.
  */

@@ -97,6 +97,31 @@ describe('MetaService', () => {
     });
   });
 
+  describe('getObjectName()', () => {
+    it('GETs the object and returns its name field', async () => {
+      const fetchFn = makeFetch({ name: '+ Winning Ad' });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      const name = await svc.getObjectName('ad-id-777');
+
+      const [url, options] = fetchFn.mock.calls[0] as [string, RequestInit | undefined];
+
+      expect(url).toContain('/ad-id-777');
+      expect(url).toContain('fields=name');
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(name).toBe('+ Winning Ad');
+    });
+
+    it('returns an empty string when Meta omits the name field', async () => {
+      const fetchFn = makeFetch({});
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      const name = await svc.getObjectName('ad-id-777');
+
+      expect(name).toBe('');
+    });
+  });
+
   describe('duplicateAd()', () => {
     it('throws when source ad has no creative', async () => {
       const fetchFn = makeFetch({ id: 'ad-1', name: 'My Ad' });

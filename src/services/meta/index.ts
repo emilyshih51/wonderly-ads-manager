@@ -601,6 +601,28 @@ export class MetaService {
   }
 
   /**
+   * Fetch an object's current live `name` directly from the Graph API object,
+   * bypassing any Insights-derived value.
+   *
+   * Used by the promote action to re-confirm an ad isn't already marked as
+   * promoted right before duplicating it. The per-row `ad_name` returned by
+   * `getFilteredInsights()` can lag behind a very recent rename for an ad that
+   * went quiet and only just requalified — the `+` de-dup marker only works
+   * against the live name, so the promote flow re-reads it here rather than
+   * trusting the Insights snapshot.
+   *
+   * @param objectId - Meta object ID (campaign, ad set, or ad)
+   * @returns The object's current `name` field, or `''` if Meta returns none
+   */
+  async getObjectName(objectId: string): Promise<string> {
+    const data = await this.request<{ name?: string }>(`/${objectId}`, {
+      params: { fields: 'name' },
+    });
+
+    return data.name ?? '';
+  }
+
+  /**
    * Update the daily budget for a campaign or ad set.
    *
    * Meta represents budgets in cents (integer, account currency subunit).

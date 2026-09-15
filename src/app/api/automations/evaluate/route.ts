@@ -714,6 +714,41 @@ async function evaluateRule(
         actionResult.action = 'activated';
         if (actionCap) actionCap.executed++;
       } else if (actionType === 'promote') {
+        // Re-confirm against the *live* ad name right before writing anything.
+        // The `already_promoted` skip earlier in this loop trusts `entityName`,
+        // which comes from getFilteredInsights() — an Insights row whose
+        // `ad_name` can lag behind a very recent rename for an ad that went
+        // quiet and only just requalified. Confirmed in production: a winner
+        // marked "+ ..." on one run got promoted again weeks later because the
+        // insights snapshot that fed this run still showed the pre-rename name.
+        // A direct object read can't have that lag, so it's the last word
+        // before we duplicate or rename anything.
+        if (!dryRun) {
+          try {
+            const liveName = await meta.getObjectName(entityId);
+
+            if (isPromotedName(liveName)) {
+              actionResult.action = 'skipped';
+              actionResult.skipped = 'already_promoted';
+              actionResult.skip_reason =
+                'Live ad name already carries the promoted marker (insights data was stale)';
+              logger.info(
+                `Skipping promote for "${entityName}" (${entityId}) — live name is already marked`,
+                { rule: rule.name, liveName }
+              );
+              results.push(actionResult);
+              continue;
+            }
+          } catch (liveNameError) {
+            // Can't verify — fall back to the insights-derived check already
+            // done above rather than blocking the promotion on a read error.
+            logger.warn(
+              'Failed to verify live ad name before promoting — proceeding with insights data',
+              { entityId, entityName, error: String(liveNameError) }
+            );
+          }
+        }
+
         // Default to pausing the original winner (legacy behaviour). The pause
         // is skipped when pause_original is explicitly false, and when the
         // lifetime-conversion guardrail protects this ad — the guardrail
@@ -791,6 +826,10 @@ async function evaluateRule(
                 entityName,
                 error: String(renameError),
               });
+              actionResult.marked_promoted = false;
+              actionResult.warning = actionResult.warning
+                ? `${actionResult.warning}; failed to add "+" marker — this ad may be promoted again next run`
+                : 'Failed to add "+" marker to the original ad — it may be promoted again next run';
             }
           } else {
             // Every target duplication failed — leave the winner untouched.

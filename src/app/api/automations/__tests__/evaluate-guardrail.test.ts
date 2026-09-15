@@ -12,6 +12,7 @@ const updateStatus = vi.fn();
 const updateBudget = vi.fn();
 const duplicateAd = vi.fn();
 const updateName = vi.fn();
+const getObjectName = vi.fn();
 const getBudget = vi.fn();
 const getFilteredInsights = vi.fn();
 const getAdInsights = vi.fn();
@@ -38,6 +39,7 @@ vi.mock('@/services/meta', () => ({
       getBudget,
       duplicateAd,
       updateName,
+      getObjectName,
     }),
   },
 }));
@@ -138,6 +140,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   getBudget.mockResolvedValue(10000);
   getAdInsights.mockResolvedValue({ data: [] });
+  // Live name matches the insights row's name by default (i.e. not yet
+  // promoted) — individual tests override this to simulate a stale insights
+  // snapshot vs. the live object.
+  getObjectName.mockResolvedValue('Test Ad');
 });
 
 describe('lifetime-conversion guardrail', () => {
@@ -280,6 +286,28 @@ describe('lifetime-conversion guardrail', () => {
       converter_protected: true,
       lifetime_results: 6,
     });
+  });
+
+  it('skips promoting a winner whose live name is already marked, even if the insights row looks unmarked', async () => {
+    // Insights returned a stale, pre-rename name ("Test Ad") for an ad that
+    // went quiet and just requalified, but the live object already carries
+    // the "+" marker from an earlier promotion — this is the bug seen in
+    // production where an already-promoted winner got duplicated a second
+    // time weeks later.
+    mockInsights([adRow(0)], [adRow(6)]);
+    getObjectName.mockResolvedValue('+ Test Ad');
+
+    const { results } = await evaluate(
+      pauseRule({
+        action_type: 'promote',
+        target_adset_id: 'winners-1',
+        pause_original: 'true',
+      })
+    );
+
+    expect(duplicateAd).not.toHaveBeenCalled();
+    expect(updateName).not.toHaveBeenCalled();
+    expect(results[0]).toMatchObject({ action: 'skipped', skipped: 'already_promoted' });
   });
 
   it('does not run the extra lifetime query for a non-destructive rule', async () => {

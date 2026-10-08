@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireSession } from '@/lib/session';
 import {
+  AutopauseRateLimitError,
   envKillSwitch,
   loadRuns,
   loadSettings,
@@ -66,6 +67,10 @@ export async function POST() {
     return NextResponse.json({ run });
   } catch (error) {
     logger.error('Preview run failed', error);
+
+    if (error instanceof AutopauseRateLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Run failed' },

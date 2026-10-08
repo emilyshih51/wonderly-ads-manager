@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server';
 
 import { envKillSwitch, loadSettings, runAutopause } from '@/lib/winners-autopause-runner';
 import { createLogger } from '@/services/logger';
+import { createSlackService } from '@/services/slack';
 
 const logger = createLogger('WinnersAutopauseCron');
 
@@ -58,6 +59,21 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     logger.error('Winners auto-pause run failed — nothing paused', error);
+
+    // Say so in Slack, so a missed day isn't silent.
+    const channel =
+      process.env.SLACK_AUTOPAUSE_CHANNEL || process.env.SLACK_NOTIFICATION_CHANNEL || '';
+
+    if (channel) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+
+      await createSlackService()
+        .postMessage(
+          channel,
+          `*Winners auto-pause couldn't run today.* Nothing was paused.\n${reason}`
+        )
+        .catch(() => null);
+    }
 
     return NextResponse.json({ error: 'Run failed' }, { status: 500 });
   }

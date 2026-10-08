@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { OctagonX, Play, RefreshCw } from 'lucide-react';
+import { OctagonX, Play, RefreshCw, Send } from 'lucide-react';
 
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
@@ -100,7 +100,14 @@ export default function AutopausePage() {
 
   const runNow = useMutation({
     mutationFn: () => apiFetch<{ run: StoredRun }>('/api/winners-autopause', { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+    onSuccess: () => {
+      sendSlack.reset();
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    },
+  });
+
+  const sendSlack = useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean }>('/api/winners-autopause/slack', { method: 'POST' }),
   });
 
   const settings = data?.settings;
@@ -142,19 +149,35 @@ export default function AutopausePage() {
         title="Winners Auto-pause"
         description="Checks every ad in the Winners campaign once a day and pauses the ones that fail the rules."
       >
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => runNow.mutate()}
-          disabled={runNow.isPending || !settings}
-        >
-          {runNow.isPending ? (
-            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-4 w-4" />
-          )}
-          Run check now
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runNow.mutate()}
+            disabled={runNow.isPending || !settings}
+          >
+            {runNow.isPending ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="mr-2 h-4 w-4" />
+            )}
+            Run check now
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => sendSlack.mutate()}
+            disabled={sendSlack.isPending || !data?.runs?.length}
+            title="Post the latest check to Slack"
+          >
+            {sendSlack.isPending ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            {sendSlack.isSuccess ? 'Sent to Slack' : 'Send to Slack'}
+          </Button>
+        </div>
       </Header>
 
       <div className="space-y-6 p-4 md:p-8">
@@ -313,6 +336,9 @@ export default function AutopausePage() {
 
             {runNow.error && (
               <p className="mb-3 text-sm text-red-500">{(runNow.error as Error).message}</p>
+            )}
+            {sendSlack.error && (
+              <p className="mb-3 text-sm text-red-500">{(sendSlack.error as Error).message}</p>
             )}
 
             {!latest ? (

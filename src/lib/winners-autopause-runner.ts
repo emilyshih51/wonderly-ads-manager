@@ -219,6 +219,32 @@ export async function withRateLimitRetry<T>(
   }
 }
 
+/** Slack channel for the summary, or '' when none is configured. */
+export function autopauseSlackChannel(): string {
+  return process.env.SLACK_AUTOPAUSE_CHANNEL || process.env.SLACK_NOTIFICATION_CHANNEL || '';
+}
+
+/**
+ * Post a run's summary to Slack. Used by the daily cron and by "Send to Slack" on the page.
+ * Returns false when no channel is set or Slack rejected the post (e.g. bot not in channel).
+ */
+export async function postRunToSlack(run: StoredRun): Promise<boolean> {
+  const channel = autopauseSlackChannel();
+
+  if (!channel) return false;
+
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  let text = formatSlackSummary(run, base ? `${base}/autopause` : undefined);
+
+  if (run.trigger === 'preview') text += '\n_Sent by hand from the Auto-pause page_';
+  if (run.note) text += `\n_${run.note}_`;
+  for (const err of run.errors) text += `\n:x: Couldn't pause ${err.adId}: ${err.error}`;
+
+  const result = await createSlackService().postMessage(channel, text);
+
+  return result !== null;
+}
+
 /**
  * Run the check. `cron` may pause (unless dry run / stopped); `preview` never pauses
  * and never posts to Slack — it only refreshes the table on the page.
@@ -279,20 +305,9 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
   await saveRun(run);
 
   if (trigger === 'cron') {
-    const channel =
-      process.env.SLACK_AUTOPAUSE_CHANNEL || process.env.SLACK_NOTIFICATION_CHANNEL || '';
+    const posted = await postRunToSlack(run);
 
-    if (channel) {
-      const base = process.env.NEXT_PUBLIC_APP_URL;
-      let text = formatSlackSummary(run, base ? `${base}/autopause` : undefined);
-
-      if (run.note) text += `\n_${run.note}_`;
-      for (const err of run.errors) text += `\n:x: Couldn't pause ${err.adId}: ${err.error}`;
-
-      await createSlackService().postMessage(channel, text);
-    } else {
-      logger.warn('No Slack channel configured for the auto-pause summary');
-    }
+    if (!posted) logger.warn('Auto-pause summary was not posted to Slack');
   }
 
   return run;

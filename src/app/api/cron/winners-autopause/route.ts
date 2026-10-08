@@ -13,7 +13,12 @@
 
 import { NextResponse } from 'next/server';
 
-import { envKillSwitch, loadSettings, runAutopause } from '@/lib/winners-autopause-runner';
+import {
+  autopauseSlackChannel,
+  envKillSwitch,
+  loadSettings,
+  runAutopause,
+} from '@/lib/winners-autopause-runner';
 import { createLogger } from '@/services/logger';
 import { createSlackService } from '@/services/slack';
 
@@ -61,8 +66,7 @@ export async function GET(request: Request) {
     logger.error('Winners auto-pause run failed — nothing paused', error);
 
     // Say so in Slack, so a missed day isn't silent.
-    const channel =
-      process.env.SLACK_AUTOPAUSE_CHANNEL || process.env.SLACK_NOTIFICATION_CHANNEL || '';
+    const channel = autopauseSlackChannel();
 
     if (channel) {
       const reason = error instanceof Error ? error.message : 'Unknown error';

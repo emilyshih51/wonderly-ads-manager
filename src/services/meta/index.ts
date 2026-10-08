@@ -982,6 +982,90 @@ export class MetaService {
   }
 
   /**
+   * Every ad in one campaign with its current `effective_status` and ad set, paginated.
+   * Used by the Winners auto-pause job to find which ads are live.
+   *
+   * @param campaignId - Meta campaign ID
+   */
+  async getCampaignAds(
+    campaignId: string
+  ): Promise<Array<{ id: string; name: string; adsetId: string; effectiveStatus: string }>> {
+    const ads: Array<{ id: string; name: string; adsetId: string; effectiveStatus: string }> = [];
+    let after: string | undefined;
+
+    for (;;) {
+      const params: Record<string, string> = {
+        fields: 'id,name,adset_id,effective_status',
+        limit: '200',
+      };
+
+      if (after) params.after = after;
+
+      const data = await this.request<{
+        data?: Array<{ id: string; name?: string; adset_id?: string; effective_status?: string }>;
+        paging?: { cursors?: { after?: string }; next?: string };
+      }>(`/${campaignId}/ads`, { params });
+
+      for (const ad of data.data ?? []) {
+        ads.push({
+          id: ad.id,
+          name: ad.name ?? ad.id,
+          adsetId: ad.adset_id ?? '',
+          effectiveStatus: ad.effective_status ?? 'UNKNOWN',
+        });
+      }
+
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
+    }
+
+    return ads;
+  }
+
+  /**
+   * Per-ad, per-day insights for one campaign over a date range (`level=ad`,
+   * `time_increment=1`), following pagination so long-running ads aren't cut off.
+   *
+   * @param campaignId - Meta campaign ID
+   * @param since - First day, `YYYY-MM-DD` (inclusive)
+   * @param until - Last day, `YYYY-MM-DD` (inclusive)
+   */
+  async getCampaignAdDailyInsights(
+    campaignId: string,
+    since: string,
+    until: string
+  ): Promise<MetaInsightsRow[]> {
+    const rows: MetaInsightsRow[] = [];
+    let after: string | undefined;
+
+    for (let page = 0; page < 100; page++) {
+      const params: Record<string, string> = {
+        fields: 'ad_id,ad_name,adset_id,campaign_id,spend,actions',
+        level: 'ad',
+        time_range: JSON.stringify({ since, until }),
+        time_increment: '1',
+        limit: '500',
+      };
+
+      if (after) params.after = after;
+
+      const data = await this.request<{
+        data?: MetaInsightsRow[];
+        paging?: { cursors?: { after?: string }; next?: string };
+      }>(`/${campaignId}/insights`, { params });
+
+      rows.push(...(data.data ?? []));
+
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
+    }
+
+    return rows;
+  }
+
+  /**
    * Get ad account info: name, status, currency, timezone, and amount spent.
    */
   async getAdAccount(): Promise<MetaAdAccountInfo> {

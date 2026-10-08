@@ -227,6 +227,18 @@ Fail-closed invariants to preserve:
 
 Tests: `src/app/api/automations/__tests__/evaluate-guardrail.test.ts`.
 
+### Winners auto-pause (separate from the automations engine)
+
+A daily job that pauses ads in the "Wonderly | Prospecting | Remodeling Winners" campaign when they fail the Poisson rules in the Notion "Winners Campaign Auto-Pause Spec". It is **not** an Automations-page rule: it intentionally pauses ads that have conversions (which the guardrail above forbids for generic rules), needs per-day data and a rolling $2k window, and runs once a day on completed days.
+
+- Rules (pure, tested): `src/lib/winners-autopause.ts` — keep in sync with the Notion spec.
+- I/O + safety rails: `src/lib/winners-autopause-runner.ts`
+- Cron: `GET /api/cron/winners-autopause` (daily, `0 15 * * *` UTC)
+- Page: `/autopause` (on/off switch, dry-run switch, editable numbers, table of every ad). API: `/api/winners-autopause`.
+- Settings live in Redis (`winners_autopause:settings`), runs in `winners_autopause:runs`.
+
+Safety rails to preserve: off switch on the page and env `WINNERS_AUTOPAUSE_DISABLED=1` both stop the cron; dry run is the default; no Redis → dry run; Meta errors → nothing paused; more failures than `maxPausesPerRun` → nothing paused + Slack warning; settings re-read right before pausing; the job only ever pauses (never activates or changes budgets). Slack summary goes to `SLACK_AUTOPAUSE_CHANNEL` (falls back to `SLACK_NOTIFICATION_CHANNEL`).
+
 ### Logging
 
 ```ts

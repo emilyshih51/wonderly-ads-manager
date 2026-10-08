@@ -31,6 +31,12 @@ export interface AutopauseSettings {
   dryRun: boolean;
   /** Campaign the job watches. */
   campaignId: string;
+  /** Rule 1 (Poisson ladder) on/off. */
+  rule1Enabled: boolean;
+  /** Rule 2 (last-$2k fatigue check) on/off. */
+  rule2Enabled: boolean;
+  /** Rule 3 (no pauses before `minDays` days of spend) on/off. */
+  rule3Enabled: boolean;
   /** CPA we're holding ads to, in dollars. */
   targetCpa: number;
   /** Pause when the chance a good ad looks this bad is below this (0.10 = "1 in 10"). */
@@ -52,6 +58,9 @@ export const DEFAULT_AUTOPAUSE_SETTINGS: AutopauseSettings = {
   enabled: true,
   dryRun: true,
   campaignId: WINNERS_CAMPAIGN_ID,
+  rule1Enabled: true,
+  rule2Enabled: true,
+  rule3Enabled: true,
   targetCpa: 250,
   cutoff: 0.1,
   rule2Window: 2000,
@@ -181,6 +190,18 @@ export function lastWindow(
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Rule 1 caps for 0…`upTo` trials — the ladder shown on the page while editing. */
+export function ladder(
+  settings: Pick<AutopauseSettings, 'targetCpa' | 'cutoff'>,
+  upTo = 8
+): Array<{ trials: number; cap: number }> {
+  return Array.from({ length: upTo + 1 }, (_, trials) => ({
+    trials,
+    cap: rule1Cap(trials, settings.targetCpa, settings.cutoff),
+  }));
+}
 
 /** Run Rules 1–3 on one ad's completed days. */
 export function evaluateAd(
@@ -197,7 +218,9 @@ export function evaluateAd(
   const line = rule2Line(settings.rule2Window, targetCpa, cutoff);
   const watchLine = rule2Line(settings.rule2Window, targetCpa, cutoff * 2);
   const window =
-    trials >= settings.rule2MinTrials ? lastWindow(ad.days, settings.rule2Window) : null;
+    settings.rule2Enabled && trials >= settings.rule2MinTrials
+      ? lastWindow(ad.days, settings.rule2Window)
+      : null;
 
   const base: AdEvaluation = {
     adId: ad.adId,
@@ -215,17 +238,21 @@ export function evaluateAd(
   };
 
   // Rule 3 — too early to judge.
-  if (daysWithSpend < settings.minDays) {
-    return { ...base, decision: 'TOO_EARLY', reason: `Only ${daysWithSpend} day of spend` };
+  if (settings.rule3Enabled && daysWithSpend < settings.minDays) {
+    return {
+      ...base,
+      decision: 'TOO_EARLY',
+      reason: `Only ${plural(daysWithSpend, 'day')} of spend`,
+    };
   }
 
   // Rule 1 — too few trials for total spend.
-  if (p1 < cutoff) {
+  if (settings.rule1Enabled && p1 < cutoff) {
     return {
       ...base,
       decision: 'PAUSE',
       rule: 'rule1',
-      reason: `${money(spend)} spent with ${trials} trials (cap for ${trials} is ${money(cap)})`,
+      reason: `${money(spend)} spent with ${plural(trials, 'trial')} (cap is ${money(cap)})`,
     };
   }
 
@@ -240,12 +267,12 @@ export function evaluateAd(
   }
 
   // Close to a line → watch.
-  if (p1 < cutoff * 2) {
+  if (settings.rule1Enabled && p1 < cutoff * 2) {
     return {
       ...base,
       decision: 'WATCH',
       rule: 'rule1',
-      reason: `Close to Rule 1: ${money(spend)} spent, cap for ${trials} trials is ${money(cap)}`,
+      reason: `Close to Rule 1: ${money(spend)} spent, cap for ${plural(trials, 'trial')} is ${money(cap)}`,
     };
   }
 
@@ -273,6 +300,11 @@ export interface AutopauseRun {
   overLimit: boolean;
   /** Why this run made no changes, if it didn't. */
   note?: string;
+  /**
+   * The per-day data this run was judged on. Kept so the page can re-run the rules with
+   * edited numbers ("what if") without calling Meta again. Missing on older runs.
+   */
+  inputs?: Array<{ adId: string; adName: string; days: AdDay[] }>;
 }
 
 const ORDER: Record<AutopauseDecision, number> = { PAUSE: 0, WATCH: 1, TOO_EARLY: 2, OK: 3 };
@@ -308,6 +340,9 @@ export function sanitizeSettings(
     dryRun: s.dryRun !== false,
     campaignId:
       String(s.campaignId || WINNERS_CAMPAIGN_ID).replace(/\D/g, '') || WINNERS_CAMPAIGN_ID,
+    rule1Enabled: s.rule1Enabled !== false,
+    rule2Enabled: s.rule2Enabled !== false,
+    rule3Enabled: s.rule3Enabled !== false,
     targetCpa: num(s.targetCpa, 250, 50, 2000),
     cutoff: num(s.cutoff, 0.1, 0.01, 0.5),
     rule2Window: num(s.rule2Window, 2000, 500, 20000),

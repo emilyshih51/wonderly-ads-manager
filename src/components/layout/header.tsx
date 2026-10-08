@@ -9,9 +9,11 @@ interface HeaderProps {
   title: string;
   description?: string;
   children?: React.ReactNode;
+  /** Show the global date-range picker (default true). Off for pages that don't use it. */
+  showDatePreset?: boolean;
 }
 
-export function Header({ title, description, children }: HeaderProps) {
+export function Header({ title, description, children, showDatePreset = true }: HeaderProps) {
   const tCommon = useTranslations('common');
   const { datePreset, setDatePreset } = useAppStore();
 
@@ -28,12 +30,14 @@ export function Header({ title, description, children }: HeaderProps) {
         )}
       </div>
       <div className="ml-auto flex min-w-0 items-center gap-2">
-        <Select
-          value={datePreset}
-          onChange={setDatePreset}
-          options={DATE_PRESETS.map((p) => ({ label: tCommon(p.labelKey), value: p.value }))}
-          className="h-8 shrink-0 text-xs sm:text-sm"
-        />
+        {showDatePreset && (
+          <Select
+            value={datePreset}
+            onChange={setDatePreset}
+            options={DATE_PRESETS.map((p) => ({ label: tCommon(p.labelKey), value: p.value }))}
+            className="h-8 shrink-0 text-xs sm:text-sm"
+          />
+        )}
         {children}
       </div>
     </div>

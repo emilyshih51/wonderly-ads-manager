@@ -236,7 +236,7 @@ A daily job that pauses ads in the "Wonderly | Prospecting | Remodeling Winners"
 - Rules (pure, tested): `src/lib/winners-autopause.ts` — keep in sync with the Notion spec.
 - I/O + safety rails: `src/lib/winners-autopause-runner.ts`
 - Cron: `GET /api/cron/winners-autopause` (daily, `0 15 * * *` UTC)
-- Page: `/autopause` (on/off switch, dry-run switch, editable numbers, table of every ad). API: `/api/winners-autopause`.
+- Page: `/autopause` — mode (Off / Dry run / Live; Live asks to confirm), latest check with filter tiles, rules editor (each rule a sentence with inline numbers + its own on/off; unsaved edits re-run the rules client-side on the latest run's stored `inputs` so you see the effect before saving), change history (`winners_autopause:changes`). Components in `src/components/autopause/`. API: `/api/winners-autopause`.
 - Settings live in Redis (`winners_autopause:settings`), runs in `winners_autopause:runs`.
 
 Safety rails to preserve: off switch on the page and env `WINNERS_AUTOPAUSE_DISABLED=1` both stop the cron; dry run is the default; no Redis → dry run; Meta errors → nothing paused; more failures than `maxPausesPerRun` → nothing paused + Slack warning; settings re-read right before pausing; the job only ever pauses (never activates or changes budgets). Slack summary goes to `SLACK_AUTOPAUSE_CHANNEL` (falls back to `SLACK_NOTIFICATION_CHANNEL`).

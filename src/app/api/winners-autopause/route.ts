@@ -12,6 +12,7 @@ import { requireSession } from '@/lib/session';
 import {
   AutopauseRateLimitError,
   envKillSwitch,
+  loadChanges,
   loadRuns,
   loadSettings,
   runAutopause,
@@ -29,9 +30,15 @@ export async function GET() {
 
   if (session instanceof NextResponse) return session;
 
-  const [{ settings, persisted }, runs] = await Promise.all([loadSettings(), loadRuns(10)]);
+  const [{ settings, persisted }, allRuns, changes] = await Promise.all([
+    loadSettings(),
+    loadRuns(10),
+    loadChanges(10),
+  ]);
+  // Only the latest run needs its per-day data (for "what if" previews) — keep the payload small.
+  const runs = allRuns.map((run, i) => (i === 0 ? run : { ...run, inputs: undefined }));
 
-  return NextResponse.json({ settings, persisted, envKillSwitch: envKillSwitch(), runs });
+  return NextResponse.json({ settings, persisted, envKillSwitch: envKillSwitch(), runs, changes });
 }
 
 export async function PUT(request: NextRequest) {
@@ -41,7 +48,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const patch = (await request.json()) as Partial<AutopauseSettings>;
-    const settings = await saveSettings(patch);
+    const settings = await saveSettings(patch, session.name || session.email || session.id);
 
     logger.info('Settings updated', { by: session.id, settings });
 

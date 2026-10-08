@@ -46,6 +46,7 @@ src/
 ├── proxy.ts                   # Auth redirect + per-IP rate limiting (60 req/min)
 ├── services/
 │   ├── anthropic/             # AnthropicService — Claude API wrapper
+│   ├── openai/                # OpenAIService — Slack bot's AI when OPENAI_API_KEY is set
 │   ├── logger/                # createLogger() — structured console logger
 │   ├── meta/                  # MetaService — typed Meta Graph API wrapper + OAuth helpers
 │   ├── rules-store/           # RulesStoreService — automation rules (Redis + cookie fallback)
@@ -100,7 +101,8 @@ All external API calls go through service classes. Never call `fetch()` directly
 
 - **MetaService** — all Meta Graph API calls, including OAuth token exchange
 - **SlackService** — all Slack Web API calls, including OAuth token exchange
-- **AnthropicService** — Claude API calls
+- **AnthropicService** — Claude API calls (web AI Chat; Slack bot when no OpenAI key)
+- **OpenAIService** — OpenAI Chat Completions for the Slack bot. Provider picked by `SLACK_BOT_AI_PROVIDER` (`openai` | `anthropic`), else OpenAI if `OPENAI_API_KEY` is set. Same `complete()` shape, so the prompt and action-button parsing are shared.
 - **RulesStoreService** — automation rules persistence (Redis + cookie fallback)
 
 ### State Management

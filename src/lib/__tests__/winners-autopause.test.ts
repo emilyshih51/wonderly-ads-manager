@@ -203,3 +203,26 @@ describe('formatSlackSummary', () => {
     expect(text).toContain('Ad A');
   });
 });
+
+describe('formatSlackSummary links', () => {
+  it('links each ad name when given a link builder', () => {
+    const { evaluations } = planRun(
+      [{ adId: '123', adName: 'Ad <A> | test', days: days(3, 1000) }],
+      S
+    );
+    const text = formatSlackSummary(
+      {
+        ranAt: '',
+        throughDate: '2026-10-06',
+        settings: S,
+        evaluations,
+        paused: [],
+        overLimit: false,
+      },
+      undefined,
+      (id) => `https://ads.example/${id}`
+    );
+
+    expect(text).toContain('<https://ads.example/123|Ad &lt;A&gt; ¦ test>');
+  });
+});

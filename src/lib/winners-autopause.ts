@@ -317,8 +317,27 @@ export function sanitizeSettings(
   };
 }
 
-/** Slack summary text. */
-export function formatSlackSummary(run: AutopauseRun, pageUrl?: string): string {
+/** Slack mrkdwn link `<url|text>`; escapes the characters Slack treats as markup. */
+function slackLink(url: string, text: string): string {
+  const safe = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\|/g, '¦');
+
+  return `<${url}|${safe}>`;
+}
+
+/**
+ * Slack summary text. Pass `adLink` to turn each ad name into a link (e.g. to Ads Manager),
+ * like the other automation notifications.
+ */
+export function formatSlackSummary(
+  run: AutopauseRun,
+  pageUrl?: string,
+  adLink?: (adId: string) => string
+): string {
+  const name = (e: AdEvaluation) => (adLink ? slackLink(adLink(e.adId), e.adName) : e.adName);
   const pause = run.evaluations.filter((e) => e.decision === 'PAUSE');
   const watch = run.evaluations.filter((e) => e.decision === 'WATCH');
   const ok = run.evaluations.length - pause.length - watch.length;
@@ -334,12 +353,12 @@ export function formatSlackSummary(run: AutopauseRun, pageUrl?: string): string 
   const verb = run.settings.dryRun || run.overLimit ? 'Would pause' : 'Paused';
 
   lines.push(`*${verb} (${pause.length})*`);
-  for (const e of pause) lines.push(`• ${e.adName} — ${e.reason}`);
+  for (const e of pause) lines.push(`• ${name(e)} — ${e.reason}`);
   if (pause.length === 0) lines.push('• none');
 
   if (watch.length) {
     lines.push(`*Watch (${watch.length})*`);
-    for (const e of watch) lines.push(`• ${e.adName} — ${e.reason}`);
+    for (const e of watch) lines.push(`• ${name(e)} — ${e.reason}`);
   }
 
   lines.push(`${ok} other ads OK`);

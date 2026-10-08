@@ -39,6 +39,8 @@ const logger = createLogger('WinnersAutopause');
 
 const SETTINGS_KEY = 'winners_autopause:settings';
 const RUNS_KEY = 'winners_autopause:runs';
+const CHANGES_KEY = 'winners_autopause:changes';
+const MAX_CHANGES = 30;
 const MAX_RUNS = 30;
 
 export type RunTrigger = 'cron' | 'preview';
@@ -76,18 +78,61 @@ export async function loadSettings(): Promise<{
   return { settings: sanitizeSettings(parsed), persisted: true };
 }
 
-/** Save settings (merged over current). Returns the saved settings. */
-export async function saveSettings(patch: Partial<AutopauseSettings>): Promise<AutopauseSettings> {
+/** One saved change to the settings, for the "Change history" list on the page. */
+export interface SettingsChange {
+  at: string;
+  by: string;
+  /** field → [before, after] */
+  changes: Record<string, [unknown, unknown]>;
+}
+
+/**
+ * Save settings (merged over current) and log what changed and who changed it.
+ * Returns the saved settings.
+ */
+export async function saveSettings(
+  patch: Partial<AutopauseSettings>,
+  by = 'unknown'
+): Promise<AutopauseSettings> {
   const redis = await getRedisClient();
 
   if (!redis) throw new Error('Redis is not available — settings cannot be saved');
 
   const { settings: current } = await loadSettings();
   const next = sanitizeSettings({ ...current, ...patch });
+  const changes: SettingsChange['changes'] = {};
+
+  for (const key of Object.keys(next) as Array<keyof AutopauseSettings>) {
+    if (current[key] !== next[key]) changes[key] = [current[key], next[key]];
+  }
 
   await redis.set(SETTINGS_KEY, JSON.stringify(next));
 
+  if (Object.keys(changes).length > 0) {
+    const entry: SettingsChange = { at: new Date().toISOString(), by, changes };
+
+    await redis.lPush(CHANGES_KEY, JSON.stringify(entry));
+    await redis.lTrim(CHANGES_KEY, 0, MAX_CHANGES - 1);
+  }
+
   return next;
+}
+
+/** Recent settings changes, newest first. */
+export async function loadChanges(limit = 10): Promise<SettingsChange[]> {
+  const redis = await getRedisClient();
+
+  if (!redis) return [];
+
+  const raw = await redis.lRange(CHANGES_KEY, 0, limit - 1);
+
+  return raw.flatMap((r) => {
+    try {
+      return [JSON.parse(r) as SettingsChange];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /** Most recent runs, newest first. */
@@ -278,6 +323,7 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
     paused: [],
     overLimit,
     errors: [],
+    inputs: ads,
   };
 
   if (!persisted) run.note = 'Redis unavailable — ran as dry run';

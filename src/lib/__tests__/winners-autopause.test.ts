@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_AUTOPAUSE_SETTINGS as S,
   evaluateAd,
+  ladder,
   formatSlackSummary,
   lastWindow,
   pGood,
@@ -224,5 +225,36 @@ describe('formatSlackSummary links', () => {
     );
 
     expect(text).toContain('<https://ads.example/123|Ad &lt;A&gt; ¦ test>');
+  });
+});
+
+describe('rule on/off switches', () => {
+  const ad = (d: AdDay[]) => ({ adId: '1', adName: 'Test ad', days: d });
+
+  it('Rule 1 off: an ad over its cap is not paused by Rule 1', () => {
+    const e = evaluateAd(ad(days(2, 700, [1, 1])), { ...S, rule1Enabled: false });
+
+    expect(e.decision).toBe('OK');
+  });
+
+  it('Rule 2 off: a fatigued ad is not paused by Rule 2', () => {
+    const trials = [...Array(16).fill(2), 1, 1, 1, 1];
+    const e = evaluateAd(ad(days(20, 500, trials)), { ...S, rule2Enabled: false });
+
+    expect(e.rule2).toBeNull();
+    expect(e.decision).not.toBe('PAUSE');
+  });
+
+  it('Rule 3 off: day-one ads can be judged', () => {
+    const e = evaluateAd(ad(days(1, 1500)), { ...S, rule3Enabled: false });
+
+    expect(e.decision).toBe('PAUSE');
+  });
+
+  it('ladder() matches the spec caps', () => {
+    const steps = ladder(S, 2).map((s) => s.cap);
+
+    expect(Math.abs(steps[0] - 575)).toBeLessThanOrEqual(10);
+    expect(Math.abs(steps[2] - 1330)).toBeLessThanOrEqual(10);
   });
 });

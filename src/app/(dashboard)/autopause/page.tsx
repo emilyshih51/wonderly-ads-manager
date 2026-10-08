@@ -18,6 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { buildAdsManagerAdLink } from '@/lib/ads-manager-link';
+import { WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID } from '@/lib/growth-config';
 import { apiFetch, apiPut } from '@/lib/queries/api-fetch';
 import { cn } from '@/lib/utils';
 import type { AdEvaluation, AutopauseDecision, AutopauseSettings } from '@/lib/winners-autopause';
@@ -392,7 +394,18 @@ export default function AutopausePage() {
                             className="max-w-[280px] truncate font-medium"
                             title={e.adName}
                           >
-                            {e.adName}
+                            <a
+                              href={buildAdsManagerAdLink(
+                                WONDERLY_AD_ACCOUNT_ID,
+                                WONDERLY_BUSINESS_ID,
+                                e.adId
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--color-primary)] hover:underline"
+                            >
+                              {e.adName}
+                            </a>
                           </TableCell>
                           <TableCell>
                             <Badge variant={DECISION_VARIANT[e.decision]}>

@@ -18,6 +18,7 @@ import {
   Layers,
   Trophy,
   Workflow,
+  OctagonPause,
   Settings,
   LogOut,
   MessageSquare,
@@ -317,6 +318,7 @@ export function Sidebar() {
     { name: t('launch'), href: '/launch', icon: Layers },
     { name: t('topAds'), href: '/ads', icon: Trophy },
     { name: t('automations'), href: '/automations', icon: Workflow },
+    { name: t('autopause'), href: '/autopause', icon: OctagonPause },
     { name: t('settings'), href: '/settings', icon: Settings },
   ];
 

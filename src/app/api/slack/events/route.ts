@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { AnthropicService } from '@/services/anthropic';
+import { OpenAIService, OpenAIApiError } from '@/services/openai';
 import { SlackService, createSlackService } from '@/services/slack';
 import { fetchAdContextData, formatContextForClaude } from '@/lib/slack-context';
 import { getRedisClient } from '@/lib/redis';
@@ -200,7 +201,7 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
       contextText += formatContextForClaude(data);
     }
 
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const provider = slackBotProvider();
     let analysisText = '';
 
     // Persist user question to cross-thread memory
@@ -210,10 +211,8 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
       timestamp: Date.now(),
     });
 
-    if (anthropicKey) {
+    if (provider) {
       try {
-        const ai = new AnthropicService(anthropicKey, process.env.ANTHROPIC_MODEL);
-
         // Combine cross-thread memory (older) with current thread history (newer)
         const pastMemory = crossThreadMemory.map((m) => ({
           role: m.role,
@@ -226,6 +225,13 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
 
         // Past memory first, then current thread — thread takes priority for recency
         const history = [...pastMemory, ...threadMessages];
+        const ai =
+          provider === 'openai'
+            ? new OpenAIService(process.env.OPENAI_API_KEY ?? '', process.env.OPENAI_MODEL)
+            : new AnthropicService(
+                process.env.ANTHROPIC_API_KEY ?? '',
+                process.env.ANTHROPIC_MODEL
+              );
 
         analysisText = await ai.complete({
           message: question,
@@ -233,12 +239,13 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
           context: contextText,
           history,
         });
-      } catch (claudeError) {
-        logger.error('Claude API error', claudeError);
-        analysisText = `Debug - Claude error: ${claudeError instanceof Error ? claudeError.message : String(claudeError)}`;
+      } catch (aiError) {
+        logger.error(`Slack bot AI error (${provider})`, aiError);
+        analysisText = friendlyAiError(provider, aiError);
       }
     } else {
-      analysisText = 'Claude API not configured.';
+      analysisText =
+        'The AI for this bot isn’t set up. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) in Vercel.';
     }
 
     const actions = SlackService.parseActions(analysisText);
@@ -264,4 +271,52 @@ async function processAppMention(event: AppMentionEvent): Promise<void> {
       threadTs
     );
   }
+}
+
+/**
+ * Which AI the Slack bot uses. `SLACK_BOT_AI_PROVIDER` (`openai` | `anthropic`) wins;
+ * otherwise OpenAI when `OPENAI_API_KEY` is set, else Anthropic. Only the Slack bot reads
+ * this — the web AI Chat page always uses Anthropic.
+ */
+function slackBotProvider(): 'openai' | 'anthropic' | null {
+  const chosen = (process.env.SLACK_BOT_AI_PROVIDER ?? '').trim().toLowerCase();
+
+  if (chosen === 'openai') return process.env.OPENAI_API_KEY ? 'openai' : null;
+  if (chosen === 'anthropic') return process.env.ANTHROPIC_API_KEY ? 'anthropic' : null;
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+
+  return null;
+}
+
+/** Plain-English message for the thread instead of a raw API error dump. */
+function friendlyAiError(provider: 'openai' | 'anthropic', error: unknown): string {
+  const name = provider === 'openai' ? 'OpenAI' : 'Anthropic';
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+
+  if (
+    (error instanceof OpenAIApiError && error.code === 'insufficient_quota') ||
+    lower.includes('credit balance') ||
+    lower.includes('quota')
+  ) {
+    return `I can't answer right now: the ${name} API account is out of credits. Add credits in the ${name} billing page and try again.`;
+  }
+
+  if (
+    (error instanceof OpenAIApiError && error.status === 401) ||
+    lower.includes('invalid x-api-key') ||
+    lower.includes('incorrect api key')
+  ) {
+    return `I can't answer right now: the ${name} API key is invalid. Check it in Vercel.`;
+  }
+
+  if (
+    lower.includes('model') &&
+    (lower.includes('not found') || lower.includes('does not exist'))
+  ) {
+    return `I can't answer right now: the ${name} model isn't available. Set ${provider === 'openai' ? 'OPENAI_MODEL' : 'ANTHROPIC_MODEL'} in Vercel to a current model.`;
+  }
+
+  return `I couldn't get an answer from ${name} just now. Try again in a minute.`;
 }

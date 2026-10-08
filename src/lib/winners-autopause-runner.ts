@@ -27,6 +27,7 @@ import {
   type AutopauseSettings,
 } from './winners-autopause';
 import { getResultCount } from './automation-utils';
+import { isMetaRateLimit } from './meta-error-response';
 import { WONDERLY_AD_ACCOUNT_ID } from './growth-config';
 import { getRedisClient } from './redis';
 import { createLogger } from '@/services/logger';
@@ -147,7 +148,11 @@ export async function fetchCampaignAds(
   const account = await meta.getAdAccount();
   const today = dateInZone(new Date(), account.timezone_name || 'America/Los_Angeles');
   const until = addDays(today, -1); // completed days only
-  const since = addDays(until, -365);
+  // Start at the campaign's first day (not a full year back) to keep the pull small —
+  // Meta's per-hour request limit is shared with every other cron on this token.
+  const startDate = await meta.getCampaignStartDate(campaignId).catch(() => null);
+  const oneYearBack = addDays(until, -365);
+  const since = startDate && startDate > oneYearBack ? startDate : oneYearBack;
 
   const [ads, rows, optimizationMap] = await Promise.all([
     meta.getCampaignAds(campaignId),
@@ -176,6 +181,44 @@ export async function fetchCampaignAds(
   };
 }
 
+/** Shown on the page and in Slack when Meta's hourly request limit is hit. */
+export const RATE_LIMIT_MESSAGE =
+  "Meta's hourly request limit was reached, so the check couldn't run. Nothing was paused. Try again in about an hour.";
+
+/** Thrown when Meta rate-limits us even after one retry. */
+export class AutopauseRateLimitError extends Error {
+  constructor() {
+    super(RATE_LIMIT_MESSAGE);
+    this.name = 'AutopauseRateLimitError';
+  }
+}
+
+const RETRY_WAIT_MS = 20_000;
+
+/**
+ * Run `fn`; if Meta says "slow down", wait once and retry. A second rate-limit becomes an
+ * `AutopauseRateLimitError` with a plain-English message.
+ */
+export async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  waitMs = RETRY_WAIT_MS
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!isMetaRateLimit(error)) throw error;
+    logger.warn(`Meta rate limit hit — retrying once in ${waitMs / 1000}s`);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+    try {
+      return await fn();
+    } catch (retryError) {
+      if (isMetaRateLimit(retryError)) throw new AutopauseRateLimitError();
+      throw retryError;
+    }
+  }
+}
+
 /**
  * Run the check. `cron` may pause (unless dry run / stopped); `preview` never pauses
  * and never posts to Slack — it only refreshes the table on the page.
@@ -192,7 +235,9 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
   if (!token) throw new Error('META_SYSTEM_ACCESS_TOKEN is not configured');
 
   const meta = new MetaService(token, WONDERLY_AD_ACCOUNT_ID);
-  const { throughDate, ads } = await fetchCampaignAds(meta, effective.campaignId);
+  const { throughDate, ads } = await withRateLimitRetry(() =>
+    fetchCampaignAds(meta, effective.campaignId)
+  );
   const { evaluations, toPause, overLimit } = planRun(ads, effective);
 
   const run: StoredRun = {

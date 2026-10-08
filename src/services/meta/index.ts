@@ -1024,6 +1024,21 @@ export class MetaService {
   }
 
   /**
+   * The day a campaign started, `YYYY-MM-DD` (from its `start_time`), or `null` if Meta
+   * doesn't report one. Lets daily pulls start at the campaign's first day instead of
+   * asking for a whole year of mostly-empty rows.
+   *
+   * @param campaignId - Meta campaign ID
+   */
+  async getCampaignStartDate(campaignId: string): Promise<string | null> {
+    const data = await this.request<{ start_time?: string }>(`/${campaignId}`, {
+      params: { fields: 'start_time' },
+    });
+
+    return data.start_time ? data.start_time.slice(0, 10) : null;
+  }
+
+  /**
    * Per-ad, per-day insights for one campaign over a date range (`level=ad`,
    * `time_increment=1`), following pagination so long-running ads aren't cut off.
    *

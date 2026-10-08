@@ -799,6 +799,46 @@ export class MetaService {
   }
 
   /**
+   * Get one row per ad per day for every ad in a campaign, over the campaign's whole life.
+   *
+   * Used by the Winners auto-pause cron, which needs each ad's full daily history (first day
+   * of delivery, lifetime trials, and the last $2k of spend). Paginates, so campaigns with
+   * many ads × days aren't truncated.
+   *
+   * @param campaignId - Meta campaign ID
+   * @returns Ad-level insights rows with `time_increment=1`
+   */
+  async getAdDailyInsightsForCampaign(campaignId: string): Promise<MetaInsightsRow[]> {
+    const rows: MetaInsightsRow[] = [];
+    let after: string | undefined;
+
+    for (;;) {
+      const params: Record<string, string> = {
+        fields: 'ad_id,ad_name,adset_id,campaign_id,spend,actions,date_start,date_stop',
+        level: 'ad',
+        date_preset: 'maximum',
+        time_increment: '1',
+        limit: '500',
+      };
+
+      if (after) params.after = after;
+
+      const data = await this.request<{
+        data?: MetaInsightsRow[];
+        paging?: { cursors?: { after?: string }; next?: string };
+      }>(`/${campaignId}/insights`, { params });
+
+      rows.push(...(data.data ?? []));
+
+      if (!data.paging?.next) break;
+      after = data.paging.cursors?.after;
+      if (!after) break;
+    }
+
+    return rows;
+  }
+
+  /**
    * Get daily time-increment insights for trend analysis.
    *
    * @param datePreset - Date range preset (default: `'last_7d'`)

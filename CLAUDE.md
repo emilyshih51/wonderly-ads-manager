@@ -510,3 +510,12 @@ A hosted, streamable-HTTP MCP that exposes the same Growth intelligence as tools
 - `src/lib/growth-data.ts` — `fetchGrowthData({ rows?, deals?, succeeding?, pnl? })` reads Meta + Snowflake live (mirrors the cron, minus the sheet merge/overrides) and returns typed objects; `adPerformance(deals)` aggregates by ad.
 - `src/lib/growth-config.ts` — shared `BACKFILL_START`, `WONDERLY_AD_ACCOUNT_ID`, `isoDate`, `daysSince` (imported by both the cron and the MCP so they never drift).
 - Deps: `mcp-handler`, `zod`. Tools reuse the same pure libs (`computeOverview`, `toDailyFunnelValues`, `toHistoricalCacValues`) so definitions stay identical to the sheet.
+
+## Winners Auto-Pause (`/api/cron/winners-auto-pause`)
+
+Daily cron (`0 15 * * *` UTC ≈ 8am PT) that checks every ACTIVE ad in the Remodeling Winners campaign (`WINNERS_CAMPAIGN_ID`) against the [Winners Campaign Auto-Pause Spec](https://app.notion.com/p/3f278d7150b38151a50df33c27c1aa8c) and posts one summary to `WINNERS_AUTOPAUSE_SLACK_CHANNEL`. **Dry run unless `WINNERS_AUTOPAUSE_LIVE=true`** — the Slack post then says "would pause" and nothing is touched.
+
+- Rules live in `src/lib/winners-auto-pause.ts` (pure + unit-tested): Rule 1 ladder caps for 0–7 trials (`LADDER_CAPS`), Rule 2 fatigue for 8+ trials (≤4 trials in the last $2,000 → pause), Rule 3 no judgment on the first day of delivery (in the ad account's timezone).
+- "Trial" = `offsite_conversion.fb_pixel_start_trial`. Data: `MetaService.getAdDailyInsightsForCampaign` (ad × day, `date_preset=maximum`, paginated). Ads enter Winners as `[Winner Copy]` duplicates, so an ad's lifetime in this campaign = its time in Winners.
+- The last-$2k window counts its oldest day proportionally so the window is exactly $2,000. Trials on $0-spend days (late attribution) still count.
+- This deliberately does **not** go through the rules engine: the engine's `protect_converters` guardrail would block every Rule 2 pause (those ads all have conversions). Live mode is capped at `WINNERS_AUTOPAUSE_MAX_PAUSES` (default 10) per run, highest spend first.

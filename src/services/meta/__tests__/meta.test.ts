@@ -97,6 +97,61 @@ describe('MetaService', () => {
     });
   });
 
+  describe('getAdNameAndCreative()', () => {
+    it('returns the live name and creative ID', async () => {
+      const fetchFn = makeFetch({ id: 'ad-1', name: '+ Hero Ad', creative: { id: 'cr-9' } });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      await expect(svc.getAdNameAndCreative('ad-1')).resolves.toEqual({
+        name: '+ Hero Ad',
+        creativeId: 'cr-9',
+      });
+    });
+
+    it('returns a null creative ID when the ad has none', async () => {
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, makeFetch({ id: 'ad-1', name: 'X' }));
+
+      await expect(svc.getAdNameAndCreative('ad-1')).resolves.toEqual({
+        name: 'X',
+        creativeId: null,
+      });
+    });
+  });
+
+  describe('getAdSetCreativeIds()', () => {
+    it('collects creative IDs across pages and excludes deleted/archived ads', async () => {
+      const pages = [
+        {
+          data: [{ creative: { id: 'cr-1' } }, { creative: { id: 'cr-2' } }],
+          paging: { cursors: { after: 'c1' }, next: 'https://graph/next' },
+        },
+        { data: [{ creative: { id: 'cr-3' } }, {}], paging: { cursors: { after: 'c2' } } },
+      ];
+      let call = 0;
+      const fetchFn = vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve({ ok: true, json: () => Promise.resolve(pages[call++]) })
+        );
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+
+      const ids = await svc.getAdSetCreativeIds('adset-9');
+
+      expect([...ids]).toEqual(['cr-1', 'cr-2', 'cr-3']);
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+
+      const firstUrl = new URL(fetchFn.mock.calls[0][0] as string);
+      const secondUrl = new URL(fetchFn.mock.calls[1][0] as string);
+      const statuses = JSON.parse(firstUrl.searchParams.get('effective_status') ?? '[]');
+
+      expect(firstUrl.pathname).toContain('/adset-9/ads');
+      expect(statuses).toContain('PAUSED');
+      expect(statuses).not.toContain('DELETED');
+      expect(statuses).not.toContain('ARCHIVED');
+      expect(secondUrl.searchParams.get('after')).toBe('c1');
+    });
+  });
+
   describe('duplicateAd()', () => {
     it('throws when source ad has no creative', async () => {
       const fetchFn = makeFetch({ id: 'ad-1', name: 'My Ad' });

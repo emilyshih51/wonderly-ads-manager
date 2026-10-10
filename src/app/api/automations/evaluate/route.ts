@@ -296,6 +296,8 @@ interface EvaluateResult {
   target_adset_count?: number;
   partial_failure?: Array<{ adset_id: string; error: string }>;
   marked_promoted?: boolean;
+  /** Target ad sets that already held this winner's creative (promote only). */
+  already_in_adset_ids?: string[];
   slack_sent?: boolean;
   slack_channel?: string;
   skipped?: string;
@@ -354,6 +356,16 @@ function shouldRunRule(schedule: string | undefined, now: Date): boolean {
     default:
       return true;
   }
+}
+
+/**
+ * Add a warning to a result, keeping any warning already set.
+ *
+ * @param result - Result to annotate
+ * @param warning - Warning text to append
+ */
+function appendWarning(result: EvaluateResult, warning: string): void {
+  result.warning = result.warning ? `${result.warning}; ${warning}` : warning;
 }
 
 async function evaluateRule(
@@ -546,9 +558,11 @@ async function evaluateRule(
       continue;
     }
 
-    // Skip ads that have already been promoted (name starts with the promoted
-    // marker). This stops a winner that stays running — because pause_original
-    // is off — from being re-promoted on every evaluation tick.
+    // Cheap pre-filter: skip ads already marked as promoted (name starts with
+    // the `+` marker) without touching Meta. The marker is only a hint — the
+    // authoritative "already promoted" check is the target-ad-set creative
+    // lookup in the promote branch, which also catches winners whose rename
+    // failed or whose insights name is stale.
     if (isPromoteAction && isPromotedName(entityName)) {
       logger.info(`Skipping "${entityName}" (${entityId}) — already promoted`);
       results.push({
@@ -740,12 +754,49 @@ async function evaluateRule(
           .filter(Boolean);
 
         if (targetAdSetIds.length > 0) {
+          // The source of truth for "already promoted" is the target ad sets
+          // themselves, not the `+` name marker: a promotion reuses the
+          // winner's creative, so a target that already holds that creative
+          // already has this winner. The marker is a best-effort rename that
+          // can fail, and the insights name it's read from can be stale, so on
+          // its own it let winners be re-promoted. Read the ad directly — its
+          // live name is also what the marker is applied to below.
+          const source = await meta.getAdNameAndCreative(entityId);
+
+          if (!source.creativeId) throw new Error(`Ad ${entityId} has no creative`);
+
+          const liveName = source.name || entityName;
           const duplicatedIds: string[] = [];
+          const alreadyInTargets: string[] = [];
           const failedTargets: Array<{ adset_id: string; error: string }> = [];
 
-          // Duplicate into each target ad set. A failure on one target must not
-          // abort the others, so failures are collected and reported.
+          // A failure on one target must not abort the others, so failures are
+          // collected and reported. If a target can't be checked it is skipped
+          // (fail closed) — the next run retries it, whereas duplicating blind
+          // could create a second copy.
           for (const targetAdSetId of targetAdSetIds) {
+            let existingCreatives: Set<string>;
+
+            try {
+              existingCreatives = await meta.getAdSetCreativeIds(targetAdSetId);
+            } catch (checkError) {
+              logger.error('Failed to check target ad set for an existing copy', {
+                entityId,
+                targetAdSetId,
+                error: String(checkError),
+              });
+              failedTargets.push({
+                adset_id: targetAdSetId,
+                error: `Could not check for an existing copy: ${String(checkError)}`,
+              });
+              continue;
+            }
+
+            if (existingCreatives.has(source.creativeId)) {
+              alreadyInTargets.push(targetAdSetId);
+              continue;
+            }
+
             try {
               const duplicated = await meta.duplicateAd(entityId, targetAdSetId);
 
@@ -760,6 +811,37 @@ async function evaluateRule(
               failedTargets.push({ adset_id: targetAdSetId, error: String(dupError) });
             }
           }
+
+          if (alreadyInTargets.length > 0) {
+            actionResult.already_in_adset_ids = alreadyInTargets;
+          }
+
+          // Only mark the original once it sits in every target. After a
+          // partial failure it stays unmarked so the next run fills just the
+          // missing targets — the creative check keeps the others from getting
+          // a second copy.
+          const inEveryTarget =
+            alreadyInTargets.length + duplicatedIds.length === targetAdSetIds.length;
+
+          const markOriginal = async () => {
+            if (!inEveryTarget || isPromotedName(liveName)) return;
+
+            try {
+              await meta.updateName(entityId, addPromotedMarker(liveName));
+              actionResult.marked_promoted = true;
+            } catch (renameError) {
+              logger.warn('Failed to mark original ad as promoted', {
+                entityId,
+                entityName,
+                error: String(renameError),
+              });
+              actionResult.marked_promoted = false;
+              appendWarning(
+                actionResult,
+                `Couldn't add the "+" marker to the original ad name (it won't be promoted twice — the copy check still applies)`
+              );
+            }
+          };
 
           if (duplicatedIds.length > 0) {
             // Only pause the original once at least one duplication succeeded,
@@ -776,27 +858,36 @@ async function evaluateRule(
 
             if (failedTargets.length > 0) {
               actionResult.partial_failure = failedTargets;
-              actionResult.warning = `Duplicated into ${duplicatedIds.length} of ${targetAdSetIds.length} target ad sets`;
+              appendWarning(
+                actionResult,
+                `Duplicated into ${duplicatedIds.length + alreadyInTargets.length} of ${targetAdSetIds.length} target ad sets`
+              );
             }
 
-            // Mark the original winner with the promoted prefix so it is visible
-            // in Ads Manager and skipped on future runs. A failure here must not
-            // fail the promotion itself, so it is logged and swallowed.
-            try {
-              await meta.updateName(entityId, addPromotedMarker(entityName));
-              actionResult.marked_promoted = true;
-            } catch (renameError) {
-              logger.warn('Failed to mark original ad as promoted', {
-                entityId,
-                entityName,
-                error: String(renameError),
-              });
-            }
+            await markOriginal();
+          } else if (failedTargets.length === 0) {
+            // Every target already holds this creative — it was promoted
+            // before. Nothing to duplicate, pause, or announce; just repair the
+            // `+` marker if an earlier rename failed.
+            actionResult.action = 'skipped';
+            actionResult.skipped = 'already_promoted';
+            actionResult.skip_reason = 'Already in every target ad set';
+            await markOriginal();
+            logger.info(`Skipping promote for "${entityName}" (${entityId}) — already in targets`, {
+              rule: rule.name,
+              targets: alreadyInTargets,
+            });
+            results.push(actionResult);
+            continue;
           } else {
-            // Every target duplication failed — leave the winner untouched.
+            // Nothing new was duplicated and at least one target failed —
+            // leave the winner untouched.
             actionResult.action = 'promotion_failed';
             actionResult.partial_failure = failedTargets;
-            actionResult.warning = `Failed to duplicate into all ${targetAdSetIds.length} target ad sets`;
+            appendWarning(
+              actionResult,
+              `Failed to duplicate into ${failedTargets.length} of ${targetAdSetIds.length} target ad sets`
+            );
           }
         } else {
           actionResult.action = pauseOriginal
@@ -898,6 +989,7 @@ async function evaluateRule(
                 },
                 duplicatedAdId: actionResult.duplicated_ad_id as string | undefined,
                 duplicatedCount: actionResult.duplicated_ad_ids?.length,
+                warning: actionResult.warning,
                 // Use the campaign name from the insight row so multi-campaign rules
                 // show only the campaign that actually matched, not all configured campaigns.
                 campaignName:

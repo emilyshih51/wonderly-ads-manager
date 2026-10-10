@@ -15,6 +15,9 @@ const updateName = vi.fn();
 const getBudget = vi.fn();
 const getFilteredInsights = vi.fn();
 const getAdInsights = vi.fn();
+const getAdNameAndCreative = vi.fn();
+const getAdSetCreativeIds = vi.fn();
+const sendAutomationNotification = vi.fn();
 
 vi.mock('@/lib/session', () => ({
   requireSession: vi.fn().mockResolvedValue({
@@ -38,13 +41,15 @@ vi.mock('@/services/meta', () => ({
       getBudget,
       duplicateAd,
       updateName,
+      getAdNameAndCreative,
+      getAdSetCreativeIds,
     }),
   },
 }));
 
 vi.mock('@/services/slack', () => ({
   createSlackService: () => ({
-    sendAutomationNotification: vi.fn().mockResolvedValue(undefined),
+    sendAutomationNotification,
     sendBudgetNotification: vi.fn().mockResolvedValue(undefined),
     sendBudgetRunSummary: vi.fn().mockResolvedValue(undefined),
   }),
@@ -138,6 +143,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   getBudget.mockResolvedValue(10000);
   getAdInsights.mockResolvedValue({ data: [] });
+  getAdNameAndCreative.mockResolvedValue({ name: 'Test Ad', creativeId: 'cr-1' });
+  getAdSetCreativeIds.mockResolvedValue(new Set());
+  sendAutomationNotification.mockResolvedValue(undefined);
 });
 
 describe('lifetime-conversion guardrail', () => {
@@ -346,5 +354,117 @@ describe('lifetime-window rules (0 conversions + >$X lifetime -> kill)', () => {
     // One query total: the rule's own window already is the lifetime window.
     expect(getFilteredInsights).toHaveBeenCalledTimes(1);
     expect(getAdInsights).not.toHaveBeenCalled();
+  });
+});
+
+describe('promote never duplicates a winner twice', () => {
+  /** A keep-original promote rule into the given target ad sets. */
+  function promoteRule(targets: string, extra: Record<string, unknown> = {}) {
+    return pauseRule({
+      action_type: 'promote',
+      target_adset_id: targets,
+      pause_original: 'false',
+      also_notify_slack: 'true',
+      slack_channel: 'C1',
+      ...extra,
+    });
+  }
+
+  beforeEach(() => {
+    mockInsights([adRow(5)], [adRow(5)]);
+    duplicateAd.mockResolvedValue({ id: 'dup-1' });
+  });
+
+  it('promotes and marks a winner that is not yet in the target', async () => {
+    const { results } = await evaluate(promoteRule('winners-1'));
+
+    expect(duplicateAd).toHaveBeenCalledWith('ad-1', 'winners-1');
+    expect(updateName).toHaveBeenCalledWith('ad-1', '+ Test Ad');
+    expect(updateStatus).not.toHaveBeenCalled();
+    expect(results[0]).toMatchObject({
+      action: 'promoted (original kept active)',
+      marked_promoted: true,
+    });
+  });
+
+  it('skips a winner whose creative is already in the target, even without the + marker', async () => {
+    getAdSetCreativeIds.mockResolvedValue(new Set(['cr-1']));
+
+    const { results } = await evaluate(promoteRule('winners-1'));
+
+    expect(duplicateAd).not.toHaveBeenCalled();
+    expect(sendAutomationNotification).not.toHaveBeenCalled();
+    expect(results[0]).toMatchObject({ skipped: 'already_promoted' });
+    // The missing marker is repaired.
+    expect(updateName).toHaveBeenCalledWith('ad-1', '+ Test Ad');
+  });
+
+  it('trusts the live ad name over a stale insights name when repairing the marker', async () => {
+    getAdNameAndCreative.mockResolvedValue({ name: '+ Test Ad', creativeId: 'cr-1' });
+    getAdSetCreativeIds.mockResolvedValue(new Set(['cr-1']));
+
+    const { results } = await evaluate(promoteRule('winners-1'));
+
+    expect(duplicateAd).not.toHaveBeenCalled();
+    expect(updateName).not.toHaveBeenCalled();
+    expect(results[0]).toMatchObject({ skipped: 'already_promoted' });
+  });
+
+  it('only fills the targets that are missing the winner', async () => {
+    getAdSetCreativeIds.mockImplementation((id: string) =>
+      Promise.resolve(new Set(id === 'winners-1' ? ['cr-1'] : []))
+    );
+
+    const { results } = await evaluate(promoteRule('winners-1, winners-2'));
+
+    expect(duplicateAd).toHaveBeenCalledTimes(1);
+    expect(duplicateAd).toHaveBeenCalledWith('ad-1', 'winners-2');
+    expect(updateName).toHaveBeenCalledWith('ad-1', '+ Test Ad');
+    expect(results[0]).toMatchObject({
+      duplicated_ad_ids: ['dup-1'],
+      already_in_adset_ids: ['winners-1'],
+      marked_promoted: true,
+    });
+  });
+
+  it('leaves the original unmarked after a partial failure so the next run retries', async () => {
+    duplicateAd.mockImplementation((_ad: string, target: string) =>
+      target === 'winners-2' ? Promise.reject(new Error('boom')) : Promise.resolve({ id: 'dup-1' })
+    );
+
+    const { results } = await evaluate(promoteRule('winners-1,winners-2'));
+
+    expect(updateName).not.toHaveBeenCalled();
+    expect(results[0].warning).toContain('1 of 2');
+    expect(sendAutomationNotification).toHaveBeenCalledWith(
+      'C1',
+      expect.objectContaining({ warning: expect.stringContaining('1 of 2') })
+    );
+  });
+
+  it('does not duplicate into a target it could not check', async () => {
+    getAdSetCreativeIds.mockRejectedValue(new Error('rate limited'));
+
+    const { results } = await evaluate(promoteRule('winners-1'));
+
+    expect(duplicateAd).not.toHaveBeenCalled();
+    expect(updateName).not.toHaveBeenCalled();
+    expect(results[0]).toMatchObject({ action: 'promotion_failed' });
+  });
+
+  it('flags a failed rename in the result and in Slack', async () => {
+    updateName.mockRejectedValue(new Error('rename failed'));
+
+    const { results } = await evaluate(promoteRule('winners-1'));
+
+    expect(results[0]).toMatchObject({
+      action: 'promoted (original kept active)',
+      marked_promoted: false,
+    });
+    expect(results[0].warning).toContain('"+" marker');
+    expect(sendAutomationNotification).toHaveBeenCalledWith(
+      'C1',
+      expect.objectContaining({ warning: expect.stringContaining('"+" marker') })
+    );
   });
 });

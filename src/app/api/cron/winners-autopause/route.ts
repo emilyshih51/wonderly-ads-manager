@@ -1,11 +1,12 @@
 /**
  * GET /api/cron/winners-autopause
  *
- * Daily check of the Winners campaign (see `src/lib/winners-autopause.ts` for the rules and
- * `src/lib/winners-autopause-runner.ts` for the safety rails). Runs once a day on completed
- * days only — see vercel.json.
+ * Daily check of every campaign on the Auto-pause page (Winners by default). Each campaign
+ * has its own rules and Off / Dry run / Live switch; stopped campaigns are skipped. See
+ * `src/lib/winners-autopause.ts` for the rules and `src/lib/winners-autopause-runner.ts`
+ * for the safety rails. Runs once a day on completed days only — see vercel.json.
  *
- * Does nothing when stopped from the Auto-pause page or when `WINNERS_AUTOPAUSE_DISABLED=1`.
+ * Does nothing at all when `WINNERS_AUTOPAUSE_DISABLED=1`.
  *
  * Auth follows the existing cron pattern: `Authorization: Bearer <CRON_SECRET>` when
  * CRON_SECRET is set; 503 in production when it is not.
@@ -13,18 +14,13 @@
 
 import { NextResponse } from 'next/server';
 
-import {
-  autopauseSlackChannel,
-  envKillSwitch,
-  loadSettings,
-  runAutopause,
-} from '@/lib/winners-autopause-runner';
+import { envKillSwitch, runAllCampaigns } from '@/lib/winners-autopause-runner';
 import { createLogger } from '@/services/logger';
-import { createSlackService } from '@/services/slack';
 
 const logger = createLogger('WinnersAutopauseCron');
 
-export const maxDuration = 120;
+// Campaigns run one after another; give a few of them room to finish.
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -43,42 +39,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, skipped: 'env_kill_switch' });
   }
 
-  const { settings } = await loadSettings();
+  const results = await runAllCampaigns();
 
-  if (!settings.enabled) {
-    logger.info('Skipped — stopped from the Auto-pause page');
-
-    return NextResponse.json({ ok: true, skipped: 'stopped' });
-  }
-
-  try {
-    const run = await runAutopause('cron');
-
-    return NextResponse.json({
-      ok: true,
-      dryRun: run.settings.dryRun,
-      checked: run.evaluations.length,
-      wouldPause: run.evaluations.filter((e) => e.decision === 'PAUSE').length,
-      paused: run.paused.length,
-      overLimit: run.overLimit,
-    });
-  } catch (error) {
-    logger.error('Winners auto-pause run failed — nothing paused', error);
-
-    // Say so in Slack, so a missed day isn't silent.
-    const channel = autopauseSlackChannel();
-
-    if (channel) {
-      const reason = error instanceof Error ? error.message : 'Unknown error';
-
-      await createSlackService()
-        .postMessage(
-          channel,
-          `*Winners auto-pause couldn't run today.* Nothing was paused.\n${reason}`
-        )
-        .catch(() => null);
-    }
-
-    return NextResponse.json({ error: 'Run failed' }, { status: 500 });
-  }
+  return NextResponse.json({
+    ok: results.every((r) => !r.error),
+    campaigns: results.map(({ campaign, run, skipped, error }) => ({
+      id: campaign.id,
+      name: campaign.name,
+      skipped,
+      error,
+      dryRun: run?.settings.dryRun,
+      checked: run?.evaluations.length,
+      wouldPause: run?.evaluations.filter((e) => e.decision === 'PAUSE').length,
+      paused: run?.paused.length,
+      overLimit: run?.overLimit,
+    })),
+  });
 }

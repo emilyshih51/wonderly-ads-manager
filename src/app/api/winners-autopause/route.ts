@@ -1,44 +1,91 @@
 /**
- * /api/winners-autopause — backs the Auto-pause page.
+ * /api/winners-autopause?campaign=<id> — backs the Auto-pause page. No `campaign` = Winners.
  *
- *   GET  → current settings, kill-switch state, and recent runs
- *   PUT  → update settings (on/off, dry run, numbers)
- *   POST → "Run check now": evaluates every ad and refreshes the table. Never pauses.
+ *   GET  → campaigns on the page, plus this campaign's settings, recent runs, change history,
+ *          and any active Automations rules that also pause ads in it
+ *   PUT  → update this campaign's settings (mode, numbers, rule on/off)
+ *   POST → "Run check now" for this campaign: refreshes the table. Never pauses.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getRedisClient } from '@/lib/redis';
 import { requireSession } from '@/lib/session';
+import type { AutopauseSettings } from '@/lib/winners-autopause';
+import { campaignFromRequest } from '@/lib/winners-autopause-request';
 import {
   AutopauseRateLimitError,
   envKillSwitch,
+  loadCampaigns,
   loadChanges,
   loadRuns,
   loadSettings,
   runAutopause,
   saveSettings,
 } from '@/lib/winners-autopause-runner';
-import type { AutopauseSettings } from '@/lib/winners-autopause';
 import { createLogger } from '@/services/logger';
+import { RulesStoreService } from '@/services/rules-store';
 
 const logger = createLogger('WinnersAutopauseApi');
 
 export const maxDuration = 120;
 
-export async function GET() {
+/** Active Automations rules that can pause ads and point at this campaign. */
+async function overlappingRules(campaignId: string): Promise<string[]> {
+  try {
+    const rules = await new RulesStoreService(await getRedisClient()).getActive();
+
+    return rules
+      .filter((r) => {
+        const json = JSON.stringify(r.nodes);
+
+        return json.includes(campaignId) && json.includes('"pause"');
+      })
+      .map((r) => r.name);
+  } catch {
+    return [];
+  }
+}
+
+export async function GET(request: NextRequest) {
   const session = await requireSession();
 
   if (session instanceof NextResponse) return session;
 
-  const [{ settings, persisted }, allRuns, changes] = await Promise.all([
-    loadSettings(),
-    loadRuns(10),
-    loadChanges(10),
+  const campaign = await campaignFromRequest(request);
+
+  if (campaign instanceof NextResponse) return campaign;
+
+  const [campaigns, { settings, persisted }, allRuns, changes, overlaps] = await Promise.all([
+    loadCampaigns(),
+    loadSettings(campaign.id),
+    loadRuns(campaign.id, 10),
+    loadChanges(campaign.id, 10),
+    overlappingRules(campaign.id),
   ]);
+  const modes = Object.fromEntries(
+    await Promise.all(
+      campaigns.map(async (c) => {
+        const { settings: s } = await loadSettings(c.id);
+
+        return [c.id, !s.enabled ? 'off' : s.dryRun ? 'dry' : 'live'] as const;
+      })
+    )
+  );
   // Only the latest run needs its per-day data (for "what if" previews) — keep the payload small.
   const runs = allRuns.map((run, i) => (i === 0 ? run : { ...run, inputs: undefined }));
 
-  return NextResponse.json({ settings, persisted, envKillSwitch: envKillSwitch(), runs, changes });
+  return NextResponse.json({
+    campaigns,
+    modes,
+    campaign,
+    settings,
+    persisted,
+    envKillSwitch: envKillSwitch(),
+    runs,
+    changes,
+    overlaps,
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -46,11 +93,19 @@ export async function PUT(request: NextRequest) {
 
   if (session instanceof NextResponse) return session;
 
+  const campaign = await campaignFromRequest(request);
+
+  if (campaign instanceof NextResponse) return campaign;
+
   try {
     const patch = (await request.json()) as Partial<AutopauseSettings>;
-    const settings = await saveSettings(patch, session.name || session.email || session.id);
+    const settings = await saveSettings(
+      campaign.id,
+      patch,
+      session.name || session.email || session.id
+    );
 
-    logger.info('Settings updated', { by: session.id, settings });
+    logger.info('Settings updated', { by: session.id, campaign: campaign.id, settings });
 
     return NextResponse.json({ settings });
   } catch (error) {
@@ -63,13 +118,17 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await requireSession();
 
   if (session instanceof NextResponse) return session;
 
+  const campaign = await campaignFromRequest(request);
+
+  if (campaign instanceof NextResponse) return campaign;
+
   try {
-    const run = await runAutopause('preview');
+    const run = await runAutopause('preview', campaign);
 
     return NextResponse.json({ run });
   } catch (error) {

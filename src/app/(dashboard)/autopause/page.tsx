@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, History, Play, RefreshCw, RotateCcw, Send } from 'lucide-react';
+import { AlertTriangle, Eye, History, Play, RefreshCw, RotateCcw, Send } from 'lucide-react';
 
+import { CampaignTabs, RemoveCampaignButton } from '@/components/autopause/campaign-tabs';
 import { ModeControl, type AutopauseMode } from '@/components/autopause/mode-control';
 import { DECISION_LABEL, ResultsTable } from '@/components/autopause/results-table';
 import {
@@ -21,21 +23,24 @@ import { apiFetch, apiPut } from '@/lib/queries/api-fetch';
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_AUTOPAUSE_SETTINGS,
+  WINNERS_CAMPAIGN_ID,
   planRun,
   type AutopauseDecision,
   type AutopauseSettings,
 } from '@/lib/winners-autopause';
-import type { SettingsChange, StoredRun } from '@/lib/winners-autopause-runner';
+import type { AutopauseCampaign, SettingsChange, StoredRun } from '@/lib/winners-autopause-runner';
 
 interface AutopauseState {
+  campaigns: AutopauseCampaign[];
+  modes: Record<string, AutopauseMode>;
+  campaign: AutopauseCampaign;
+  overlaps: string[];
   settings: AutopauseSettings;
   persisted: boolean;
   envKillSwitch: boolean;
   runs: StoredRun[];
   changes: SettingsChange[];
 }
-
-const QUERY_KEY = ['winners-autopause'];
 
 type Filter = 'ALL' | AutopauseDecision;
 
@@ -106,11 +111,40 @@ const when = (iso: string) =>
   });
 
 export default function AutopausePage() {
+  return (
+    <Suspense>
+      <AutopauseRouter />
+    </Suspense>
+  );
+}
+
+/** Keeps the selected campaign in the URL (?campaign=…) so a tab can be linked to. */
+function AutopauseRouter() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const campaignId = params.get('campaign') || WINNERS_CAMPAIGN_ID;
+  const select = (id: string) =>
+    router.replace(id === WINNERS_CAMPAIGN_ID ? pathname : `${pathname}?campaign=${id}`);
+
+  // `key` resets unsaved edits and filters when switching campaigns.
+  return <CampaignView key={campaignId} campaignId={campaignId} onSelect={select} />;
+}
+
+function CampaignView({
+  campaignId,
+  onSelect,
+}: {
+  campaignId: string;
+  onSelect: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+  const QUERY_KEY = ['winners-autopause', campaignId];
+  const api = `/api/winners-autopause?campaign=${encodeURIComponent(campaignId)}`;
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['winners-autopause'] });
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEY,
-    queryFn: () => apiFetch<AutopauseState>('/api/winners-autopause'),
+    queryFn: () => apiFetch<AutopauseState>(api),
   });
 
   const [draft, setDraft] = useState<RulesDraft | null>(null);
@@ -118,18 +152,22 @@ export default function AutopausePage() {
 
   const save = useMutation({
     mutationFn: (patch: Partial<AutopauseSettings>) =>
-      apiPut<{ settings: AutopauseSettings }>('/api/winners-autopause', patch),
+      apiPut<{ settings: AutopauseSettings }>(api, patch),
     onSuccess: () => void refresh(),
   });
   const runNow = useMutation({
-    mutationFn: () => apiFetch<{ run: StoredRun }>('/api/winners-autopause', { method: 'POST' }),
+    mutationFn: () => apiFetch<{ run: StoredRun }>(api, { method: 'POST' }),
     onSuccess: () => {
       sendSlack.reset();
       void refresh();
     },
   });
   const sendSlack = useMutation({
-    mutationFn: () => apiFetch<{ ok: boolean }>('/api/winners-autopause/slack', { method: 'POST' }),
+    mutationFn: () =>
+      apiFetch<{ ok: boolean }>(
+        `/api/winners-autopause/slack?campaign=${encodeURIComponent(campaignId)}`,
+        { method: 'POST' }
+      ),
   });
 
   const settings = data?.settings;
@@ -170,9 +208,9 @@ export default function AutopausePage() {
   return (
     <div>
       <Header
-        title="Winners Auto-pause"
+        title="Auto-pause"
         showDatePreset={false}
-        description="Checks every Winners ad once a day and pauses the ones that fail the rules."
+        description="Checks ads once a day and pauses the ones that fail the rules. Each campaign has its own rules."
       >
         <div className="flex items-center gap-2">
           <Button
@@ -204,6 +242,15 @@ export default function AutopausePage() {
         </div>
       </Header>
 
+      {data && (
+        <CampaignTabs
+          campaigns={data.campaigns}
+          modes={{ ...data.modes, [campaignId]: mode }}
+          selected={campaignId}
+          onSelect={onSelect}
+        />
+      )}
+
       <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
         {error && (
           <p className="text-sm text-red-500">Couldn&apos;t load: {(error as Error).message}</p>
@@ -215,12 +262,40 @@ export default function AutopausePage() {
             {isLoading || !settings ? (
               <Skeleton className="h-14 w-full" />
             ) : (
-              <ModeControl
-                mode={mode}
-                onChange={setMode}
-                disabled={save.isPending || !!lockedReason}
-                lockedReason={lockedReason}
-              />
+              <>
+                <p className="mb-3 text-xs font-medium tracking-wide text-[var(--color-muted-foreground)] uppercase">
+                  {data?.campaign.name}
+                </p>
+                <ModeControl
+                  mode={mode}
+                  onChange={setMode}
+                  disabled={save.isPending || !!lockedReason}
+                  lockedReason={lockedReason}
+                />
+                {data && data.overlaps.length > 0 && (
+                  <p className="mt-4 flex items-start gap-2 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      {data.overlaps.length === 1 ? 'An Automations rule' : 'Automations rules'}{' '}
+                      also pause{data.overlaps.length === 1 ? 's' : ''} ads in this campaign:{' '}
+                      {data.overlaps.map((n) => `“${n}”`).join(', ')}. Both will run, so an ad can
+                      be paused by either.
+                    </span>
+                  </p>
+                )}
+                {data && data.campaigns.length > 1 && (
+                  <div className="mt-4 flex justify-end border-t border-[var(--color-border)] pt-3">
+                    <RemoveCampaignButton
+                      campaign={data.campaign}
+                      onRemoved={() =>
+                        onSelect(
+                          data.campaigns.find((c) => c.id !== campaignId)?.id ?? WINNERS_CAMPAIGN_ID
+                        )
+                      }
+                    />
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

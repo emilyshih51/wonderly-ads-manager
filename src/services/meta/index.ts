@@ -20,6 +20,7 @@ import {
   INSIGHT_FIELDS_ADSET,
   INSIGHT_FIELDS_CAMPAIGN,
   ACTIVE_FILTER,
+  PROMOTE_DEDUPE_AD_STATUSES,
 } from './constants';
 
 export { META_OAUTH_URL };
@@ -574,6 +575,61 @@ export class MetaService {
     })) as { id: string };
 
     return { id: result.id };
+  }
+
+  /**
+   * Read an ad's current name and creative ID directly from the ad object.
+   *
+   * Unlike the `ad_name` on an Insights row, this can't lag behind a recent
+   * rename, so the promote flow uses it as the source of truth.
+   *
+   * @param adId - Ad ID
+   * @returns The live name and creative ID (`creativeId` is `null` when the ad has none)
+   */
+  async getAdNameAndCreative(adId: string): Promise<{ name: string; creativeId: string | null }> {
+    const ad = (await this.request(`/${adId}`, {
+      params: { fields: 'name,creative{id}' },
+    })) as { name?: string; creative?: { id?: string } };
+
+    return { name: ad.name ?? '', creativeId: ad.creative?.id ?? null };
+  }
+
+  /**
+   * Collect the creative IDs of every non-deleted, non-archived ad in an ad set.
+   *
+   * The promote flow duplicates a winner by reusing its creative, so "this ad
+   * set already contains this creative" means "this winner was already
+   * promoted here" — without trusting the `+` name marker. Paused copies
+   * count, so pausing a copy in Winners does not get it re-added.
+   *
+   * @param adSetId - Ad set ID
+   * @returns Set of creative IDs present in the ad set
+   */
+  async getAdSetCreativeIds(adSetId: string): Promise<Set<string>> {
+    const creativeIds = new Set<string>();
+    let after: string | undefined;
+
+    do {
+      const page = await this.request<{
+        data: Array<{ creative?: { id?: string } }>;
+        paging?: { cursors?: { after?: string }; next?: string };
+      }>(`/${adSetId}/ads`, {
+        params: {
+          fields: 'creative{id}',
+          effective_status: JSON.stringify(PROMOTE_DEDUPE_AD_STATUSES),
+          limit: '500',
+          ...(after ? { after } : {}),
+        },
+      });
+
+      for (const ad of page.data ?? []) {
+        if (ad.creative?.id) creativeIds.add(ad.creative.id);
+      }
+
+      after = page.paging?.next ? page.paging.cursors?.after : undefined;
+    } while (after);
+
+    return creativeIds;
   }
 
   /**

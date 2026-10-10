@@ -109,6 +109,25 @@ export const INSIGHT_DETAIL_FIELDS: Record<string, string> = {
 // ─── Promoted-Ad Marker ──────────────────────────────────────────────────────
 
 /**
+ * Ad statuses that count as "already in the target ad set" when the promote
+ * action checks for an existing copy of a winner's creative. Everything except
+ * `DELETED` and `ARCHIVED` — a paused copy still counts, so pausing a copy in
+ * Winners doesn't get it re-added on the next run.
+ */
+export const PROMOTE_DEDUPE_AD_STATUSES = [
+  'ACTIVE',
+  'PAUSED',
+  'CAMPAIGN_PAUSED',
+  'ADSET_PAUSED',
+  'PENDING_REVIEW',
+  'PREAPPROVED',
+  'DISAPPROVED',
+  'WITH_ISSUES',
+  'IN_PROCESS',
+  'PENDING_BILLING_INFO',
+] as const;
+
+/**
  * Character prefixed to a winning ad's name once it has been promoted, so it is
  * visible in Meta Ads Manager and can be skipped on future automation runs.
  *

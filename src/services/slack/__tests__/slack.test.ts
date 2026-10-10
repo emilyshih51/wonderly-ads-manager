@@ -314,6 +314,29 @@ describe('SlackService', () => {
       expect(allBlockText).toContain('Duplicated to winners ad set');
       expect(allBlockText).toContain('dup-456');
     });
+
+    it('shows a warning line when one is provided', async () => {
+      const fetchFn = makeFetch({ ok: true, ts: '1234', channel: 'C1' });
+      const svc = new SlackService(BOT_TOKEN, SIGNING_SECRET, fetchFn);
+
+      await svc.sendAutomationNotification('C1', {
+        ...baseNotification,
+        actionType: 'promote',
+        duplicatedAdId: 'dup-456',
+        warning: 'Duplicated into 1 of 2 target ad sets',
+      });
+
+      const [, options] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as {
+        blocks: Array<{ type: string; text?: { text: string } }>;
+      };
+      const allBlockText = body.blocks
+        .filter((b) => b.text?.text)
+        .map((b) => b.text!.text)
+        .join(' ');
+
+      expect(allBlockText).toContain('⚠️ Duplicated into 1 of 2 target ad sets');
+    });
   });
 
   describe('sendBudgetNotification()', () => {

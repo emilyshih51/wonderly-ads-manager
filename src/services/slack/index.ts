@@ -282,6 +282,7 @@ export class SlackService {
       customMessage,
       duplicatedAdId,
       duplicatedCount,
+      warning,
       prefix = '',
       datePreset = 'today',
     } = notification;
@@ -365,6 +366,10 @@ export class SlackService {
       } else {
         bodySections.push(`Duplicated to winners ad set: <${dupLink}|View new ad>`);
       }
+    }
+
+    if (warning) {
+      bodySections.push(`⚠️ ${SlackService.sanitizeMentions(warning)}`);
     }
 
     const header = `${prefix}${actionEmoji} *[${brand}]* ${ruleName}`;

@@ -83,6 +83,8 @@ export interface AutomationNotification {
    * greater than 1, the notification reflects the multi-target promotion.
    */
   duplicatedCount?: number;
+  /** Optional warning about the action (e.g. a partial promotion), shown with a ⚠️. */
+  warning?: string;
   /** Optional prefix string (used in tests to identify test messages). */
   prefix?: string;
   /** Date preset used to evaluate the rule — drives the Ads Manager deep link date range. */

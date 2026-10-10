@@ -5,18 +5,23 @@
  * re-run the check (no extra Meta calls) and never pauses anything.
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
 import { requireSession } from '@/lib/session';
+import { campaignFromRequest } from '@/lib/winners-autopause-request';
 import { autopauseSlackChannel, loadRuns, postRunToSlack } from '@/lib/winners-autopause-runner';
 import { createLogger } from '@/services/logger';
 
 const logger = createLogger('WinnersAutopauseSlack');
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await requireSession();
 
   if (session instanceof NextResponse) return session;
+
+  const campaign = await campaignFromRequest(request);
+
+  if (campaign instanceof NextResponse) return campaign;
 
   if (!autopauseSlackChannel()) {
     return NextResponse.json(
@@ -25,7 +30,7 @@ export async function POST() {
     );
   }
 
-  const [latest] = await loadRuns(1);
+  const [latest] = await loadRuns(campaign.id, 1);
 
   if (!latest) {
     return NextResponse.json(

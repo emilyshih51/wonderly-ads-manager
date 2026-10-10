@@ -1,9 +1,11 @@
 /**
- * Winners auto-pause — the I/O side: settings in Redis, data from Meta, pausing, Slack.
+ * Auto-pause — the I/O side: per-campaign settings in Redis, data from Meta, pausing, Slack.
+ * Started with the Winners campaign (hence the file name); each campaign on the page now
+ * has its own settings, runs and history.
  * The rules themselves live in `./winners-autopause.ts` (pure, tested).
  *
  * Used by:
- *   - `GET /api/cron/winners-autopause` (daily Vercel cron) → `runAutopause('cron')`
+ *   - `GET /api/cron/winners-autopause` (daily Vercel cron) → `runAllCampaigns()`
  *   - `POST /api/winners-autopause` ("Run check now" on the Auto-pause page) → `runAutopause('preview')`
  *
  * Safety rails (keep these):
@@ -19,6 +21,7 @@
 
 import {
   DEFAULT_AUTOPAUSE_SETTINGS,
+  WINNERS_CAMPAIGN_ID,
   formatSlackSummary,
   planRun,
   sanitizeSettings,
@@ -37,9 +40,130 @@ import { createSlackService } from '@/services/slack';
 
 const logger = createLogger('WinnersAutopause');
 
-const SETTINGS_KEY = 'winners_autopause:settings';
-const RUNS_KEY = 'winners_autopause:runs';
-const CHANGES_KEY = 'winners_autopause:changes';
+const CAMPAIGNS_KEY = 'winners_autopause:campaigns';
+
+/**
+ * Redis keys for one campaign. Winners keeps the original un-suffixed keys so its settings,
+ * runs and history from before multi-campaign support carry over untouched.
+ */
+function keys(campaignId: string) {
+  const suffix = campaignId === WINNERS_CAMPAIGN_ID ? '' : `:${campaignId}`;
+
+  return {
+    settings: `winners_autopause:settings${suffix}`,
+    runs: `winners_autopause:runs${suffix}`,
+    changes: `winners_autopause:changes${suffix}`,
+  };
+}
+
+/** A campaign the auto-pause rules run on. */
+export interface AutopauseCampaign {
+  id: string;
+  name: string;
+}
+
+/** Pay Per Results — the testing campaign that feeds Winners. */
+export const PAY_PER_RESULTS_CAMPAIGN_ID = '120242022304100408';
+
+/**
+ * Used until someone adds/removes a campaign on the page. Pay Per Results has no saved
+ * settings at first, so it picks up a copy of Winners' rules in Dry run (see loadSettings).
+ */
+const DEFAULT_CAMPAIGNS: AutopauseCampaign[] = [
+  { id: WINNERS_CAMPAIGN_ID, name: 'Wonderly | Prospecting | Remodeling Winners' },
+  {
+    id: PAY_PER_RESULTS_CAMPAIGN_ID,
+    name: 'Wonderly | Prospecting | Remodeling Pay Per Results',
+  },
+];
+
+/** Campaigns that have auto-pause rules (each with its own settings). Winners by default. */
+export async function loadCampaigns(): Promise<AutopauseCampaign[]> {
+  const redis = await getRedisClient();
+
+  if (!redis) return DEFAULT_CAMPAIGNS.map((c) => ({ ...c }));
+
+  try {
+    const raw = await redis.get(CAMPAIGNS_KEY);
+    const list = raw ? (JSON.parse(raw) as AutopauseCampaign[]) : null;
+
+    return list && list.length > 0 ? list : DEFAULT_CAMPAIGNS.map((c) => ({ ...c }));
+  } catch {
+    logger.warn('Malformed campaign list in Redis — using Winners only');
+
+    return DEFAULT_CAMPAIGNS.map((c) => ({ ...c }));
+  }
+}
+
+/**
+ * Add a campaign. Its rules start as a copy of `copyFrom`'s (Winners by default) and it
+ * starts in Dry run, so nothing is paused until someone has looked at it.
+ */
+export async function addCampaign(
+  campaign: AutopauseCampaign,
+  by: string,
+  copyFrom = WINNERS_CAMPAIGN_ID
+): Promise<AutopauseCampaign[]> {
+  const redis = await getRedisClient();
+
+  if (!redis) throw new Error('Redis is not available — campaigns cannot be added');
+
+  const id = campaign.id.replace(/\D/g, '');
+
+  if (!id) throw new Error('Missing campaign ID');
+
+  const list = await loadCampaigns();
+
+  if (!list.some((c) => c.id === id)) {
+    const { settings: source } = await loadSettings(copyFrom);
+    const existing = await redis.get(keys(id).settings);
+
+    if (!existing) {
+      await redis.set(
+        keys(id).settings,
+        JSON.stringify(sanitizeSettings({ ...source, campaignId: id, enabled: true, dryRun: true }))
+      );
+    }
+
+    list.push({ id, name: campaign.name || id });
+    await redis.set(CAMPAIGNS_KEY, JSON.stringify(list));
+    await logChange(id, by, { campaign: [null, 'added (dry run)'] });
+  }
+
+  return list;
+}
+
+/** Stop running the rules on a campaign. Its settings and history are kept. */
+export async function removeCampaign(id: string, by: string): Promise<AutopauseCampaign[]> {
+  const redis = await getRedisClient();
+
+  if (!redis) throw new Error('Redis is not available — campaigns cannot be removed');
+
+  const list = (await loadCampaigns()).filter((c) => c.id !== id);
+
+  if (list.length === 0) throw new Error('Keep at least one campaign');
+
+  await redis.set(CAMPAIGNS_KEY, JSON.stringify(list));
+  await logChange(id, by, { campaign: ['on', 'removed'] });
+
+  return list;
+}
+
+async function logChange(
+  campaignId: string,
+  by: string,
+  changes: Record<string, [unknown, unknown]>
+): Promise<void> {
+  const redis = await getRedisClient();
+
+  if (!redis) return;
+
+  const entry = { at: new Date().toISOString(), by, changes };
+
+  await redis.lPush(keys(campaignId).changes, JSON.stringify(entry));
+  await redis.lTrim(keys(campaignId).changes, 0, MAX_CHANGES - 1);
+}
+
 const MAX_CHANGES = 30;
 const MAX_RUNS = 30;
 
@@ -58,15 +182,17 @@ export function envKillSwitch(): boolean {
 }
 
 /** Load settings. `persisted: false` means Redis is unavailable (treat as dry run). */
-export async function loadSettings(): Promise<{
+export async function loadSettings(campaignId = WINNERS_CAMPAIGN_ID): Promise<{
   settings: AutopauseSettings;
   persisted: boolean;
 }> {
   const redis = await getRedisClient();
 
-  if (!redis) return { settings: { ...DEFAULT_AUTOPAUSE_SETTINGS }, persisted: false };
+  if (!redis) {
+    return { settings: { ...DEFAULT_AUTOPAUSE_SETTINGS, campaignId }, persisted: false };
+  }
 
-  const raw = await redis.get(SETTINGS_KEY);
+  const raw = await redis.get(keys(campaignId).settings);
   let parsed: Partial<AutopauseSettings> | null = null;
 
   try {
@@ -75,7 +201,14 @@ export async function loadSettings(): Promise<{
     logger.warn('Malformed settings in Redis — using defaults');
   }
 
-  return { settings: sanitizeSettings(parsed), persisted: true };
+  // A campaign with nothing saved yet follows Winners' rules, always starting in Dry run.
+  if (!raw && campaignId !== WINNERS_CAMPAIGN_ID) {
+    const { settings: winners } = await loadSettings(WINNERS_CAMPAIGN_ID);
+
+    parsed = { ...winners, enabled: true, dryRun: true };
+  }
+
+  return { settings: sanitizeSettings({ ...parsed, campaignId }), persisted: true };
 }
 
 /** One saved change to the settings, for the "Change history" list on the page. */
@@ -91,6 +224,7 @@ export interface SettingsChange {
  * Returns the saved settings.
  */
 export async function saveSettings(
+  campaignId: string,
   patch: Partial<AutopauseSettings>,
   by = 'unknown'
 ): Promise<AutopauseSettings> {
@@ -98,33 +232,31 @@ export async function saveSettings(
 
   if (!redis) throw new Error('Redis is not available — settings cannot be saved');
 
-  const { settings: current } = await loadSettings();
-  const next = sanitizeSettings({ ...current, ...patch });
+  const { settings: current } = await loadSettings(campaignId);
+  const next = sanitizeSettings({ ...current, ...patch, campaignId });
   const changes: SettingsChange['changes'] = {};
 
   for (const key of Object.keys(next) as Array<keyof AutopauseSettings>) {
     if (current[key] !== next[key]) changes[key] = [current[key], next[key]];
   }
 
-  await redis.set(SETTINGS_KEY, JSON.stringify(next));
+  await redis.set(keys(campaignId).settings, JSON.stringify(next));
 
-  if (Object.keys(changes).length > 0) {
-    const entry: SettingsChange = { at: new Date().toISOString(), by, changes };
-
-    await redis.lPush(CHANGES_KEY, JSON.stringify(entry));
-    await redis.lTrim(CHANGES_KEY, 0, MAX_CHANGES - 1);
-  }
+  if (Object.keys(changes).length > 0) await logChange(campaignId, by, changes);
 
   return next;
 }
 
 /** Recent settings changes, newest first. */
-export async function loadChanges(limit = 10): Promise<SettingsChange[]> {
+export async function loadChanges(
+  campaignId = WINNERS_CAMPAIGN_ID,
+  limit = 10
+): Promise<SettingsChange[]> {
   const redis = await getRedisClient();
 
   if (!redis) return [];
 
-  const raw = await redis.lRange(CHANGES_KEY, 0, limit - 1);
+  const raw = await redis.lRange(keys(campaignId).changes, 0, limit - 1);
 
   return raw.flatMap((r) => {
     try {
@@ -136,12 +268,12 @@ export async function loadChanges(limit = 10): Promise<SettingsChange[]> {
 }
 
 /** Most recent runs, newest first. */
-export async function loadRuns(limit = 10): Promise<StoredRun[]> {
+export async function loadRuns(campaignId = WINNERS_CAMPAIGN_ID, limit = 10): Promise<StoredRun[]> {
   const redis = await getRedisClient();
 
   if (!redis) return [];
 
-  const raw = await redis.lRange(RUNS_KEY, 0, limit - 1);
+  const raw = await redis.lRange(keys(campaignId).runs, 0, limit - 1);
 
   return raw.flatMap((r) => {
     try {
@@ -157,8 +289,8 @@ async function saveRun(run: StoredRun): Promise<void> {
 
   if (!redis) return;
 
-  await redis.lPush(RUNS_KEY, JSON.stringify(run));
-  await redis.lTrim(RUNS_KEY, 0, MAX_RUNS - 1);
+  await redis.lPush(keys(run.settings.campaignId).runs, JSON.stringify(run));
+  await redis.lTrim(keys(run.settings.campaignId).runs, 0, MAX_RUNS - 1);
 }
 
 /** `YYYY-MM-DD` for `date` in an IANA time zone. */
@@ -297,8 +429,11 @@ export async function postRunToSlack(run: StoredRun): Promise<boolean> {
  * Run the check. `cron` may pause (unless dry run / stopped); `preview` never pauses
  * and never posts to Slack — it only refreshes the table on the page.
  */
-export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
-  const { settings, persisted } = await loadSettings();
+export async function runAutopause(
+  trigger: RunTrigger,
+  campaign: AutopauseCampaign = DEFAULT_CAMPAIGNS[0]
+): Promise<StoredRun> {
+  const { settings, persisted } = await loadSettings(campaign.id);
   const effective: AutopauseSettings = {
     ...settings,
     dryRun: settings.dryRun || !persisted || trigger === 'preview',
@@ -316,6 +451,7 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
 
   const run: StoredRun = {
     trigger,
+    campaignName: campaign.name,
     ranAt: new Date().toISOString(),
     throughDate,
     settings: effective,
@@ -330,7 +466,7 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
 
   if (!effective.dryRun && toPause.length > 0) {
     // Re-check the switch right before acting, in case someone hit Stop mid-run.
-    const latest = await loadSettings();
+    const latest = await loadSettings(campaign.id);
 
     if (!latest.settings.enabled || latest.settings.dryRun || envKillSwitch()) {
       run.note = 'Stopped or switched to dry run during the run — nothing paused';
@@ -360,4 +496,51 @@ export async function runAutopause(trigger: RunTrigger): Promise<StoredRun> {
   }
 
   return run;
+}
+
+/**
+ * Daily cron: run every campaign that's switched on, one after another (keeps Meta's
+ * per-hour request limit happy). One campaign failing doesn't stop the others — its
+ * failure is posted to Slack and the rest carry on.
+ */
+export async function runAllCampaigns(): Promise<
+  Array<{ campaign: AutopauseCampaign; run?: StoredRun; skipped?: string; error?: string }>
+> {
+  const results: Array<{
+    campaign: AutopauseCampaign;
+    run?: StoredRun;
+    skipped?: string;
+    error?: string;
+  }> = [];
+
+  for (const campaign of await loadCampaigns()) {
+    const { settings } = await loadSettings(campaign.id);
+
+    if (!settings.enabled) {
+      results.push({ campaign, skipped: 'stopped' });
+      continue;
+    }
+
+    try {
+      results.push({ campaign, run: await runAutopause('cron', campaign) });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+
+      logger.error(`Auto-pause run failed for ${campaign.name} — nothing paused`, error);
+      results.push({ campaign, error: reason });
+
+      const channel = autopauseSlackChannel();
+
+      if (channel) {
+        await createSlackService()
+          .postMessage(
+            channel,
+            `*Auto-pause couldn't run today for ${campaign.name}.* Nothing was paused.\n${reason}`
+          )
+          .catch(() => null);
+      }
+    }
+  }
+
+  return results;
 }

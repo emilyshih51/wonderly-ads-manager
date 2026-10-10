@@ -290,6 +290,8 @@ export function evaluateAd(
 
 export interface AutopauseRun {
   ranAt: string;
+  /** Campaign name, for the Slack title. Missing on runs from before multi-campaign. */
+  campaignName?: string;
   /** Last completed day included. */
   throughDate: string;
   settings: AutopauseSettings;
@@ -377,7 +379,9 @@ export function formatSlackSummary(
   const watch = run.evaluations.filter((e) => e.decision === 'WATCH');
   const ok = run.evaluations.length - pause.length - watch.length;
   const mode = run.settings.dryRun ? ' (dry run — nothing was paused)' : '';
-  const lines = [`*Winners auto-pause — data through ${run.throughDate}*${mode}`];
+  const lines = [
+    `*${shortCampaignName(run.campaignName)} auto-pause — data through ${run.throughDate}*${mode}`,
+  ];
 
   if (run.overLimit) {
     lines.push(
@@ -400,4 +404,15 @@ export function formatSlackSummary(
   if (pageUrl) lines.push(`<${pageUrl}|Open the Auto-pause page>`);
 
   return lines.join('\n');
+}
+
+/** "Wonderly | Prospecting | Remodeling Winners" → "Remodeling Winners". */
+export function shortCampaignName(name?: string): string {
+  if (!name) return 'Winners';
+  const parts = name
+    .split('|')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  return parts[parts.length - 1] || name;
 }

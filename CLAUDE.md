@@ -233,13 +233,13 @@ Tests: `src/app/api/automations/__tests__/evaluate-guardrail.test.ts`.
 
 ### Winners auto-pause (separate from the automations engine)
 
-A daily job that pauses ads in the "Wonderly | Prospecting | Remodeling Winners" campaign when they fail the Poisson rules in the Notion "Winners Campaign Auto-Pause Spec". It is **not** an Automations-page rule: it intentionally pauses ads that have conversions (which the guardrail above forbids for generic rules), needs per-day data and a rolling $2k window, and runs once a day on completed days.
+A daily job that pauses ads in the campaigns listed on the Auto-pause page (Remodeling Winners and Remodeling Pay Per Results by default; more can be added there) when they fail the Poisson rules in the Notion "Winners Campaign Auto-Pause Spec". It is **not** an Automations-page rule: it intentionally pauses ads that have conversions (which the guardrail above forbids for generic rules), needs per-day data and a rolling $2k window, and runs once a day on completed days.
 
 - Rules (pure, tested): `src/lib/winners-autopause.ts` — keep in sync with the Notion spec.
 - I/O + safety rails: `src/lib/winners-autopause-runner.ts`
 - Cron: `GET /api/cron/winners-autopause` (daily, `0 15 * * *` UTC)
 - Page: `/autopause` — mode (Off / Dry run / Live; Live asks to confirm), latest check with filter tiles, rules editor (each rule a sentence with inline numbers + its own on/off; unsaved edits re-run the rules client-side on the latest run's stored `inputs` so you see the effect before saving), change history (`winners_autopause:changes`). Components in `src/components/autopause/`. API: `/api/winners-autopause`.
-- Settings live in Redis (`winners_autopause:settings`), runs in `winners_autopause:runs`.
+- Each campaign has its own settings, runs and change history in Redis (`winners_autopause:settings:<campaignId>` etc.; Winners keeps the original un-suffixed keys). The campaign list is `winners_autopause:campaigns`. A campaign with no saved settings follows Winners' rules in Dry run. The cron runs campaigns one at a time; one failing doesn't stop the others. API routes take `?campaign=<id>` (default Winners).
 
 Safety rails to preserve: off switch on the page and env `WINNERS_AUTOPAUSE_DISABLED=1` both stop the cron; dry run is the default; no Redis → dry run; Meta errors → nothing paused; more failures than `maxPausesPerRun` → nothing paused + Slack warning; settings re-read right before pausing; the job only ever pauses (never activates or changes budgets). Slack summary goes to `SLACK_AUTOPAUSE_CHANNEL` (falls back to `SLACK_NOTIFICATION_CHANNEL`).
 

@@ -1096,41 +1096,61 @@ export class MetaService {
 
   /**
    * Per-ad, per-day insights for one campaign over a date range (`level=ad`,
-   * `time_increment=1`), following pagination so long-running ads aren't cut off.
+   * `time_increment=1`), following pagination.
+   *
+   * Big campaigns (many ads × many days) make Meta time out with "Service temporarily
+   * unavailable", so the pull is split into ≤31-day windows and, when `adIds` is given,
+   * batches of 50 ads; each request is retried a couple of times on Meta's transient errors.
    *
    * @param campaignId - Meta campaign ID
    * @param since - First day, `YYYY-MM-DD` (inclusive)
    * @param until - Last day, `YYYY-MM-DD` (inclusive)
+   * @param adIds - Only these ads (e.g. the active ones). Omit for every ad in the campaign.
    */
   async getCampaignAdDailyInsights(
     campaignId: string,
     since: string,
-    until: string
+    until: string,
+    adIds?: string[]
   ): Promise<MetaInsightsRow[]> {
+    if (adIds && adIds.length === 0) return [];
+
     const rows: MetaInsightsRow[] = [];
-    let after: string | undefined;
+    const adBatches = adIds ? chunk(adIds, 50) : [null];
 
-    for (let page = 0; page < 100; page++) {
-      const params: Record<string, string> = {
-        fields: 'ad_id,ad_name,adset_id,campaign_id,spend,actions',
-        level: 'ad',
-        time_range: JSON.stringify({ since, until }),
-        time_increment: '1',
-        limit: '500',
-      };
+    for (const window of dateWindows(since, until, 31)) {
+      for (const batch of adBatches) {
+        let after: string | undefined;
 
-      if (after) params.after = after;
+        for (let page = 0; page < 100; page++) {
+          const params: Record<string, string> = {
+            fields: 'ad_id,ad_name,adset_id,campaign_id,spend,actions',
+            level: 'ad',
+            time_range: JSON.stringify(window),
+            time_increment: '1',
+            limit: '200',
+          };
 
-      const data = await this.request<{
-        data?: MetaInsightsRow[];
-        paging?: { cursors?: { after?: string }; next?: string };
-      }>(`/${campaignId}/insights`, { params });
+          if (batch) {
+            params.filtering = JSON.stringify([{ field: 'ad.id', operator: 'IN', value: batch }]);
+          }
 
-      rows.push(...(data.data ?? []));
+          if (after) params.after = after;
 
-      if (!data.paging?.next) break;
-      after = data.paging.cursors?.after;
-      if (!after) break;
+          const data = await withTransientRetry(() =>
+            this.request<{
+              data?: MetaInsightsRow[];
+              paging?: { cursors?: { after?: string }; next?: string };
+            }>(`/${campaignId}/insights`, { params })
+          );
+
+          rows.push(...(data.data ?? []));
+
+          if (!data.paging?.next) break;
+          after = data.paging.cursors?.after;
+          if (!after) break;
+        }
+      }
     }
 
     return rows;
@@ -1238,4 +1258,69 @@ export class MetaService {
       data?: Array<{ id: string; name: string; account_status: number }>;
     }>;
   }
+}
+
+/**
+ * Meta's "try again" errors: code 1 (unknown error), 2 ("Service temporarily unavailable"),
+ * or messages asking to reduce the data requested. Distinct from rate limits.
+ */
+export function isMetaTransient(error: unknown): boolean {
+  if (error instanceof MetaApiError) {
+    const code = error.metaError.code;
+
+    if (code === 1 || code === 2) return true;
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+
+  return (
+    message.includes('temporarily unavailable') ||
+    message.includes('unknown error') ||
+    message.includes('reduce the amount of data') ||
+    message.includes('please retry')
+  );
+}
+
+/** Retry `fn` up to `delays.length` more times on Meta's transient errors. */
+async function withTransientRetry<T>(fn: () => Promise<T>, delays = [3_000, 8_000]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isMetaTransient(error) || attempt >= delays.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+
+  return out;
+}
+
+/** Split `since`…`until` (inclusive, `YYYY-MM-DD`) into windows of at most `days` days. */
+export function dateWindows(
+  since: string,
+  until: string,
+  days: number
+): Array<{ since: string; until: string }> {
+  const out: Array<{ since: string; until: string }> = [];
+  const end = new Date(`${until}T00:00:00Z`);
+  let start = new Date(`${since}T00:00:00Z`);
+
+  while (start <= end) {
+    const windowEnd = new Date(start);
+
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + days - 1);
+    const last = windowEnd < end ? windowEnd : end;
+
+    out.push({ since: start.toISOString().slice(0, 10), until: last.toISOString().slice(0, 10) });
+    start = new Date(last);
+    start.setUTCDate(start.getUTCDate() + 1);
+  }
+
+  return out;
 }

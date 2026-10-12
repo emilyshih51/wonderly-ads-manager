@@ -35,7 +35,7 @@ import { buildAdsManagerAdLink } from './ads-manager-link';
 import { WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID } from './growth-config';
 import { getRedisClient } from './redis';
 import { createLogger } from '@/services/logger';
-import { MetaService } from '@/services/meta';
+import { MetaService, isMetaTransient } from '@/services/meta';
 import { createSlackService } from '@/services/slack';
 
 const logger = createLogger('WinnersAutopause');
@@ -332,13 +332,17 @@ export async function fetchCampaignAds(
   const oneYearBack = addDays(until, -365);
   const since = startDate && startDate > oneYearBack ? startDate : oneYearBack;
 
-  const [ads, rows, optimizationMap] = await Promise.all([
-    meta.getCampaignAds(campaignId),
-    meta.getCampaignAdDailyInsights(campaignId, since, until),
-    meta.getOptimizationMap(),
-  ]);
-
+  // One step at a time, and only the live ads' data: big campaigns (Pay Per Results) make
+  // Meta time out when asked for every ad × every day at once.
+  const ads = await meta.getCampaignAds(campaignId);
   const active = ads.filter((a) => a.effectiveStatus === 'ACTIVE');
+  const rows = await meta.getCampaignAdDailyInsights(
+    campaignId,
+    since,
+    until,
+    active.map((a) => a.id)
+  );
+  const optimizationMap = await meta.getOptimizationMap();
   const byAd = new Map<string, AdDay[]>();
 
   for (const row of rows) {
@@ -444,9 +448,21 @@ export async function runAutopause(
   if (!token) throw new Error('META_SYSTEM_ACCESS_TOKEN is not configured');
 
   const meta = new MetaService(token, WONDERLY_AD_ACCOUNT_ID);
-  const { throughDate, ads } = await withRateLimitRetry(() =>
-    fetchCampaignAds(meta, effective.campaignId)
-  );
+  let fetched: Awaited<ReturnType<typeof fetchCampaignAds>>;
+
+  try {
+    fetched = await withRateLimitRetry(() => fetchCampaignAds(meta, effective.campaignId));
+  } catch (error) {
+    if (isMetaTransient(error)) {
+      throw new Error(
+        "Meta's servers didn't send the data (they said it was temporarily unavailable), even after retrying. Nothing was paused. Try Run check now in a bit — tomorrow's check will try again on its own."
+      );
+    }
+
+    throw error;
+  }
+
+  const { throughDate, ads } = fetched;
   const { evaluations, toPause, overLimit } = planRun(ads, effective);
 
   const run: StoredRun = {

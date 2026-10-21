@@ -31,7 +31,7 @@ import {
 } from './winners-autopause';
 import { getResultCount } from './automation-utils';
 import { isMetaRateLimit } from './meta-error-response';
-import { buildAdsManagerAdLink } from './ads-manager-link';
+import { buildAdsManagerPerformanceLink } from './ads-manager-link';
 import { WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID } from './growth-config';
 import { getRedisClient } from './redis';
 import { createLogger } from '@/services/logger';
@@ -416,8 +416,8 @@ export async function postRunToSlack(run: StoredRun): Promise<boolean> {
   if (!channel) return false;
 
   const base = process.env.NEXT_PUBLIC_APP_URL;
-  let text = formatSlackSummary(run, base ? `${base}/autopause` : undefined, (adId) =>
-    buildAdsManagerAdLink(WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID, adId)
+  let text = formatSlackSummary(run, base ? `${base}/autopause` : undefined, (adId, adName) =>
+    buildAdsManagerPerformanceLink(WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID, adId, adName)
   );
 
   if (run.trigger === 'preview') text += '\n_Sent by hand from the Auto-pause page_';

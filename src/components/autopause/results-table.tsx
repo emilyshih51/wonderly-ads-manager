@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { buildAdsManagerAdLink } from '@/lib/ads-manager-link';
+import { buildAdsManagerPerformanceLink } from '@/lib/ads-manager-link';
 import { WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID } from '@/lib/growth-config';
 import { cn } from '@/lib/utils';
 import type { AdEvaluation, AutopauseDecision } from '@/lib/winners-autopause';
@@ -73,8 +73,8 @@ export function ResultsTable({
     );
   }
 
-  const link = (adId: string) =>
-    buildAdsManagerAdLink(WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID, adId);
+  const link = (adId: string, adName: string) =>
+    buildAdsManagerPerformanceLink(WONDERLY_AD_ACCOUNT_ID, WONDERLY_BUSINESS_ID, adId, adName);
 
   const result = (e: AdEvaluation) => {
     const was = before?.get(e.adId);
@@ -131,7 +131,7 @@ export function ResultsTable({
             >
               <div className="flex items-start justify-between gap-2">
                 <a
-                  href={link(e.adId)}
+                  href={link(e.adId, e.adName)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="min-w-0 text-sm font-medium text-[var(--color-foreground)] hover:text-[var(--color-primary)]"
@@ -175,7 +175,7 @@ export function ResultsTable({
                 <TableRow key={e.adId} className={cn(r.changed && 'bg-[var(--color-primary)]/5')}>
                   <TableCell className="max-w-[340px]">
                     <a
-                      href={link(e.adId)}
+                      href={link(e.adId, e.adName)}
                       target="_blank"
                       rel="noopener noreferrer"
                       title={`${e.adName} — open in Ads Manager`}

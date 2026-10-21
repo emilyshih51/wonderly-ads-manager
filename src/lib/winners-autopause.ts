@@ -372,9 +372,10 @@ function slackLink(url: string, text: string): string {
 export function formatSlackSummary(
   run: AutopauseRun,
   pageUrl?: string,
-  adLink?: (adId: string) => string
+  adLink?: (adId: string, adName: string) => string
 ): string {
-  const name = (e: AdEvaluation) => (adLink ? slackLink(adLink(e.adId), e.adName) : e.adName);
+  const name = (e: AdEvaluation) =>
+    adLink ? slackLink(adLink(e.adId, e.adName), e.adName) : e.adName;
   const pause = run.evaluations.filter((e) => e.decision === 'PAUSE');
   const watch = run.evaluations.filter((e) => e.decision === 'WATCH');
   const ok = run.evaluations.length - pause.length - watch.length;

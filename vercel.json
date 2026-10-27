@@ -25,6 +25,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/linkedin-daily",
+      "schedule": "10 * * * *"
+    },
+    {
       "path": "/api/cron/acquisition-update",
       "schedule": "50 12 * * *"
     },

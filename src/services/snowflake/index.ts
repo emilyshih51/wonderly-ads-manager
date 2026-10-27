@@ -21,6 +21,7 @@ import { toChannel, type ChannelFunnelRow } from '@/lib/channel';
 import type { SeoPageRow } from '@/lib/seo-pages';
 import type { SucceedingContractors } from '@/lib/succeeding';
 import type { DailyMarketingRow } from '@/lib/marketing-daily';
+import type { LinkedinFunnelRow } from '@/lib/linkedin-metrics';
 
 /** wonderly-prod events table. The name embeds the Amplitude project id. */
 const EVENTS_TABLE = 'AMPLITUDE.AMPLITUDE.EVENTS_766268';
@@ -648,6 +649,219 @@ export class SnowflakeService {
       heldOrganic: num(r.HELD_ORGANIC),
       leadDaysSum: num(r.LEAD_DAYS_SUM),
       leadBookings: num(r.LEAD_BOOKINGS),
+    }));
+  }
+
+  /**
+   * Daily LinkedIn funnel for the "LinkedIn Daily Metrics" tab — the same counting rules as
+   * {@link getDailyMarketing}, restricted to people/deals carrying a LinkedIn signal.
+   *
+   * LinkedIn signal (marketing events): the event's `utm_source` is `linkedin`, OR the
+   * person's last-touch `utm_source` user property is `linkedin`, OR the event carries
+   * LinkedIn's click id `li_fat_id`. Campaign Manager auto-appends `utm_source=linkedin` to
+   * every ad link; message links must be tagged by hand.
+   *
+   * LinkedIn signal (CRM deals): the deal's own `METADATA.attribution` utm_source /
+   * acquisition_channel is `linkedin` (or it carries `li_fat_id`), falling back to the
+   * email → marketing-session bridge for deals without attribution — the same pattern
+   * Daily Metrics uses for its FB flag.
+   *
+   * Steps:
+   *   - FORM_OPENED  = unique LinkedIn people with a marketing page view (hi.wonderly.com is the
+   *                    form itself, so a view there is "form opened").
+   *   - PARTIAL / QUALIFIED = unique LinkedIn people firing the form submit events.
+   *   - CALL1_BOOKED = LinkedIn-qualified leads with a real booking, keyed to qualified day
+   *                    (identical rule to Daily Metrics).
+   *   - DIRECT_BOOKED = LinkedIn deals with a booking but NO qualified-form submit — the
+   *                    `?mode=book` link that skips the form. Keyed to booking day.
+   *   - HELD / NO_SHOW / ACCEPTED = cohort metrics by booking day, Daily Metrics definitions,
+   *                    over all LinkedIn deals (form AND direct-booked).
+   *
+   * @param days - Trailing window
+   * @param bookingOverrides - Manual deal_id → booked_day fills (same tab Daily Metrics uses)
+   * @returns One row per day that had any LinkedIn activity, newest first
+   */
+  async getLinkedinFunnel(
+    days: number,
+    bookingOverrides: BookingOverride[] = []
+  ): Promise<LinkedinFunnelRow[]> {
+    const LI_EVENT = `(LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) = 'linkedin'
+        OR LOWER(COALESCE(USER_PROPERTIES:utm_source::string,'')) = 'linkedin'
+        OR EVENT_PROPERTIES:li_fat_id IS NOT NULL)`;
+    const ATTR = 'TRY_PARSE_JSON(cd.METADATA):attribution';
+
+    const rows = await this.query<Record<string, unknown>>(
+      `WITH ovr AS (
+         SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
+         FROM TABLE(FLATTEN(input => PARSE_JSON(?)))
+       ),
+       excluded_amps AS (
+         SELECT DISTINCT AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND ${excludedEmail('LOWER(COALESCE(USER_PROPERTIES:email::string, EVENT_PROPERTIES:email::string))')}
+       ),
+       mkt AS (
+         SELECT CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date AS day, EVENT_TYPE, AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           AND ${LI_EVENT}
+           AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
+       ),
+       f AS (
+         SELECT day,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__PAGE__VIEW' THEN AMPLITUDE_ID END) AS form_opened,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL' THEN AMPLITUDE_ID END) AS partial,
+           COUNT(DISTINCT CASE WHEN EVENT_TYPE='MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED' THEN AMPLITUDE_ID END) AS qualified
+         FROM mkt GROUP BY day
+       ),
+       em AS (
+         SELECT CONTACT_ID,
+           LOWER(COALESCE(MAX(CASE WHEN IS_PRIMARY THEN EMAIL END), MAX(EMAIL))) AS join_email
+         FROM AIRBYTE.CSM_OPS.CRM_CONTACT_EMAILS
+         WHERE DELETED_AT IS NULL
+         GROUP BY CONTACT_ID
+       ),
+       sub_amp AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email, AMPLITUDE_ID
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+         GROUP BY 1, 2
+       ),
+       bc_amp AS (
+         SELECT AMPLITUDE_ID, MIN(CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date) AS bc
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE'
+         GROUP BY 1
+       ),
+       email_bc AS (
+         SELECT s.email, MIN(b.bc) AS bc FROM sub_amp s JOIN bc_amp b ON b.AMPLITUDE_ID = s.AMPLITUDE_ID GROUP BY 1
+       ),
+       crt AS (
+         SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS
+       ),
+       -- Emails whose form-submit session carried a LinkedIn signal (fallback channel bridge).
+       li_email AS (
+         SELECT DISTINCT LOWER(EVENT_PROPERTIES:email::string) AS email
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND (${LI_EVENT} OR LOWER(COALESCE(USER_PROPERTIES:initial_utm_source::string,'')) = 'linkedin')
+       ),
+       -- Every email that ever submitted the QUALIFIED form — separates form bookings from
+       -- direct (mode=book link) bookings.
+       any_qual AS (
+         SELECT DISTINCT LOWER(EVENT_PROPERTIES:email::string) AS email
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+           AND EVENT_PROPERTIES:email IS NOT NULL
+       ),
+       ds AS (
+         SELECT
+           COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))) AS day,
+           st.TYPE AS stage_type,
+           NULLIF(cd.LOSS_REASON_KEY, '') AS loss_reason,
+           CONVERT_TIMEZONE('${REPORT_TZ}', cd.PIPELINE_STAGE_ENTERED_AT)::date AS stage_entered_day,
+           ROW_NUMBER() OVER (
+             PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, cd.ID) END
+             ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), cd.ID
+           ) AS accept_rn,
+           CASE
+             WHEN ${ATTR}:utm_source IS NOT NULL OR ${ATTR}:acquisition_channel IS NOT NULL
+                  OR ${ATTR}:li_fat_id IS NOT NULL
+               THEN CASE WHEN LOWER(${ATTR}:utm_source::string) = 'linkedin'
+                          OR LOWER(${ATTR}:acquisition_channel::string) = 'linkedin'
+                          OR ${ATTR}:li_fat_id IS NOT NULL
+                         THEN 1 ELSE 0 END
+             ELSE CASE WHEN li_email.email IS NOT NULL THEN 1 ELSE 0 END
+           END AS is_li,
+           CASE WHEN any_qual.email IS NULL THEN 1 ELSE 0 END AS no_form,
+           CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
+                     OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
+                THEN 1 ELSE 0 END AS booked
+         FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
+         JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
+           ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
+         LEFT JOIN ovr o ON o.deal_id = cd.ID
+         LEFT JOIN em ON em.CONTACT_ID = cd.PRIMARY_CONTACT_PERSON_ID
+         LEFT JOIN email_bc ebc ON ebc.email = em.join_email
+         LEFT JOIN crt ON crt.deal_id = cd.ID
+         LEFT JOIN li_email ON li_email.email = em.join_email
+         LEFT JOIN any_qual ON any_qual.email = em.join_email
+         WHERE cd.DELETED_AT IS NULL
+           AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
+           AND NOT ${excludedDealName('cd.NAME')}
+       ),
+       s AS (
+         SELECT day,
+           SUM(CASE WHEN stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn = 1 THEN 1 ELSE 0 END) AS accepted,
+           SUM(CASE WHEN stage_type = '${NO_SHOW_STAGE_TYPE}' AND (stage_entered_day IS NULL OR stage_entered_day > day) THEN 1 ELSE 0 END) AS no_show,
+           SUM(CASE WHEN booked = 1 AND NOT (stage_type = '${ACCEPTED_STAGE_TYPE}' AND accept_rn > 1) AND (
+                      stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
+                      OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
+                    ) THEN 1 ELSE 0 END) AS held,
+           SUM(CASE WHEN booked = 1 AND no_form = 1 THEN 1 ELSE 0 END) AS direct_booked
+         FROM ds
+         WHERE day IS NOT NULL AND is_li = 1 AND day >= DATEADD('day', ?, CURRENT_DATE)
+         GROUP BY day
+       ),
+       qual AS (
+         SELECT LOWER(EVENT_PROPERTIES:email::string) AS email,
+           MIN(CONVERT_TIMEZONE('UTC', '${REPORT_TZ}', EVENT_TIME)::date) AS qualified_day
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND ${LI_EVENT}
+         GROUP BY 1
+       ),
+       bk AS (
+         SELECT DISTINCT LOWER(b.INVITEE_EMAIL) AS email
+         FROM AIRBYTE.CSM_OPS.BOOKING_LINK_INVITEES b
+         WHERE b.DELETED_AT IS NULL AND NOT b.IS_CANCELED AND b.INVITEE_EMAIL IS NOT NULL
+           AND NOT ${excludedEmail('LOWER(b.INVITEE_EMAIL)')}
+       ),
+       lead AS (
+         SELECT q.qualified_day AS day, COUNT(*) AS booked
+         FROM qual q JOIN bk ON bk.email = q.email
+         GROUP BY q.qualified_day
+       ),
+       days AS (
+         SELECT day FROM f UNION SELECT day FROM s UNION SELECT day FROM lead
+       )
+       SELECT TO_CHAR(d.day,'YYYY-MM-DD') AS DATE,
+         COALESCE(f.form_opened,0) AS form_opened,
+         COALESCE(f.partial,0) AS partial,
+         COALESCE(f.qualified,0) AS qualified,
+         COALESCE(lead.booked,0) AS call1_booked,
+         COALESCE(s.direct_booked,0) AS direct_booked,
+         COALESCE(s.held,0) AS held,
+         COALESCE(s.no_show,0) AS no_show,
+         COALESCE(s.accepted,0) AS accepted
+       FROM days d
+       LEFT JOIN f ON f.day = d.day
+       LEFT JOIN s ON s.day = d.day
+       LEFT JOIN lead ON lead.day = d.day
+       ORDER BY d.day DESC`,
+      // Binds: overrides JSON, then -days for excluded_amps, mkt, li_email, s, qual.
+      [overridesJson(bookingOverrides), -days, -days, -days, -days, -days]
+    );
+
+    return rows.map((r) => ({
+      date: String(r.DATE),
+      formOpened: num(r.FORM_OPENED),
+      partial: num(r.PARTIAL),
+      qualified: num(r.QUALIFIED),
+      call1Booked: num(r.CALL1_BOOKED),
+      directBooked: num(r.DIRECT_BOOKED),
+      held: num(r.HELD),
+      noShow: num(r.NO_SHOW),
+      accepted: num(r.ACCEPTED),
     }));
   }
 

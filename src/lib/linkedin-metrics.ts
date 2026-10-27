@@ -1,27 +1,28 @@
 /**
- * LinkedIn Daily Metrics — a self-contained tab for the LinkedIn test, kept separate from
- * Daily Metrics on purpose so nothing about the trusted FB/Organic tab changes.
+ * LinkedIn Daily Metrics — the LinkedIn test in EXACTLY the Daily Metrics layout (same
+ * group/sub-header rows, live 7d avg / MTD / Prev Month formula rows, daily rows newest
+ * first in ISO-week blocks closed by a "Week of …" row, Cost + w/w columns, heat-map), kept
+ * on its own tab so nothing about the trusted Daily Metrics tab changes.
  *
- * LinkedIn's funnel is shorter than the website's: the ad (or retargeting message) links
- * straight to the form on hi.wonderly.com, so there is no landing page / CTA step. Columns
- * run forward in funnel order:
+ * Every group keeps Daily Metrics' column shape — [Cost] ALL [w/w] FB Organic — so the shared
+ * `buildDailyMetricsFormatRequests` formats it identically. LinkedIn has no channel split, so
+ * the FB / Organic columns are written blank and hidden by the format spec.
  *
- *   Spend → Impressions → LP clicks (CPC) → Engagements → Form opened → Partial → Qualified
- *     → Call 1 booked → Direct booked → All booked → Held → No show → Accepted
+ * Metrics run the funnel backwards like Daily Metrics. LinkedIn's funnel has no landing page /
+ * CTA step (ads and messages link straight to the form on hi.wonderly.com):
+ *   Accepted → Held → No show → Call 1 booked → Direct booked → Qualified → Partial
+ *     → Form opened → Engagements → Clicks → CPC → Spend
  *
- * - Spend / impressions / clicks / engagements come from LinkedIn's Advertising API.
- * - Everything from Form opened on comes from Amplitude + the CRM (Snowflake), using the
- *   same rules as Daily Metrics (see `SnowflakeService.getLinkedinFunnel`).
- * - Direct booked = the `?mode=book` link that skips the form; All booked = Call 1 + Direct.
+ * - Spend / clicks (landing-page clicks) / engagements: LinkedIn Advertising API.
+ * - Form opened → Accepted: Amplitude + CRM via `SnowflakeService.getLinkedinFunnel`, same
+ *   rules as Daily Metrics. Direct booked = the `?mode=book` link that skips the form.
+ * - Cost = LinkedIn spend ÷ that stage's count; ratio of totals in the summary rows.
  *
- * Summary rows (Since launch / Last 7d / MTD) use RATIO OF TOTALS for every cost-per. Last 7d
- * excludes today's partial day, matching the Overview tab.
- *
- * Maturation caveat (same as the rest of the sheet): Held / No show / Accepted are cohort
- * metrics keyed to booking day, so recent rows read low until deals work through the
- * pipeline. Judge the test on Since launch, not the newest days.
+ * Held / No show / Accepted are cohort metrics keyed to booking day, so recent rows read low
+ * until deals mature — same caveat as Daily Metrics.
  */
 
+import type { MetricFormat } from '@/lib/daily-metrics-format';
 import type { LinkedInDailySpend } from '@/services/linkedin';
 
 /** One day of the LinkedIn funnel from Snowflake. */
@@ -45,30 +46,6 @@ export interface LinkedinDay extends LinkedinFunnelRow {
   engagements: number;
 }
 
-export const LINKEDIN_METRICS_HEADERS = [
-  'Date',
-  'Spend',
-  'Impressions',
-  'LP clicks',
-  'CPC',
-  'Engagements',
-  'Form opened',
-  'Cost / form',
-  'Partial',
-  'Cost / partial',
-  'Qualified',
-  'Cost / qualified',
-  'Call 1 booked',
-  'Direct booked',
-  'All booked',
-  'Cost / booked',
-  'Held',
-  'Cost / held',
-  'No show',
-  'Accepted',
-  'Cost / accepted',
-] as const;
-
 const ZERO: Omit<LinkedinDay, 'date'> = {
   spend: 0,
   impressions: 0,
@@ -88,9 +65,13 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Spend ÷ count, blank when there's nothing to divide by. */
-function costPer(spend: number, count: number): number | '' {
-  return count > 0 ? round2(spend / count) : '';
+/** Shift a `YYYY-MM-DD` by whole days. */
+function shiftDay(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+
+  d.setUTCDate(d.getUTCDate() + n);
+
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -137,134 +118,269 @@ export function joinLinkedinDays(
   const days = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date));
   const firstActive = days.filter(hasActivity).at(-1)?.date;
 
-  return firstActive ? days.filter((d) => d.date >= firstActive) : [];
+  if (!firstActive) return [];
+
+  // Fill every calendar day from launch to the newest date, so a no-delivery day still gets a
+  // row (zeros) — w/w compares against the row 7 back and needs contiguous days.
+  const out: LinkedinDay[] = [];
+  const newest = days[0].date;
+
+  for (let d = newest; d >= firstActive; d = shiftDay(d, -1)) {
+    out.push(byDate.get(d) ?? { ...ZERO, date: d });
+  }
+
+  return out;
 }
 
-/** Sum a set of days into one total. */
-export function sumDays(days: LinkedinDay[]): Omit<LinkedinDay, 'date'> {
-  return days.reduce(
-    (acc, d) => {
-      for (const k of Object.keys(ZERO) as (keyof typeof ZERO)[]) acc[k] += d[k];
-
-      return acc;
-    },
-    { ...ZERO }
-  );
+interface Metric {
+  label: string;
+  daily: (r: LinkedinDay) => number;
+  numer?: (r: LinkedinDay) => number;
+  denom?: (r: LinkedinDay) => number;
+  hasCost?: boolean;
+  noWow?: boolean;
+  money?: boolean;
+  wholeDollars?: boolean;
 }
 
-/** One sheet row (any label in the Date column) from a day or a summed window. */
-function toRow(label: string, t: Omit<LinkedinDay, 'date'>): (string | number)[] {
-  const allBooked = t.call1Booked + t.directBooked;
+/** Reversed funnel, outcome first — same reading order as Daily Metrics. */
+const METRICS: Metric[] = [
+  { label: 'Accepted', daily: (r) => r.accepted, hasCost: true, noWow: true },
+  { label: 'Held', daily: (r) => r.held, hasCost: true },
+  { label: 'No show', daily: (r) => r.noShow, noWow: true },
+  { label: 'Call 1 booked', daily: (r) => r.call1Booked, hasCost: true },
+  // The ?mode=book link that skips the form — kept apart so it doesn't distort the form funnel.
+  { label: 'Direct booked', daily: (r) => r.directBooked, hasCost: true, noWow: true },
+  { label: 'Qualified', daily: (r) => r.qualified, hasCost: true },
+  { label: 'Partial', daily: (r) => r.partial, hasCost: true },
+  { label: 'Form opened', daily: (r) => r.formOpened, hasCost: true },
+  { label: 'Engagements', daily: (r) => r.engagements, hasCost: true },
+  { label: 'Clicks', daily: (r) => r.clicks, hasCost: true },
+  {
+    label: 'CPC',
+    daily: (r) => (r.clicks > 0 ? r.spend / r.clicks : 0),
+    numer: (r) => r.spend,
+    denom: (r) => r.clicks,
+    money: true,
+  },
+  { label: 'Spend', daily: (r) => r.spend, money: true, wholeDollars: true },
+];
 
-  return [
-    label,
-    round2(t.spend),
-    t.impressions,
-    t.clicks,
-    costPer(t.spend, t.clicks),
-    t.engagements,
-    t.formOpened,
-    costPer(t.spend, t.formOpened),
-    t.partial,
-    costPer(t.spend, t.partial),
-    t.qualified,
-    costPer(t.spend, t.qualified),
-    t.call1Booked,
-    t.directBooked,
-    allBooked,
-    costPer(t.spend, allBooked),
-    t.held,
-    costPer(t.spend, t.held),
-    t.noShow,
-    t.accepted,
-    costPer(t.spend, t.accepted),
-  ];
+/**
+ * Format spec for `buildDailyMetricsFormatRequests`, in the order the matrix is written. FB and
+ * Organic are hidden on every group — LinkedIn has no channel split.
+ */
+export const LINKEDIN_DAILY_METRICS_FORMAT: MetricFormat[] = METRICS.map((m) => ({
+  label: m.label,
+  money: Boolean(m.money),
+  wholeDollars: m.wholeDollars,
+  hasCost: m.hasCost,
+  noWow: m.noWow,
+  hideFb: true,
+  hideOrganic: true,
+}));
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
 }
 
-/** Shift a `YYYY-MM-DD` by whole days. */
-function addDays(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
+function pct(now: number, base: number): number | '' {
+  return base > 0 ? round4((now - base) / base) : '';
+}
 
-  d.setUTCDate(d.getUTCDate() + n);
+/** Monday (UTC) of a date's week. */
+function weekKey(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
 
   return d.toISOString().slice(0, 10);
 }
 
-/**
- * Build the tab's data rows (header excluded): three summary rows, a blank spacer, then one
- * row per day newest first.
- *
- * @param days - Output of {@link joinLinkedinDays}, newest first
- * @param ptToday - Today in America/Los_Angeles (`YYYY-MM-DD`) — excluded from Last 7d
- */
-export function toLinkedinMetricsValues(
-  days: LinkedinDay[],
-  ptToday: string
-): (string | number)[][] {
-  if (days.length === 0) {
-    return [['No LinkedIn activity yet — rows appear once the first campaign spends.']];
+/** 0-based column index → A1 letter. */
+function colLetter(index: number): string {
+  let s = '';
+  let i = index + 1;
+
+  while (i > 0) {
+    s = String.fromCharCode(65 + ((i - 1) % 26)) + s;
+    i = Math.floor((i - 1) / 26);
   }
 
-  const sevenStart = addDays(ptToday, -7);
-  const last7 = days.filter((d) => d.date >= sevenStart && d.date < ptToday);
-  const mtd = days.filter((d) => d.date.slice(0, 7) === ptToday.slice(0, 7));
-
-  return [
-    toRow('Since launch', sumDays(days)),
-    toRow('Last 7d', sumDays(last7)),
-    toRow('MTD', sumDays(mtd)),
-    [],
-    ...days.map((d) => toRow(d.date, d)),
-  ];
+  return s;
 }
 
-/** Number of leading summary rows (after the header) — the formatter bolds these. */
-export const LINKEDIN_SUMMARY_ROWS = 3;
+/** "Week of <Monday>" summary row: sums, ratio-of-totals for CPC / Cost, blank w/w. */
+function weeklyRow(members: LinkedinDay[]): (string | number)[] {
+  const weekSpend = members.reduce((s, r) => s + r.spend, 0);
+  const out: (string | number)[] = [`Week of ${weekKey(members[0].date)}`];
 
-/** Indices (0-based) of currency columns, for formatting. */
-export const LINKEDIN_CURRENCY_COLUMNS = LINKEDIN_METRICS_HEADERS.map((h, i) =>
-  h === 'Spend' || h === 'CPC' || h.startsWith('Cost /') ? i : -1
-).filter((i) => i >= 0);
+  for (const m of METRICS) {
+    const count = members.reduce((s, r) => s + m.daily(r), 0);
+    let allV: number;
 
-/**
- * Sheets batchUpdate requests: freeze header + date column, bold header and summary rows,
- * currency format on spend / cost columns.
- */
-export function buildLinkedinMetricsFormatRequests(
-  sheetId: number,
-  rowCount: number
-): Record<string, unknown>[] {
-  const requests: Record<string, unknown>[] = [
-    {
-      updateSheetProperties: {
-        properties: { sheetId, gridProperties: { frozenRowCount: 1, frozenColumnCount: 1 } },
-        fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount',
-      },
-    },
-    {
-      repeatCell: {
-        range: { sheetId, startRowIndex: 0, endRowIndex: 1 + LINKEDIN_SUMMARY_ROWS },
-        cell: { userEnteredFormat: { textFormat: { bold: true } } },
-        fields: 'userEnteredFormat.textFormat.bold',
-      },
-    },
-  ];
+    if (m.numer && m.denom) {
+      const numer = m.numer;
+      const denom = members.reduce((s, r) => s + m.denom!(r), 0);
 
-  for (const col of LINKEDIN_CURRENCY_COLUMNS) {
-    requests.push({
-      repeatCell: {
-        range: {
-          sheetId,
-          startRowIndex: 1,
-          endRowIndex: rowCount + 1,
-          startColumnIndex: col,
-          endColumnIndex: col + 1,
-        },
-        cell: { userEnteredFormat: { numberFormat: { type: 'CURRENCY', pattern: '$#,##0.00' } } },
-        fields: 'userEnteredFormat.numberFormat',
-      },
-    });
+      allV = denom > 0 ? round2(members.reduce((s, r) => s + numer(r), 0) / denom) : 0;
+    } else {
+      allV = round2(count);
+    }
+
+    if (m.hasCost) out.push(count > 0 ? round2(weekSpend / count) : '');
+    out.push(allV);
+    if (!m.noWow) out.push('');
+    out.push('', '');
   }
 
-  return requests;
+  return out;
+}
+
+/**
+ * Build the LinkedIn Daily Metrics matrix — same shape and formulas as `computeDailyMetrics`:
+ * row 1 group header, row 2 sub-header, rows 3–5 live 7d avg / MTD / Prev Month formulas,
+ * then daily rows (newest first) in ISO-week blocks each closed by a "Week of …" row.
+ *
+ * @param rows - Output of {@link joinLinkedinDays}, newest first
+ * @param today - Pacific `YYYY-MM-DD`; today's partial row is skipped in the 7d average
+ * @returns The full matrix, header rows included
+ */
+export function computeLinkedinDailyMetrics(
+  rows: LinkedinDay[],
+  today: string
+): (string | number)[][] {
+  type PlanItem =
+    | { kind: 'day'; row: LinkedinDay; i: number }
+    | { kind: 'week'; members: LinkedinDay[] };
+  const plan: PlanItem[] = [];
+  let members: LinkedinDay[] = [];
+
+  rows.forEach((r, i) => {
+    plan.push({ kind: 'day', row: r, i });
+    members.push(r);
+
+    if (i === rows.length - 1 || weekKey(rows[i + 1].date) !== weekKey(r.date)) {
+      plan.push({ kind: 'week', members });
+      members = [];
+    }
+  });
+
+  let sheetRow = 6;
+  const dailyRowNums: number[] = [];
+
+  for (const item of plan) {
+    if (item.kind === 'day') dailyRowNums.push(sheetRow);
+    sheetRow += 1;
+  }
+
+  // Before launch there are no data rows; keep the formula ranges valid (row 6 only).
+  const dataEnd = Math.max(sheetRow - 1, 6);
+
+  const mtdLo = '(EOMONTH(TODAY(),-1)+1)';
+  const mtdHi = 'TODAY()';
+  const prevLo = '(EOMONTH(TODAY(),-2)+1)';
+  const prevHi = 'EOMONTH(TODAY(),-1)';
+  const prevSpanHi = 'MIN(EOMONTH(TODAY(),-2)+DAY(TODAY()),EOMONTH(TODAY(),-1))';
+
+  const completedRows = dailyRowNums.slice(rows[0]?.date === today ? 1 : 0);
+  const s7 = completedRows.slice(0, 7);
+  const p7 = completedRows.slice(7, 14);
+  const cellList = (L: string, nums: number[]) => nums.map((n) => `${L}${n}`).join(',');
+
+  let colIdx = 1;
+  const layout = METRICS.map((m) => {
+    const cost = m.hasCost ? colIdx++ : undefined;
+    const all = colIdx++;
+    const wow = m.noWow ? undefined : colIdx++;
+    const fb = colIdx++;
+    const organic = colIdx++;
+
+    return { cost, all, wow, fb, organic };
+  });
+  const spendAll = colLetter(layout[METRICS.findIndex((m) => m.label === 'Spend')].all);
+
+  const groupHeader: (string | number)[] = [''];
+  const subHeader: (string | number)[] = ['Date'];
+
+  for (const m of METRICS) {
+    const cols: string[] = [];
+
+    if (m.hasCost) cols.push('Cost');
+    cols.push('ALL');
+    if (!m.noWow) cols.push('w/w');
+    cols.push('FB', 'Organic');
+
+    groupHeader.push(m.label, ...Array(cols.length - 1).fill(''));
+    subHeader.push(...cols);
+  }
+
+  const dateRange = `$A$6:$A$${dataEnd}`;
+  const sumifs = (L: string, lo: string, hi: string) =>
+    `SUMIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&${lo},${dateRange},"<="&${hi})`;
+  const avgifs = (L: string, lo: string, hi: string) =>
+    `AVERAGEIFS(${L}$6:${L}$${dataEnd},${dateRange},">="&${lo},${dateRange},"<="&${hi})`;
+
+  const d7Row: (string | number)[] = ['7d avg'];
+  const mtdRow: (string | number)[] = ['MTD'];
+  const prevRow: (string | number)[] = ['Prev Month'];
+
+  METRICS.forEach((m, g) => {
+    const La = colLetter(layout[g].all);
+    const ratio = Boolean(m.numer && m.denom);
+
+    if (m.hasCost) {
+      d7Row.push(
+        s7.length ? `=IFERROR(SUM(${cellList(spendAll, s7)})/SUM(${cellList(La, s7)}),0)` : 0
+      );
+      mtdRow.push(`=IFERROR(${sumifs(spendAll, mtdLo, mtdHi)}/${sumifs(La, mtdLo, mtdHi)},0)`);
+      prevRow.push(`=IFERROR(${sumifs(spendAll, prevLo, prevHi)}/${sumifs(La, prevLo, prevHi)},0)`);
+    }
+
+    d7Row.push(s7.length ? `=IFERROR(AVERAGE(${cellList(La, s7)}),0)` : 0);
+    mtdRow.push(ratio ? `=IFERROR(${avgifs(La, mtdLo, mtdHi)},0)` : `=${sumifs(La, mtdLo, mtdHi)}`);
+    prevRow.push(
+      ratio ? `=IFERROR(${avgifs(La, prevLo, prevHi)},0)` : `=${sumifs(La, prevLo, prevHi)}`
+    );
+
+    if (!m.noWow) {
+      const p7avg = `AVERAGE(${cellList(La, p7)})`;
+      const prevSpan = ratio ? avgifs(La, prevLo, prevSpanHi) : sumifs(La, prevLo, prevSpanHi);
+
+      d7Row.push(p7.length ? `=IFERROR((${La}3-${p7avg})/${p7avg},"")` : '');
+      mtdRow.push(`=IFERROR((${La}4-${prevSpan})/${prevSpan},"")`);
+      prevRow.push('');
+    }
+
+    // FB / Organic: no LinkedIn channel split — blank (and hidden by the format spec).
+    d7Row.push('', '');
+    mtdRow.push('', '');
+    prevRow.push('', '');
+  });
+
+  const matrix: (string | number)[][] = [groupHeader, subHeader, d7Row, mtdRow, prevRow];
+
+  for (const item of plan) {
+    if (item.kind === 'week') {
+      matrix.push(weeklyRow(item.members));
+      continue;
+    }
+
+    const { row: r, i } = item;
+    const weekAgo = rows[i + 7];
+    const out: (string | number)[] = [r.date];
+
+    for (const m of METRICS) {
+      const count = m.daily(r);
+
+      if (m.hasCost) out.push(count > 0 ? round2(r.spend / count) : '');
+      out.push(round2(count));
+      if (!m.noWow) out.push(weekAgo ? pct(count, m.daily(weekAgo)) : '');
+      out.push('', '');
+    }
+
+    matrix.push(out);
+  }
+
+  return matrix;
 }

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
 import {
-  LINKEDIN_METRICS_HEADERS,
+  LINKEDIN_DAILY_METRICS_FORMAT,
+  computeLinkedinDailyMetrics,
   joinLinkedinDays,
-  toLinkedinMetricsValues,
   type LinkedinFunnelRow,
 } from '@/lib/linkedin-metrics';
 import {
@@ -58,45 +59,107 @@ describe('joinLinkedinDays', () => {
     expect(days.map((d) => d.date)).toEqual(['2026-10-22']);
   });
 
+  it('fills no-delivery days with zero rows so w/w stays aligned', () => {
+    const days = joinLinkedinDays([spendDay('2026-10-20', 10), spendDay('2026-10-23', 10)], []);
+
+    expect(days.map((d) => d.date)).toEqual([
+      '2026-10-23',
+      '2026-10-22',
+      '2026-10-21',
+      '2026-10-20',
+    ]);
+    expect(days[1].spend).toBe(0);
+  });
+
   it('returns nothing when there is no activity at all', () => {
     expect(joinLinkedinDays([spendDay('2026-10-20', 0)], [])).toEqual([]);
   });
 });
 
-describe('toLinkedinMetricsValues', () => {
-  it('writes summary rows with ratio-of-totals costs, then daily rows', () => {
-    const days = joinLinkedinDays(
-      [spendDay('2026-10-28', 300, 30), spendDay('2026-10-29', 100, 10)],
-      [
-        funnelDay('2026-10-28', { qualified: 3, call1Booked: 1, directBooked: 1 }),
-        funnelDay('2026-10-29', { qualified: 1, accepted: 1 }),
-      ]
-    );
-    const values = toLinkedinMetricsValues(days, '2026-10-30');
-    const col = (name: string) => LINKEDIN_METRICS_HEADERS.indexOf(name as never);
+describe('computeLinkedinDailyMetrics', () => {
+  // Two weeks of data: Mon 10/19 .. Thu 10/29 (no 10/24-10/25 weekend gap needed).
+  const dates = [
+    '2026-10-29',
+    '2026-10-28',
+    '2026-10-27',
+    '2026-10-26',
+    '2026-10-23',
+    '2026-10-22',
+  ];
+  const days = joinLinkedinDays(
+    dates.map((d) => spendDay(d, 100, 10)),
+    [funnelDay('2026-10-28', { qualified: 4, call1Booked: 2, directBooked: 1, accepted: 1 })]
+  );
+  const m = computeLinkedinDailyMetrics(days, '2026-10-29');
+  const header = m[0];
+  const sub = m[1];
 
-    expect(values[0][0]).toBe('Since launch');
-    expect(values[0][col('Spend')]).toBe(400);
-    expect(values[0][col('CPC')]).toBe(10); // 400 / 40, not mean of daily CPCs
-    expect(values[0][col('Cost / qualified')]).toBe(100); // 400 / 4
-    expect(values[0][col('All booked')]).toBe(2);
-    expect(values[0][col('Cost / booked')]).toBe(200);
-    expect(values[0][col('Cost / accepted')]).toBe(400);
-    expect(values[3]).toEqual([]); // spacer
-    expect(values[4][0]).toBe('2026-10-29');
-    expect(values[4][col('Cost / held')]).toBe(''); // blank, not divide-by-zero
+  const col = (label: string, subLabel: string) => {
+    const g = header.indexOf(label);
+
+    return sub.indexOf(subLabel, g);
+  };
+
+  it('uses the Daily Metrics shape: 2 header rows, 3 formula summary rows, then data', () => {
+    expect(sub[0]).toBe('Date');
+    expect([m[2][0], m[3][0], m[4][0]]).toEqual(['7d avg', 'MTD', 'Prev Month']);
+    expect(String(m[3][col('Spend', 'ALL')])).toMatch(/^=SUMIFS\(/);
+    expect(m[5][0]).toBe('2026-10-29');
   });
 
-  it('excludes today from Last 7d', () => {
-    const days = joinLinkedinDays([spendDay('2026-10-30', 999), spendDay('2026-10-29', 1)], []);
-    const values = toLinkedinMetricsValues(days, '2026-10-30');
+  it('closes each ISO week with a "Week of" row', () => {
+    const labels = m.slice(5).map((r) => String(r[0]));
 
-    expect(values[1][0]).toBe('Last 7d');
-    expect(values[1][1]).toBe(1);
+    expect(labels).toEqual([
+      '2026-10-29',
+      '2026-10-28',
+      '2026-10-27',
+      '2026-10-26',
+      'Week of 2026-10-26',
+      '2026-10-25',
+      '2026-10-24',
+      '2026-10-23',
+      '2026-10-22',
+      'Week of 2026-10-19',
+    ]);
   });
 
-  it('shows a placeholder row before launch', () => {
-    expect(toLinkedinMetricsValues([], '2026-10-30')[0][0]).toMatch(/No LinkedIn activity/);
+  it('writes daily Cost = spend ÷ that stage, blank on zero days', () => {
+    const row = m[6]; // 2026-10-28
+
+    expect(row[col('Qualified', 'Cost')]).toBe(25);
+    expect(row[col('Accepted', 'Cost')]).toBe(100);
+    expect(m[5][col('Accepted', 'Cost')]).toBe('');
+    expect(row[col('CPC', 'ALL')]).toBe(10);
+  });
+
+  it('weekly rows sum counts and use ratio of totals', () => {
+    const week = m[9]; // Week of 2026-10-26
+
+    expect(week[col('Spend', 'ALL')]).toBe(400);
+    expect(week[col('Qualified', 'Cost')]).toBe(100); // 400 / 4
+    expect(week[col('CPC', 'ALL')]).toBe(10); // 400 / 40
+  });
+
+  it('every row is exactly as wide as the shared formatter expects', () => {
+    const width =
+      1 +
+      LINKEDIN_DAILY_METRICS_FORMAT.reduce(
+        (n, f) => n + 4 + (f.hasCost ? 1 : 0) - (f.noWow ? 1 : 0),
+        0
+      );
+
+    for (const row of m) expect(row).toHaveLength(width);
+    expect(() =>
+      buildDailyMetricsFormatRequests(1, LINKEDIN_DAILY_METRICS_FORMAT, [], m)
+    ).not.toThrow();
+  });
+
+  it('still writes headers + summary rows before launch', () => {
+    const empty = computeLinkedinDailyMetrics([], '2026-10-29');
+
+    expect(empty).toHaveLength(5);
+    expect(String(empty[3][1])).toContain('$A$6:$A$6');
   });
 });
 

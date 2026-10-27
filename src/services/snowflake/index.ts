@@ -110,6 +110,67 @@ const ENGINE_SQL = `CASE
     END`;
 
 /**
+ * A marketing event carried a Facebook signal — utm_source facebook/ig or an fbclid. The same
+ * session rule as `is_fb` in getDailyMarketing and the `fb` branch of CHANNEL_SQL.
+ */
+const FB_EVENT_SQL = `(LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) IN ('facebook','ig')
+    OR EVENT_PROPERTIES:fbclid IS NOT NULL)`;
+
+/**
+ * A marketing event (on or after LINKEDIN_START_DATE) belongs to LinkedIn: the event's (or the person's last-touch) utm_source is
+ * `linkedin`, or it carries LinkedIn's click id `li_fat_id` — and it is NOT a Facebook event, so
+ * FB keeps precedence and FB / LinkedIn / everything-else stay an exact partition.
+ *
+ * LinkedIn is reported only on the LinkedIn Daily Metrics tab (`getLinkedinFunnel`); every other
+ * Growth tab (wonderly_daily → Daily Metrics, Daily Funnel, Overview, historical_cac, and the SEO
+ * tabs) EXCLUDES it with `NOT LINKEDIN_EVENT_SQL`, so LinkedIn never lands in Organic and FB
+ * cost-per-stage (FB spend ÷ ALL) isn't diluted by LinkedIn actions.
+ */
+/**
+ * First day of Wonderly's LinkedIn ads account. LinkedIn is only carved out of the blended tabs
+ * from here on, so every number before the LinkedIn test (e.g. an old organic post that carried
+ * utm_source=linkedin) stays exactly as it was.
+ */
+const LINKEDIN_START_DATE = '2026-10-16';
+
+const LINKEDIN_EVENT_SQL = `(EVENT_TIME >= '${LINKEDIN_START_DATE}' AND NOT ${FB_EVENT_SQL} AND (
+    LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) = 'linkedin'
+    OR LOWER(COALESCE(USER_PROPERTIES:utm_source::string,'')) = 'linkedin'
+    OR EVENT_PROPERTIES:li_fat_id IS NOT NULL))`;
+
+/**
+ * CTE body: emails whose form-submit or booking event carried a LinkedIn signal — the fallback
+ * channel bridge for deals without their own METADATA attribution.
+ */
+const LINKEDIN_EMAIL_CTE = `li_email AS (
+         SELECT DISTINCT LOWER(EVENT_PROPERTIES:email::string) AS email
+         FROM ${EVENTS_TABLE}
+         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED',
+                              'MARKETING_SITE__BETA_FORM__BOOKING_COMPLETE')
+           AND EVENT_PROPERTIES:email IS NOT NULL
+           AND ${LINKEDIN_EVENT_SQL}
+       )`;
+
+/**
+ * 1/0 SQL expression: a CRM deal (alias `cd`, joined to `li_email` on its contact email) is a
+ * LinkedIn deal. Prefers the deal's own METADATA attribution (FB attribution wins); falls back to
+ * the email → LinkedIn-session bridge for deals with no attribution.
+ */
+const LINKEDIN_DEAL_SQL = `CASE
+             WHEN cd.CREATED_AT < '${LINKEDIN_START_DATE}' THEN 0
+             WHEN TRY_PARSE_JSON(cd.METADATA):attribution:utm_source IS NOT NULL
+                  OR TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel IS NOT NULL
+                  OR TRY_PARSE_JSON(cd.METADATA):attribution:li_fat_id IS NOT NULL
+               THEN CASE WHEN TRY_PARSE_JSON(cd.METADATA):attribution:fbclid IS NULL
+                          AND LOWER(COALESCE(TRY_PARSE_JSON(cd.METADATA):attribution:utm_source::string,'')) NOT IN ('facebook','ig')
+                          AND (LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:utm_source::string) = 'linkedin'
+                               OR LOWER(TRY_PARSE_JSON(cd.METADATA):attribution:acquisition_channel::string) = 'linkedin'
+                               OR TRY_PARSE_JSON(cd.METADATA):attribution:li_fat_id IS NOT NULL)
+                         THEN 1 ELSE 0 END
+             ELSE CASE WHEN li_email.email IS NOT NULL THEN 1 ELSE 0 END
+           END`;
+
+/**
  * Acquisition channel for one marketing event, as a SQL CASE expression over the event's
  * own columns. Referenced by `getChannelFunnel` and `getSeoLandingPages`; both must use the
  * identical ladder or the two SEO tabs disagree with each other.
@@ -370,6 +431,8 @@ export class SnowflakeService {
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           -- LinkedIn is reported on its own tab only (see LINKEDIN_EVENT_SQL).
+           AND NOT ${LINKEDIN_EVENT_SQL}
            AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        -- Every marketing event carries the session's utm_source / fbclid, so each
@@ -436,6 +499,7 @@ export class SnowflakeService {
          SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
          FROM AIRBYTE.CSM_OPS.CRM_DEALS
        ),
+       ${LINKEDIN_EMAIL_CTE},
        -- Marketing source per email, from the form-submit events (same fallback chain
        -- as the call1_deals SOURCE column): event utm -> user utm -> initial utm ->
        -- referrer domain -> fbclid. Lets us attribute each deal's Call 1 to a channel.
@@ -493,6 +557,8 @@ export class SnowflakeService {
                          THEN 1 ELSE 0 END
              ELSE CASE WHEN LOWER(src.utm_source) IN ('facebook','ig') THEN 1 ELSE 0 END
            END AS is_fb,
+           -- LinkedIn deals are excluded from every blended count (own tab only).
+           ${LINKEDIN_DEAL_SQL} AS is_li,
            -- Booked = a genuine booking signal (marketing BOOKING_COMPLETE or a manual override) OR
            -- a current stage only booked deals reach. This gates DQ/Lost so pre-call junk leads
            -- (no booking signal) never count as held.
@@ -507,6 +573,7 @@ export class SnowflakeService {
          LEFT JOIN email_bc ebc ON ebc.email = em.join_email
          LEFT JOIN crt ON crt.deal_id = cd.ID
          LEFT JOIN src ON src.email = em.join_email
+         LEFT JOIN li_email ON li_email.email = em.join_email
          WHERE cd.DELETED_AT IS NULL
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
            AND NOT ${excludedDealName('cd.NAME')}
@@ -538,7 +605,7 @@ export class SnowflakeService {
                         OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
                       ) THEN 1 ELSE 0 END AS held,
              CASE WHEN booked = 1 AND stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) THEN 1 ELSE 0 END AS disqualified_lost
-           FROM ds WHERE day IS NOT NULL
+           FROM ds WHERE day IS NOT NULL AND is_li = 0
          )
          GROUP BY day
        ),
@@ -565,6 +632,7 @@ export class SnowflakeService {
          WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
            AND EVENT_PROPERTIES:email IS NOT NULL
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND NOT ${LINKEDIN_EVENT_SQL}
          GROUP BY 1
        ),
        -- Each qualified lead's first real booking (non-canceled), for the "did they book" gate and
@@ -685,11 +753,6 @@ export class SnowflakeService {
     days: number,
     bookingOverrides: BookingOverride[] = []
   ): Promise<LinkedinFunnelRow[]> {
-    const LI_EVENT = `(LOWER(COALESCE(EVENT_PROPERTIES:utm_source::string,'')) = 'linkedin'
-        OR LOWER(COALESCE(USER_PROPERTIES:utm_source::string,'')) = 'linkedin'
-        OR EVENT_PROPERTIES:li_fat_id IS NOT NULL)`;
-    const ATTR = 'TRY_PARSE_JSON(cd.METADATA):attribution';
-
     const rows = await this.query<Record<string, unknown>>(
       `WITH ovr AS (
          SELECT value:deal_id::string AS deal_id, TRY_TO_DATE(value:booked_day::string) AS booked_day
@@ -707,7 +770,7 @@ export class SnowflakeService {
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
-           AND ${LI_EVENT}
+           AND ${LINKEDIN_EVENT_SQL}
            AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        f AS (
@@ -744,15 +807,7 @@ export class SnowflakeService {
          SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
          FROM AIRBYTE.CSM_OPS.CRM_DEALS
        ),
-       -- Emails whose form-submit session carried a LinkedIn signal (fallback channel bridge).
-       li_email AS (
-         SELECT DISTINCT LOWER(EVENT_PROPERTIES:email::string) AS email
-         FROM ${EVENTS_TABLE}
-         WHERE EVENT_TYPE IN ('MARKETING_SITE__BETA_FORM__SUBMIT_PARTIAL','MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED')
-           AND EVENT_PROPERTIES:email IS NOT NULL
-           AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
-           AND (${LI_EVENT} OR LOWER(COALESCE(USER_PROPERTIES:initial_utm_source::string,'')) = 'linkedin')
-       ),
+       ${LINKEDIN_EMAIL_CTE},
        -- Every email that ever submitted the QUALIFIED form — separates form bookings from
        -- direct (mode=book link) bookings.
        any_qual AS (
@@ -771,15 +826,7 @@ export class SnowflakeService {
              PARTITION BY CASE WHEN st.TYPE = '${ACCEPTED_STAGE_TYPE}' THEN COALESCE(em.join_email, cd.ID) END
              ORDER BY COALESCE(o.booked_day, LEAST(NVL(ebc.bc, crt.created_day), NVL(crt.created_day, ebc.bc))), cd.ID
            ) AS accept_rn,
-           CASE
-             WHEN ${ATTR}:utm_source IS NOT NULL OR ${ATTR}:acquisition_channel IS NOT NULL
-                  OR ${ATTR}:li_fat_id IS NOT NULL
-               THEN CASE WHEN LOWER(${ATTR}:utm_source::string) = 'linkedin'
-                          OR LOWER(${ATTR}:acquisition_channel::string) = 'linkedin'
-                          OR ${ATTR}:li_fat_id IS NOT NULL
-                         THEN 1 ELSE 0 END
-             ELSE CASE WHEN li_email.email IS NOT NULL THEN 1 ELSE 0 END
-           END AS is_li,
+           ${LINKEDIN_DEAL_SQL} AS is_li,
            CASE WHEN any_qual.email IS NULL THEN 1 ELSE 0 END AS no_form,
            CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
                      OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
@@ -817,7 +864,7 @@ export class SnowflakeService {
          WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
            AND EVENT_PROPERTIES:email IS NOT NULL
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
-           AND ${LI_EVENT}
+           AND ${LINKEDIN_EVENT_SQL}
          GROUP BY 1
        ),
        bk AS (
@@ -848,8 +895,8 @@ export class SnowflakeService {
        LEFT JOIN s ON s.day = d.day
        LEFT JOIN lead ON lead.day = d.day
        ORDER BY d.day DESC`,
-      // Binds: overrides JSON, then -days for excluded_amps, mkt, li_email, s, qual.
-      [overridesJson(bookingOverrides), -days, -days, -days, -days, -days]
+      // Binds: overrides JSON, then -days for excluded_amps, mkt, s, qual.
+      [overridesJson(bookingOverrides), -days, -days, -days, -days]
     );
 
     return rows.map((r) => ({
@@ -907,6 +954,8 @@ export class SnowflakeService {
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           -- LinkedIn is reported on its own tab only (see LINKEDIN_EVENT_SQL).
+           AND NOT ${LINKEDIN_EVENT_SQL}
            AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        -- Flow metrics: unique people per stage per day per channel.
@@ -953,6 +1002,7 @@ export class SnowflakeService {
          SELECT ID AS deal_id, CONVERT_TIMEZONE('${REPORT_TZ}', CREATED_AT)::date AS created_day
          FROM AIRBYTE.CSM_OPS.CRM_DEALS
        ),
+       ${LINKEDIN_EMAIL_CTE},
        -- Channel per email, from that person's form-submit events (latest submit wins, same
        -- precedence as the blended query's SOURCE column, widened to the full channel ladder).
        src_raw AS (
@@ -994,7 +1044,9 @@ export class SnowflakeService {
            ) AS accept_rn,
            CASE WHEN o.booked_day IS NOT NULL OR ebc.bc IS NOT NULL
                      OR st.TYPE IN (${sqlIn(BOOKED_STAGE_TYPES)})
-                THEN 1 ELSE 0 END AS booked
+                THEN 1 ELSE 0 END AS booked,
+           -- LinkedIn deals are excluded (own tab only).
+           ${LINKEDIN_DEAL_SQL} AS is_li
          FROM AIRBYTE.CSM_OPS.CRM_DEALS cd
          JOIN AIRBYTE.CSM_OPS.CRM_PIPELINE_STAGES st
            ON st.ID = cd.PIPELINE_STAGE_ID AND st.PIPELINE_ID = '${ACQUISITION_PIPELINE_ID}'
@@ -1003,6 +1055,7 @@ export class SnowflakeService {
          LEFT JOIN email_bc ebc ON ebc.email = em.join_email
          LEFT JOIN crt ON crt.deal_id = cd.ID
          LEFT JOIN src ON src.email = em.join_email
+         LEFT JOIN li_email ON li_email.email = em.join_email
          WHERE cd.DELETED_AT IS NULL
            AND (em.join_email IS NULL OR NOT ${excludedEmail('em.join_email')})
            AND NOT ${excludedDealName('cd.NAME')}
@@ -1021,7 +1074,7 @@ export class SnowflakeService {
                         stage_type IN (${sqlIn(OFFER_STAGE_TYPES)})
                         OR (stage_type IN (${sqlIn(DQ_LOST_STAGE_TYPES)}) AND loss_reason IS NOT NULL)
                       ) THEN 1 ELSE 0 END AS held
-           FROM ds WHERE day IS NOT NULL
+           FROM ds WHERE day IS NOT NULL AND is_li = 0
          )
          GROUP BY GROUPING SETS ((day, channel), (day))
        ),
@@ -1034,6 +1087,7 @@ export class SnowflakeService {
          WHERE EVENT_TYPE = 'MARKETING_SITE__BETA_FORM__SUBMIT_QUALIFIED'
            AND EVENT_PROPERTIES:email IS NOT NULL
            AND EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
+           AND NOT ${LINKEDIN_EVENT_SQL}
          GROUP BY 1
        ),
        bk AS (
@@ -1121,6 +1175,8 @@ export class SnowflakeService {
          FROM ${EVENTS_TABLE}
          WHERE EVENT_TIME >= DATEADD('day', ?, CURRENT_DATE)
            AND EVENT_TYPE LIKE 'MARKETING_SITE%'
+           -- LinkedIn is reported on its own tab only (see LINKEDIN_EVENT_SQL).
+           AND NOT ${LINKEDIN_EVENT_SQL}
            AND AMPLITUDE_ID NOT IN (SELECT AMPLITUDE_ID FROM excluded_amps)
        ),
        -- One row per organic-search person: their landing page and their funnel high-water mark.

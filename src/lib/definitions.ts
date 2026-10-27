@@ -90,7 +90,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'wonderly_daily',
     'Booked Call 1s attributed to Facebook.',
     'CSM_OPS + Amplitude',
-    'Booking whose invitee email bridges to a facebook/ig utm (or fbclid) marketing session; Organic = everything else.',
+    'Booking whose invitee email bridges to a facebook/ig utm (or fbclid) marketing session; Organic = everything else except LinkedIn (LinkedIn is reported only on the LinkedIn Daily Metrics tab).',
   ],
   [
     'BOOKED_ORGANIC',
@@ -104,7 +104,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'wonderly_daily, Daily Metrics',
     'Each funnel step split by channel — page views, CTA, partial, qualified, and bookings.',
     'Amplitude',
-    'Every marketing event carries the session utm_source/fbclid, so FB = facebook/ig utm OR an fbclid; Organic = everything else. The split is visible from page view on.',
+    'Every marketing event carries the session utm_source/fbclid, so FB = facebook/ig utm OR an fbclid; Organic = everything else. The split is visible from page view on. LinkedIn traffic (utm_source=linkedin or an li_fat_id) is excluded from every column here, ALL included — it lives only on the LinkedIn Daily Metrics tab.',
   ],
 
   // --- Sales outcomes (CRM cohort, keyed to booking day) ------------------
@@ -141,7 +141,7 @@ const DEFINITIONS: readonly [string, string, string, string, string][] = [
     'wonderly_daily, Daily Metrics',
     'Held, accepted, and no-show deals split by the channel that produced the Call 1.',
     'CRM + Amplitude',
-    'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE). FB = facebook/ig; Organic = ALL − FB (includes unattributed deals).',
+    'Each deal is matched to its booking source by contact email (same bridge as call1_deals SOURCE). FB = facebook/ig; Organic = ALL − FB (includes unattributed deals). LinkedIn deals are excluded entirely (LinkedIn Daily Metrics tab only).',
   ],
 
   // --- Daily Funnel derived ----------------------------------------------

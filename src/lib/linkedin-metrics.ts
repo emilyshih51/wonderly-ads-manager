@@ -8,14 +8,15 @@
  * `buildDailyMetricsFormatRequests` formats it identically. LinkedIn has no channel split, so
  * the FB / Organic columns are written blank and hidden by the format spec.
  *
- * Metrics run the funnel backwards like Daily Metrics. LinkedIn's funnel has no landing page /
- * CTA step (ads and messages link straight to the form on hi.wonderly.com):
- *   Accepted → Held → No show → Call 1 booked → Direct booked → Qualified → Partial
- *     → Form opened → Engagements → Clicks → CPC → Spend
+ * Metrics run the funnel backwards like Daily Metrics. LinkedIn traffic goes to
+ * wonderly.com/?mode=book — the booking pop-up opens on load and skips the qualification form —
+ * so the funnel is short:
+ *   Accepted → Held → No show → Booked → Landed → Engagements → Clicks → CPC → Spend
  *
  * - Spend / clicks (landing-page clicks) / engagements: LinkedIn Advertising API.
- * - Form opened → Accepted: Amplitude + CRM via `SnowflakeService.getLinkedinFunnel`, same
- *   rules as Daily Metrics. Direct booked = the `?mode=book` link that skips the form.
+ * - Landed → Accepted: Amplitude + CRM via `SnowflakeService.getLinkedinFunnel`, same rules as
+ *   Daily Metrics. Booked = LinkedIn deals with a booking (direct `?mode=book` + any form-flow
+ *   Call 1s); it depends on the deal carrying `utm_source=linkedin` attribution.
  * - Cost = LinkedIn spend ÷ that stage's count; ratio of totals in the summary rows.
  *
  * Held / No show / Accepted are cohort metrics keyed to booking day, so recent rows read low
@@ -148,12 +149,17 @@ const METRICS: Metric[] = [
   { label: 'Accepted', daily: (r) => r.accepted, hasCost: true, noWow: true },
   { label: 'Held', daily: (r) => r.held, hasCost: true },
   { label: 'No show', daily: (r) => r.noShow, noWow: true },
-  { label: 'Call 1 booked', daily: (r) => r.call1Booked, hasCost: true },
-  // The ?mode=book link that skips the form — kept apart so it doesn't distort the form funnel.
-  { label: 'Direct booked', daily: (r) => r.directBooked, hasCost: true, noWow: true },
-  { label: 'Qualified', daily: (r) => r.qualified, hasCost: true },
-  { label: 'Partial', daily: (r) => r.partial, hasCost: true },
-  { label: 'Form opened', daily: (r) => r.formOpened, hasCost: true },
+  // LinkedIn traffic goes to wonderly.com/?mode=book (booking only, no qualification form), so
+  // Booked is the funnel step. It also counts any form-flow bookings (call1Booked) so a lead
+  // who comes in through the full form isn't lost; Partial / Qualified are not shown.
+  {
+    label: 'Booked',
+    daily: (r) => r.call1Booked + r.directBooked,
+    hasCost: true,
+    noWow: true,
+  },
+  // Unique LinkedIn people who landed on the page (the booking pop-up auto-opens on load).
+  { label: 'Landed', daily: (r) => r.formOpened, hasCost: true },
   { label: 'Engagements', daily: (r) => r.engagements, hasCost: true },
   { label: 'Clicks', daily: (r) => r.clicks, hasCost: true },
   {

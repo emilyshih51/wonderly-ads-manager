@@ -127,17 +127,25 @@ describe('computeLinkedinDailyMetrics', () => {
   it('writes daily Cost = spend ÷ that stage, blank on zero days', () => {
     const row = m[6]; // 2026-10-28
 
-    expect(row[col('Qualified', 'Cost')]).toBe(25);
+    expect(row[col('Booked', 'Cost')]).toBe(33.33); // 100 / (2 form + 1 direct)
+    expect(row[col('Booked', 'ALL')]).toBe(3);
     expect(row[col('Accepted', 'Cost')]).toBe(100);
     expect(m[5][col('Accepted', 'Cost')]).toBe('');
     expect(row[col('CPC', 'ALL')]).toBe(10);
+  });
+
+  it('drops the form-only steps (Partial / Qualified / Call 1 booked)', () => {
+    expect(header).not.toContain('Qualified');
+    expect(header).not.toContain('Partial');
+    expect(header).not.toContain('Call 1 booked');
+    expect(header).toContain('Landed');
   });
 
   it('weekly rows sum counts and use ratio of totals', () => {
     const week = m[9]; // Week of 2026-10-26
 
     expect(week[col('Spend', 'ALL')]).toBe(400);
-    expect(week[col('Qualified', 'Cost')]).toBe(100); // 400 / 4
+    expect(week[col('Booked', 'Cost')]).toBe(133.33); // 400 / 3
     expect(week[col('CPC', 'ALL')]).toBe(10); // 400 / 40
   });
 

@@ -17,11 +17,11 @@
 import { NextResponse } from 'next/server';
 
 import { isoDate } from '@/lib/growth-config';
+import { buildDailyMetricsFormatRequests } from '@/lib/daily-metrics-format';
 import {
-  LINKEDIN_METRICS_HEADERS,
-  buildLinkedinMetricsFormatRequests,
+  LINKEDIN_DAILY_METRICS_FORMAT,
+  computeLinkedinDailyMetrics,
   joinLinkedinDays,
-  toLinkedinMetricsValues,
 } from '@/lib/linkedin-metrics';
 import { GoogleSheetsService } from '@/services/google-sheets';
 import { LinkedInAdsService, type LinkedInDailySpend } from '@/services/linkedin';
@@ -92,14 +92,17 @@ export async function GET(request: Request) {
     ]);
 
     const joined = joinLinkedinDays(spend, funnel);
-    const values = toLinkedinMetricsValues(joined, ptToday);
+    const values = computeLinkedinDailyMetrics(joined, ptToday);
 
     await sheets.ensureTab(sheetId, LINKEDIN_TAB);
-    await sheets.replaceRows(sheetId, LINKEDIN_TAB, [...LINKEDIN_METRICS_HEADERS], values);
+    // Same write sequence as Daily Metrics: clear stale merges first (a merge left from an
+    // older layout eats header labels), write values, then apply the shared formatter.
+    await sheets.unmergeAll(sheetId, LINKEDIN_TAB);
+    await sheets.replaceRows(sheetId, LINKEDIN_TAB, values[0].map(String), values.slice(1));
 
     try {
       await sheets.formatTab(sheetId, LINKEDIN_TAB, (gid) =>
-        buildLinkedinMetricsFormatRequests(gid, values.length)
+        buildDailyMetricsFormatRequests(gid, LINKEDIN_DAILY_METRICS_FORMAT, [], values)
       );
     } catch (formatError) {
       logger.error('LinkedIn tab formatting failed (values still written)', formatError);

@@ -582,7 +582,16 @@
     "noHistoryRuns": "最近の実行が利用できません。まずルールを実行またはテストしてください。",
     "selectedMetrics": "選択されたメトリクス",
     "runOn": "{date}に実行",
-    "matchedEntities": "{count}件一致"
+    "matchedEntities": "{count}件一致",
+    "adsSkipped": "{count, plural, other {#件の広告をスキップ}}",
+    "skipReasons": {
+      "already_promoted": "昇格済み",
+      "has_lifetime_conversions": "コンバージョンあり — 稼働継続",
+      "lifetime_data_unavailable": "コンバージョンを確認できず — 稼働継続",
+      "action_cap_reached": "アクション上限に到達",
+      "stale_data_today": "本日のデータ未反映",
+      "other": "スキップ"
+    }
   },
   "settings": {
     "title": "設定",

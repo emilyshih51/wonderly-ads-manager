@@ -582,7 +582,16 @@
     "noHistoryRuns": "没有可用的最近执行。请先运行或测试规则。",
     "selectedMetrics": "选定的指标",
     "runOn": "执行于 {date}",
-    "matchedEntities": "匹配 {count} 个"
+    "matchedEntities": "匹配 {count} 个",
+    "adsSkipped": "{count, plural, other {已跳过 # 个广告}}",
+    "skipReasons": {
+      "already_promoted": "已推广",
+      "has_lifetime_conversions": "有转化 — 保持投放",
+      "lifetime_data_unavailable": "无法检查转化 — 保持投放",
+      "action_cap_reached": "已达操作上限",
+      "stale_data_today": "今日数据尚未更新",
+      "other": "已跳过"
+    }
   },
   "settings": {
     "title": "设置",

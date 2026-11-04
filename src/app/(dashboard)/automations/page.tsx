@@ -79,12 +79,62 @@ interface TestResultEntry {
   slack_sent?: boolean;
   slack_channel?: string;
   duplicated_ad_id?: string;
+  /** Why the engine left this entity alone (e.g. `already_promoted`). */
+  skipped?: string;
 }
 
 interface TestResult {
   error?: string;
   matched?: number;
   results?: TestResultEntry[];
+}
+
+/** Skip reasons the evaluate API can return that have a translated label. */
+const KNOWN_SKIP_REASONS = new Set([
+  'already_promoted',
+  'has_lifetime_conversions',
+  'lifetime_data_unavailable',
+  'action_cap_reached',
+  'stale_data_today',
+]);
+
+/**
+ * Lists entities a run or test skipped (already promoted, protected converters, …) apart
+ * from the ones it acted on, so skipped ads aren't shown as "affected" with blank metrics.
+ */
+function SkippedResults({ entries }: { entries: TestResultEntry[] }) {
+  const t = useTranslations('automations');
+  const tMetrics = useTranslations('metrics');
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+        {t('adsSkipped', { count: entries.length })}
+      </p>
+      {entries.map((r, i) => (
+        <div
+          key={i}
+          className="flex flex-col gap-0.5 rounded-lg border border-dashed border-[var(--color-border)] p-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+        >
+          <p className="truncate text-xs text-[var(--color-foreground)]">{r.entity_name}</p>
+          <div className="flex flex-shrink-0 items-center gap-2 text-[10px] text-[var(--color-muted-foreground)]">
+            {typeof r.metrics?.spend === 'number' && (
+              <span>
+                ${r.metrics.spend.toFixed(2)} · {r.metrics.results ?? 0} {tMetrics('results')}
+              </span>
+            )}
+            <span className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 font-medium">
+              {KNOWN_SKIP_REASONS.has(r.skipped ?? '')
+                ? t(`skipReasons.${r.skipped}`)
+                : t('skipReasons.other')}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 interface Rule {
@@ -1983,63 +2033,71 @@ export default function AutomationsPage() {
               <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                 <p className="text-sm text-red-700">{testResults.error}</p>
               </div>
-            ) : testResults?.matched === 0 ? (
-              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
-                <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
-                  {t('noAdsMatched')}
-                </p>
-                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  {t('noAdsMetThresholds')}
-                </p>
-              </div>
+            ) : (testResults?.results ?? []).filter((r) => !r.skipped).length === 0 ? (
+              <>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
+                  <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
+                    {t('noAdsMatched')}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    {t('noAdsMetThresholds')}
+                  </p>
+                </div>
+                <SkippedResults entries={(testResults?.results ?? []).filter((r) => r.skipped)} />
+              </>
             ) : (
               <>
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   <span className="font-medium text-[var(--color-foreground)]">
-                    {testResults?.matched || 0}
+                    {(testResults?.results ?? []).filter((r) => !r.skipped).length}
                   </span>{' '}
-                  {t('adsWouldBeAffected', { count: testResults?.matched || 0 })}
+                  {t('adsWouldBeAffected', {
+                    count: (testResults?.results ?? []).filter((r) => !r.skipped).length,
+                  })}
                 </p>
-                {testResults?.results?.map((r: TestResultEntry, i: number) => (
-                  <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
-                        {r.entity_name}
-                      </p>
-                      <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-medium ${
-                          r.action?.includes('pause')
-                            ? 'bg-red-50 text-red-600'
-                            : r.action?.includes('promote')
-                              ? 'bg-emerald-50 text-emerald-600'
-                              : 'bg-blue-50 text-blue-600'
-                        }`}
-                      >
-                        {r.action?.replace('would_', '→ ')}
-                      </span>
+                {(testResults?.results ?? [])
+                  .filter((r) => !r.skipped)
+                  .map((r: TestResultEntry, i: number) => (
+                    <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
+                          {r.entity_name}
+                        </p>
+                        <span
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium ${
+                            r.action?.includes('pause')
+                              ? 'bg-red-50 text-red-600'
+                              : r.action?.includes('promote')
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : 'bg-blue-50 text-blue-600'
+                          }`}
+                        >
+                          {r.action?.replace('would_', '→ ')}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
+                        <span>
+                          {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
+                        </span>
+                        <span>
+                          {tMetrics('results')}: {r.metrics?.results}
+                        </span>
+                        <span>
+                          {tMetrics('cpa')}:{' '}
+                          {r.metrics?.cost_per_result === 'N/A'
+                            ? 'N/A'
+                            : `$${r.metrics?.cost_per_result}`}
+                        </span>
+                      </div>
+                      {r.warning && <p className="mt-1 text-[10px] text-amber-600">{r.warning}</p>}
+                      {r.slack_sent && r.slack_channel && (
+                        <p className="mt-1 text-[10px] text-emerald-600">
+                          {t('slackSentTo', { channel: r.slack_channel })}
+                        </p>
+                      )}
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
-                      <span>
-                        {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
-                      </span>
-                      <span>
-                        {tMetrics('results')}: {r.metrics?.results}
-                      </span>
-                      <span>
-                        {tMetrics('cpa')}:{' '}
-                        {r.metrics?.cost_per_result === 'N/A'
-                          ? 'N/A'
-                          : `$${r.metrics?.cost_per_result}`}
-                      </span>
-                    </div>
-                    {r.warning && <p className="mt-1 text-[10px] text-amber-600">{r.warning}</p>}
-                    {r.slack_sent && r.slack_channel && (
-                      <p className="mt-1 text-[10px] text-emerald-600">
-                        {t('slackSentTo', { channel: r.slack_channel })}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                <SkippedResults entries={(testResults?.results ?? []).filter((r) => r.skipped)} />
               </>
             )}
           </div>
@@ -2089,68 +2147,76 @@ export default function AutomationsPage() {
               <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                 <p className="text-sm text-red-700">{runResults.error}</p>
               </div>
-            ) : runResults?.matched === 0 ? (
-              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
-                <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
-                  {t('noAdsMatched')}
-                </p>
-                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  {t('noActionsTaken')}
-                </p>
-              </div>
+            ) : (runResults?.results ?? []).filter((r) => !r.skipped).length === 0 ? (
+              <>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-4 text-center">
+                  <p className="text-sm font-medium text-[var(--color-muted-foreground)]">
+                    {t('noAdsMatched')}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    {t('noActionsTaken')}
+                  </p>
+                </div>
+                <SkippedResults entries={(runResults?.results ?? []).filter((r) => r.skipped)} />
+              </>
             ) : (
               <>
                 <p className="text-sm text-[var(--color-muted-foreground)]">
                   <span className="font-medium text-[var(--color-foreground)]">
-                    {runResults?.matched || 0}
+                    {(runResults?.results ?? []).filter((r) => !r.skipped).length}
                   </span>{' '}
-                  {t('adsAffected', { count: runResults?.matched || 0 })}
+                  {t('adsAffected', {
+                    count: (runResults?.results ?? []).filter((r) => !r.skipped).length,
+                  })}
                 </p>
-                {runResults?.results?.map((r: TestResultEntry, i: number) => (
-                  <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
-                        {r.entity_name}
-                      </p>
-                      <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-medium ${
-                          r.action?.includes('pause')
-                            ? 'bg-red-50 text-red-600'
-                            : r.action?.includes('promote')
-                              ? 'bg-emerald-50 text-emerald-600'
-                              : 'bg-blue-50 text-blue-600'
-                        }`}
-                      >
-                        {r.action}
-                      </span>
+                {(runResults?.results ?? [])
+                  .filter((r) => !r.skipped)
+                  .map((r: TestResultEntry, i: number) => (
+                    <div key={i} className="rounded-lg border border-[var(--color-border)] p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="truncate text-sm font-medium text-[var(--color-foreground)]">
+                          {r.entity_name}
+                        </p>
+                        <span
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium ${
+                            r.action?.includes('pause')
+                              ? 'bg-red-50 text-red-600'
+                              : r.action?.includes('promote')
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : 'bg-blue-50 text-blue-600'
+                          }`}
+                        >
+                          {r.action}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
+                        <span>
+                          {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
+                        </span>
+                        <span>
+                          {tMetrics('results')}: {r.metrics?.results}
+                        </span>
+                        <span>
+                          {tMetrics('cpa')}:{' '}
+                          {r.metrics?.cost_per_result === 'N/A'
+                            ? 'N/A'
+                            : `$${r.metrics?.cost_per_result}`}
+                        </span>
+                      </div>
+                      {r.duplicated_ad_id && (
+                        <p className="mt-1 text-[10px] text-emerald-600">
+                          {t('duplicatedToWinners')}
+                        </p>
+                      )}
+                      {r.slack_sent && r.slack_channel && (
+                        <p className="mt-1 text-[10px] text-emerald-600">
+                          {t('slackSentTo', { channel: r.slack_channel })}
+                        </p>
+                      )}
+                      {r.error && <p className="mt-1 text-[10px] text-red-600">{r.error}</p>}
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-xs text-[var(--color-muted-foreground)]">
-                      <span>
-                        {tMetrics('spend')}: ${r.metrics?.spend?.toFixed(2)}
-                      </span>
-                      <span>
-                        {tMetrics('results')}: {r.metrics?.results}
-                      </span>
-                      <span>
-                        {tMetrics('cpa')}:{' '}
-                        {r.metrics?.cost_per_result === 'N/A'
-                          ? 'N/A'
-                          : `$${r.metrics?.cost_per_result}`}
-                      </span>
-                    </div>
-                    {r.duplicated_ad_id && (
-                      <p className="mt-1 text-[10px] text-emerald-600">
-                        {t('duplicatedToWinners')}
-                      </p>
-                    )}
-                    {r.slack_sent && r.slack_channel && (
-                      <p className="mt-1 text-[10px] text-emerald-600">
-                        {t('slackSentTo', { channel: r.slack_channel })}
-                      </p>
-                    )}
-                    {r.error && <p className="mt-1 text-[10px] text-red-600">{r.error}</p>}
-                  </div>
-                ))}
+                  ))}
+                <SkippedResults entries={(runResults?.results ?? []).filter((r) => r.skipped)} />
               </>
             )}
           </div>

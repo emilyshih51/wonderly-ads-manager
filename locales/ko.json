@@ -582,7 +582,16 @@
     "noHistoryRuns": "최근 실행이 없습니다. 먼저 규칙을 실행하거나 테스트하세요.",
     "selectedMetrics": "선택된 메트릭",
     "runOn": "{date}에 실행됨",
-    "matchedEntities": "{count}개 일치"
+    "matchedEntities": "{count}개 일치",
+    "adsSkipped": "{count, plural, other {광고 #개 건너뜀}}",
+    "skipReasons": {
+      "already_promoted": "이미 승격됨",
+      "has_lifetime_conversions": "전환 있음 — 계속 게재",
+      "lifetime_data_unavailable": "전환 확인 불가 — 계속 게재",
+      "action_cap_reached": "작업 한도 도달",
+      "stale_data_today": "오늘 데이터 미반영",
+      "other": "건너뜀"
+    }
   },
   "settings": {
     "title": "설정",

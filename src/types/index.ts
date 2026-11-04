@@ -191,6 +191,11 @@ export interface MetaInsightsRow {
   frequency?: string;
   /** Breakdown of conversion actions. */
   actions?: MetaAction[];
+  /**
+   * Newer standard pixel events (e.g. `start_trial_website`). Meta reports these here,
+   * not in `actions`.
+   */
+  conversions?: MetaAction[];
   /** Cost per each conversion action type. */
   cost_per_action_type?: MetaAction[];
   /** Start of the reporting date range (YYYY-MM-DD). */

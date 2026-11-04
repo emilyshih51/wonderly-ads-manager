@@ -16,7 +16,7 @@ export const META_OAUTH_URL = `https://www.facebook.com/${META_API_VERSION}/dial
  * needed for result counting.
  */
 export const INSIGHT_FIELDS_AD =
-  'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,date_start,date_stop';
+  'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,reach,frequency,actions,conversions,cost_per_action_type,date_start,date_stop';
 
 /**
  * Insight fields requested for ad-set-level queries.
@@ -24,14 +24,14 @@ export const INSIGHT_FIELDS_AD =
  * a separate lookup.
  */
 export const INSIGHT_FIELDS_ADSET =
-  'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,cost_per_action_type';
+  'adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,conversions,cost_per_action_type';
 
 /**
  * Insight fields requested for campaign-level queries.
  * Core performance metrics plus actions breakdown for result counting.
  */
 export const INSIGHT_FIELDS_CAMPAIGN =
-  'campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,cost_per_action_type';
+  'campaign_id,campaign_name,spend,impressions,clicks,ctr,inline_link_click_ctr,cpc,cpm,frequency,actions,conversions,cost_per_action_type';
 
 /**
  * Pre-serialized Meta API `filtering` parameter strings for each entity level.
@@ -56,7 +56,7 @@ export const ACTIVE_FILTER = {
  * Includes spend, delivery, click, and conversion metrics plus date range bounds.
  */
 export const INSIGHT_FIELDS =
-  'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop';
+  'spend,impressions,clicks,ctr,cpc,cpm,reach,actions,conversions,cost_per_action_type,cost_per_inline_link_click,inline_link_clicks,date_start,date_stop';
 
 /**
  * Maps Meta ad set `optimization_goal` + `promoted_object.custom_event_type` values
@@ -76,15 +76,17 @@ export const CUSTOM_EVENT_TO_ACTION_TYPE: Record<string, string> = {
   PURCHASE: 'offsite_conversion.fb_pixel_purchase',
   ADD_TO_CART: 'offsite_conversion.fb_pixel_add_to_cart',
   INITIATE_CHECKOUT: 'offsite_conversion.fb_pixel_initiate_checkout',
-  START_TRIAL: 'offsite_conversion.fb_pixel_start_trial',
-  SUBSCRIBE: 'offsite_conversion.fb_pixel_subscribe',
+  // Newer standard events are reported as `<event>_website` (Ads Manager's
+  // "Website Start Trial" etc.), not `offsite_conversion.fb_pixel_<event>`.
+  START_TRIAL: 'start_trial_website',
+  SUBSCRIBE: 'subscribe_website',
   ADD_PAYMENT_INFO: 'offsite_conversion.fb_pixel_add_payment_info',
   SEARCH: 'offsite_conversion.fb_pixel_search',
   VIEW_CONTENT: 'offsite_conversion.fb_pixel_view_content',
-  CONTACT: 'offsite_conversion.fb_pixel_contact',
-  FIND_LOCATION: 'offsite_conversion.fb_pixel_find_location',
-  SCHEDULE: 'offsite_conversion.fb_pixel_schedule',
-  SUBMIT_APPLICATION: 'offsite_conversion.fb_pixel_submit_application',
+  CONTACT: 'contact_website',
+  FIND_LOCATION: 'find_location_website',
+  SCHEDULE: 'schedule_website',
+  SUBMIT_APPLICATION: 'submit_application_website',
   OTHER: 'offsite_conversion.fb_pixel_custom',
 };
 

@@ -160,37 +160,6 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', map)).toBe(4);
   });
 
-  it('counts only the optimized standard event, ignoring the custom-event bucket', () => {
-    // Regression: an ad with 1 Website Start Trial and 4 custom pixel events was reported
-    // as 4 Results because StartTrial ad sets were mapped to fb_pixel_custom.
-    const map = { a1: 'start_trial_website' };
-    const row = {
-      adset_id: 'a1',
-      actions: [
-        { action_type: 'link_click', value: '7' },
-        { action_type: 'offsite_conversion.fb_pixel_custom', value: '4' },
-        { action_type: 'start_trial_total', value: '1' },
-        { action_type: 'start_trial_website', value: '1' },
-        { action_type: 'omni_start_trial', value: '1' },
-      ],
-    };
-
-    expect(getResultCount(row, 'a1', map)).toBe(1);
-  });
-
-  it('fuzzy-matches the _website variant when the map holds a legacy fb_pixel_ type', () => {
-    const map = { a1: 'offsite_conversion.fb_pixel_start_trial' };
-    const row = {
-      adset_id: 'a1',
-      actions: [
-        { action_type: 'offsite_conversion.fb_pixel_custom', value: '4' },
-        { action_type: 'start_trial_website', value: '1' },
-      ],
-    };
-
-    expect(getResultCount(row, 'a1', map)).toBe(1);
-  });
-
   it('uses generic fallback for campaigns not in the optimization map', () => {
     const row = {
       campaign_id: 'c_unknown',

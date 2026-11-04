@@ -76,17 +76,15 @@ export const CUSTOM_EVENT_TO_ACTION_TYPE: Record<string, string> = {
   PURCHASE: 'offsite_conversion.fb_pixel_purchase',
   ADD_TO_CART: 'offsite_conversion.fb_pixel_add_to_cart',
   INITIATE_CHECKOUT: 'offsite_conversion.fb_pixel_initiate_checkout',
-  // Newer standard events are reported as `<event>_website` (Ads Manager's
-  // "Website Start Trial" etc.), not `offsite_conversion.fb_pixel_<event>`.
-  START_TRIAL: 'start_trial_website',
-  SUBSCRIBE: 'subscribe_website',
+  START_TRIAL: 'offsite_conversion.fb_pixel_start_trial',
+  SUBSCRIBE: 'offsite_conversion.fb_pixel_subscribe',
   ADD_PAYMENT_INFO: 'offsite_conversion.fb_pixel_add_payment_info',
   SEARCH: 'offsite_conversion.fb_pixel_search',
   VIEW_CONTENT: 'offsite_conversion.fb_pixel_view_content',
-  CONTACT: 'contact_website',
-  FIND_LOCATION: 'find_location_website',
-  SCHEDULE: 'schedule_website',
-  SUBMIT_APPLICATION: 'submit_application_website',
+  CONTACT: 'offsite_conversion.fb_pixel_contact',
+  FIND_LOCATION: 'offsite_conversion.fb_pixel_find_location',
+  SCHEDULE: 'offsite_conversion.fb_pixel_schedule',
+  SUBMIT_APPLICATION: 'offsite_conversion.fb_pixel_submit_application',
   OTHER: 'offsite_conversion.fb_pixel_custom',
 };
 

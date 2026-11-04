@@ -84,7 +84,6 @@ export function evaluateCondition(actual: number, operator: string, threshold: n
  * extractEventName('offsite_conversion.fb_pixel_complete_registration') // → 'complete_registration'
  * extractEventName('omni_complete_registration') // → 'complete_registration'
  * extractEventName('complete_registration') // → 'complete_registration'
- * extractEventName('start_trial_website') // → 'start_trial'
  * ```
  */
 function extractEventName(actionType: string): string {
@@ -100,9 +99,6 @@ function extractEventName(actionType: string): string {
       .replace(/^onsite_app_conversion\./, '')
       .replace(/^onsite_conversion\./, '')
       .replace(/^omni_/, '')
-      // Newer standard pixel events (StartTrial, Subscribe, Schedule, …) are reported
-      // as `<event>_website` rather than `offsite_conversion.fb_pixel_<event>`.
-      .replace(/_website$/, '')
   );
 }
 
@@ -171,8 +167,7 @@ export function getResultCount(
     }
 
     // The optimization map accurately reflects what Meta reports in the actions array
-    // (custom conversions / non-standard events map to fb_pixel_custom, standard events
-    // to their specific type).
+    // (custom conversions map to fb_pixel_custom, standard events to their specific type).
     // If neither exact nor fuzzy match found it, this ad has 0 of its target conversion.
     return 0;
   }

@@ -160,6 +160,62 @@ describe('getResultCount()', () => {
     expect(getResultCount(row, 'c1', map)).toBe(4);
   });
 
+  it('counts Start Trial from the conversions field, ignoring the custom-event bucket', () => {
+    // Regression: Meta reports Start Trial only in `conversions` (start_trial_website), while
+    // `offsite_conversion.fb_pixel_custom` sums every custom event (Call1Booked, CallHeld, …).
+    // Real row shape from the evaluate log for an ad with 1 Website Start Trial.
+    const map = { a1: 'start_trial_website' };
+    const row = {
+      adset_id: 'a1',
+      actions: [
+        { action_type: 'link_click', value: '16' },
+        { action_type: 'offsite_conversion.fb_pixel_custom', value: '2' },
+        { action_type: 'offsite_conversion.fb_pixel_complete_registration', value: '1' },
+        { action_type: 'lead', value: '1' },
+      ],
+      conversions: [{ action_type: 'start_trial_website', value: '1' }],
+    };
+
+    expect(getResultCount(row, 'a1', map)).toBe(1);
+  });
+
+  it('reads 0 when conversions was fetched but has no Start Trial', () => {
+    const map = { a1: 'start_trial_website' };
+    const row = {
+      adset_id: 'a1',
+      actions: [{ action_type: 'offsite_conversion.fb_pixel_custom', value: '3' }],
+      conversions: [],
+    };
+
+    expect(getResultCount(row, 'a1', map)).toBe(0);
+  });
+
+  it('falls back to the custom-event bucket when conversions was not requested', () => {
+    // Fail-safe: a caller that forgot to request `conversions` must never read 0 for an ad
+    // that converted (that would disable converter protection and trigger 0-result pauses).
+    const map = { a1: 'start_trial_website' };
+    const row = {
+      adset_id: 'a1',
+      actions: [{ action_type: 'offsite_conversion.fb_pixel_custom', value: '4' }],
+    };
+
+    expect(getResultCount(row, 'a1', map)).toBe(4);
+  });
+
+  it('still reads legacy standard events from actions', () => {
+    const map = { a1: 'offsite_conversion.fb_pixel_complete_registration' };
+    const row = {
+      adset_id: 'a1',
+      actions: [
+        { action_type: 'offsite_conversion.fb_pixel_custom', value: '4' },
+        { action_type: 'omni_complete_registration', value: '2' },
+      ],
+      conversions: [{ action_type: 'start_trial_website', value: '1' }],
+    };
+
+    expect(getResultCount(row, 'a1', map)).toBe(2);
+  });
+
   it('uses generic fallback for campaigns not in the optimization map', () => {
     const row = {
       campaign_id: 'c_unknown',

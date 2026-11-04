@@ -312,8 +312,38 @@ describe('MetaService', () => {
       const map = await svc.getCampaignOptimizationMap();
 
       expect(map['c1']).toBe('onsite_conversion.lead_grouped');
-      // Meta API v21 reports offsite pixel conversions as fb_pixel_custom
-      expect(map['c2']).toBe('offsite_conversion.fb_pixel_custom');
+      expect(map['c2']).toBe('offsite_conversion.fb_pixel_lead');
+    });
+
+    it('maps standard pixel events to their specific action type, not fb_pixel_custom', async () => {
+      const fetchFn = makeFetch({
+        data: [
+          {
+            id: 'a1',
+            campaign_id: 'c1',
+            optimization_goal: 'OFFSITE_CONVERSIONS',
+            promoted_object: { custom_event_type: 'START_TRIAL' },
+          },
+          {
+            id: 'a2',
+            campaign_id: 'c2',
+            optimization_goal: 'OFFSITE_CONVERSIONS',
+            promoted_object: { custom_event_type: 'OTHER', custom_event_str: 'MyEvent' },
+          },
+          {
+            id: 'a3',
+            campaign_id: 'c3',
+            optimization_goal: 'OFFSITE_CONVERSIONS',
+            promoted_object: { custom_event_type: 'START_TRIAL', custom_conversion_id: '999' },
+          },
+        ],
+      });
+      const svc = new MetaService(TOKEN, ACCOUNT_ID, fetchFn);
+      const map = await svc.getOptimizationMap();
+
+      expect(map['a1']).toBe('start_trial_website');
+      expect(map['a2']).toBe('offsite_conversion.fb_pixel_custom');
+      expect(map['a3']).toBe('offsite_conversion.fb_pixel_custom');
     });
   });
 });

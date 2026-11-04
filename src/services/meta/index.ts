@@ -21,6 +21,7 @@ import {
   INSIGHT_FIELDS_CAMPAIGN,
   ACTIVE_FILTER,
   PROMOTE_DEDUPE_AD_STATUSES,
+  CUSTOM_EVENT_TO_ACTION_TYPE,
 } from './constants';
 
 export { META_OAUTH_URL };
@@ -189,9 +190,7 @@ export class MetaService {
 
   /**
    * Build a map of ad set ID → raw `promoted_object.custom_event_type` (e.g. `START_TRIAL`,
-   * `COMPLETE_REGISTRATION`) — the specific pixel event an ad set optimizes for, before it
-   * collapses into the single `offsite_conversion.fb_pixel_custom` action type used for
-   * Results/CPL counting (see `fetchOptimizationMaps`).
+   * `COMPLETE_REGISTRATION`) — the specific pixel event an ad set optimizes for.
    *
    * Used only by the Ad Winners "All Time" tab, to exclude registration-optimized ads from
    * a CPL comparison meant for trial-optimized ones. Not populated for ad sets without a
@@ -255,12 +254,20 @@ export class MetaService {
 
         let actionType: string | undefined;
 
-        if (isOffsite && (promoted?.custom_event_type || promoted?.custom_conversion_id)) {
-          // Meta API v21 reports all offsite pixel conversion events as
-          // `offsite_conversion.fb_pixel_custom` in the actions array — not under
-          // the specific event name (e.g. fb_pixel_start_trial). This applies to both
-          // standard pixel events (custom_event_type) and custom conversions
-          // (custom_conversion_id).
+        const standardEventActionType =
+          promoted?.custom_event_type && !promoted.custom_conversion_id
+            ? CUSTOM_EVENT_TO_ACTION_TYPE[promoted.custom_event_type]
+            : undefined;
+
+        if (isOffsite && standardEventActionType && promoted?.custom_event_type !== 'OTHER') {
+          // Standard pixel events (e.g. START_TRIAL) are reported under their own action
+          // type. Do NOT use `offsite_conversion.fb_pixel_custom` here: that is the sum of
+          // every custom pixel event on the ad (scroll depth, CTA clicks, intake steps, …),
+          // which inflated Results and let ads with 1 trial get promoted as if they had 4.
+          actionType = standardEventActionType;
+        } else if (isOffsite && (promoted?.custom_event_type || promoted?.custom_conversion_id)) {
+          // Custom conversions and non-standard (OTHER) events have no dedicated action
+          // type in the plain `actions` array, so fall back to the custom-event bucket.
           actionType = 'offsite_conversion.fb_pixel_custom';
         } else if (goal === 'LEAD_GENERATION' || goal === 'OUTCOME_LEADS') {
           actionType = 'onsite_conversion.lead_grouped';
